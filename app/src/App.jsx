@@ -563,43 +563,123 @@ function App() {
   // --- 로그인 처리 안되었을 시 화면 출력 ---
   if (!session) {
     return (
-      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-800 max-w-sm w-full p-6 rounded-3xl shadow-lg border border-slate-200 dark:border-slate-700 space-y-6">
-          <div className="text-center space-y-2">
-            <span className="material-symbols-outlined text-5xl text-primary block mx-auto">cloud_sync</span>
-            <h1 className="text-2xl font-black text-slate-800 dark:text-white">클린브로 입장</h1>
-            <p className="text-xs text-slate-500">파트너와 예약 정보를 안전하게 공유하세요</p>
+      <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-slate-950">
+        {/* Animated Background Gradients & Effects (2026 Trend) */}
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCI+CgkJPGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz4KPC9zdmc+')] [mask-image:linear-gradient(to_bottom,black,transparent)] opacity-50 absolute-z-0"></div>
+        <div className="absolute top-[-15%] left-[-10%] w-[60%] h-[60%] bg-blue-600/30 rounded-full blur-[140px] mix-blend-screen pointer-events-none animate-pulse-slow"></div>
+        <div className="absolute bottom-[-15%] right-[-10%] w-[60%] h-[60%] bg-indigo-600/30 rounded-full blur-[140px] mix-blend-screen pointer-events-none animate-pulse-slow"></div>
+
+        <div className="relative z-10 bg-white/10 dark:bg-black/20 backdrop-blur-2xl border border-white/20 shadow-[0_8px_40px_-12px_rgba(0,0,0,0.5)] max-w-sm w-full p-8 rounded-[2.5rem] space-y-8 transform transition-all hover:shadow-[0_8px_50px_-12px_rgba(59,130,246,0.3)] duration-700">
+          <div className="text-center space-y-3">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-500 shadow-xl shadow-blue-500/30 mb-2 transform transition-all hover:rotate-12 hover:scale-110 duration-300">
+              <span className="material-symbols-outlined text-4xl text-white">cloud_sync</span>
+            </div>
+            <h1 className="text-3xl font-black text-white tracking-tight drop-shadow-md">클린브로</h1>
+            <p className="text-sm font-medium text-slate-300 opacity-90">스마트한 공간, 더 나은 파트너십</p>
           </div>
-          <form onSubmit={handleAuth} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">이메일</label>
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="이메일 입력" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">비밀번호</label>
-              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="비밀번호 입력" />
-            </div>
 
-            {!isLoginMode && (
-              <div className="animate-slide-up">
-                <label className="block text-xs font-bold text-slate-500 mb-1">초대 코드 (선택)</label>
-                <input type="text" value={inviteCode} onChange={e => setInviteCode(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="파트너 초대 복사 링크의 코드 입력" />
-                <p className="text-[10px] text-slate-400 mt-1">기존 업체 소속이면 파트너 초대 코드를 붙여넣으세요.</p>
+          <form onSubmit={handleAuth} className="space-y-5">
+            <div className="space-y-4">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-slate-400 group-focus-within:text-blue-400 transition-colors">
+                  <span className="material-symbols-outlined text-[20px]">mail</span>
+                </div>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="w-full pl-11 p-4 rounded-2xl bg-white/5 border border-white/10 text-white placeholder-slate-400/80 outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500/60 transition-all backdrop-blur-sm shadow-inner"
+                  placeholder="이메일을 입력하세요"
+                />
               </div>
-            )}
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-slate-400 group-focus-within:text-blue-400 transition-colors">
+                  <span className="material-symbols-outlined text-[20px]">lock</span>
+                </div>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="w-full pl-11 p-4 rounded-2xl bg-white/5 border border-white/10 text-white placeholder-slate-400/80 outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500/60 transition-all backdrop-blur-sm shadow-inner"
+                  placeholder="비밀번호를 입력하세요"
+                />
+              </div>
 
-            <div className="flex items-center gap-2 px-1">
-              <input type="checkbox" id="rememberMe" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} className="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary accent-primary" />
-              <label htmlFor="rememberMe" className="text-xs font-bold text-slate-600 cursor-pointer">자동 로그인 (브라우저를 닫아도 유지)</label>
+              {!isLoginMode && (
+                <div className="relative group animate-slide-up">
+                  <div className="absolute top-4 left-0 flex items-center pl-4 pointer-events-none text-slate-400 group-focus-within:text-blue-400 transition-colors">
+                    <span className="material-symbols-outlined text-[20px]">group_add</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={inviteCode}
+                    onChange={e => setInviteCode(e.target.value)}
+                    className="w-full pl-11 p-4 rounded-2xl bg-white/5 border border-white/10 text-white placeholder-slate-400/80 outline-none focus:ring-2 focus:ring-blue-500/60 focus:border-blue-500/60 transition-all backdrop-blur-sm shadow-inner"
+                    placeholder="파트너 초대 코드 (선택)"
+                  />
+                  <p className="text-[11px] text-slate-300/80 mt-2 px-1 font-medium">기존 업체에 합류하시려면 초대 코드를 입력하세요.</p>
+                </div>
+              )}
             </div>
 
-            <button disabled={authLoading} type="submit" className="w-full bg-primary text-white py-3.5 rounded-xl font-bold shadow-md hover:bg-primary/90 transition-all">
-              {authLoading ? '처리중...' : (isLoginMode ? '로그인하기' : '회원가입하기')}
-            </button>
+            <div className="flex items-center justify-between px-1">
+              <label className="flex items-center gap-2.5 cursor-pointer group">
+                <div className="relative flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={e => setRememberMe(e.target.checked)}
+                    className="peer sr-only"
+                  />
+                  <div className="w-5 h-5 rounded-[6px] border-2 border-slate-400/70 group-hover:border-blue-400 peer-checked:bg-blue-500 peer-checked:border-blue-500 transition-all flex items-center justify-center shadow-sm">
+                    <span className="material-symbols-outlined text-[14px] text-white opacity-0 peer-checked:opacity-100 transform scale-50 peer-checked:scale-100 transition-all duration-300 font-bold">check</span>
+                  </div>
+                </div>
+                <span className="text-sm font-medium text-slate-300 group-hover:text-white transition-colors">로그인 상태 유지</span>
+              </label>
+
+              {isLoginMode && (
+                <button type="button" className="text-sm font-medium text-blue-400/90 hover:text-blue-300 hover:underline underline-offset-4 transition-all">
+                  비밀번호 찾기
+                </button>
+              )}
+            </div>
+
+            <div className="pt-3">
+              <button
+                disabled={authLoading}
+                type="submit"
+                className="relative w-full overflow-hidden group rounded-2xl p-4 font-bold text-white shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:hover:scale-100 disabled:shadow-none bg-gradient-to-r from-blue-600 to-indigo-600"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div className="absolute inset-0 opacity-0 group-hover:opacity-20 bg-[radial-gradient(circle_at_center,white,transparent)] transition-opacity duration-500"></div>
+                <span className="relative z-10 flex items-center justify-center gap-2 text-[17px] tracking-wide">
+                  {authLoading ? (
+                    <span className="material-symbols-outlined animate-spin text-xl font-bold">progress_activity</span>
+                  ) : (
+                    isLoginMode ? '로그인하기' : '회원가입하기'
+                  )}
+                </span>
+              </button>
+            </div>
           </form>
-          <div className="text-center pt-2">
-            <button onClick={() => setIsLoginMode(!isLoginMode)} className="text-xs font-bold text-slate-400 hover:text-primary transition-colors">
-              {isLoginMode ? '계정이 없으신가요? 가입하기' : '이미 계정이 있나요? 로그인하기'}
+
+          <div className="text-center pt-2 relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-white/10"></div>
+            </div>
+            <div className="relative flex justify-center text-[13px]">
+              <span className="px-4 text-slate-400 bg-transparent backdrop-blur-3xl font-medium">
+                {isLoginMode ? '아직 회원이 아니신가요?' : '이미 회원이신가요?'}
+              </span>
+            </div>
+            <button
+              onClick={() => setIsLoginMode(!isLoginMode)}
+              className="mt-5 text-[15px] font-bold text-white hover:text-blue-300 transition-colors drop-shadow"
+            >
+              {isLoginMode ? '새 계정 만들기' : '기존 계정으로 로그인'}
             </button>
           </div>
         </div>
