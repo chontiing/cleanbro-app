@@ -128,6 +128,7 @@ function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    setSession(null); // 즉시 세션 상태 초기화 및 화면 전환
   };
 
   // ==========================================
@@ -668,7 +669,11 @@ function App() {
           <button className="text-slate-400 hover:text-blue-500 transition-colors">
             <span className="material-symbols-outlined text-[26px]">notifications</span>
           </button>
-          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm shadow-sm border border-blue-200 cursor-pointer">
+          <div
+            onClick={() => { if (window.confirm('로그아웃 하시겠습니까?')) handleLogout(); }}
+            className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm shadow-sm border border-blue-200 cursor-pointer hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors"
+            title="로그아웃"
+          >
             {userName.substring(0, 1).toUpperCase()}
           </div>
         </div>
@@ -1094,6 +1099,16 @@ function App() {
           <div className="text-center">
             <p className="text-xs text-slate-400 font-bold mb-1">우리 업체 식별 코드 (파트너 초대 시 필요)</p>
             <p className="text-[10px] bg-slate-200 p-2 rounded text-slate-600 break-all select-all font-mono">{myBusinessId}</p>
+          </div>
+
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+            <button
+              onClick={handleLogout}
+              className="w-full py-3.5 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 text-sm font-bold rounded-xl active:scale-95 transition-all flex justify-center items-center gap-2 border border-red-100 dark:border-red-900/30"
+            >
+              <span className="material-symbols-outlined text-[18px]">logout</span>
+              로그아웃
+            </button>
           </div>
         </main>
       )}
