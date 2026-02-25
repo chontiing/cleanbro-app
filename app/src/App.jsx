@@ -387,7 +387,7 @@ function App() {
         setIsSavingSettings(false);
         return;
       }
-      const { data: publicUrlData } = supabase.storage.from('LOGOS').getPublicUrl(fileName);
+      const { data: publicUrlData } = supabase.storage.from('logos').getPublicUrl(fileName);
       logoUrl = publicUrlData.publicUrl;
     }
 
