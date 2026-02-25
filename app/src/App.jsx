@@ -563,61 +563,64 @@ function App() {
   // --- 로그인 처리 안되었을 시 화면 출력 ---
   if (!session) {
     return (
-      <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-b from-cyan-400 via-blue-500 to-fuchsia-500">
-        <div className="relative z-10 bg-white w-full max-w-[340px] px-8 pt-12 pb-10 rounded-[1.5rem] shadow-2xl">
-          <div className="text-center mb-12">
-            <h1 className="text-[32px] font-black text-slate-900 tracking-tight">
+      <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-indigo-900 via-blue-900 to-purple-900">
+        <div className="relative z-10 bg-white w-full max-w-sm px-8 pt-12 pb-10 rounded-[2rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] border border-white/20 backdrop-blur-sm">
+          <div className="text-center mb-10">
+            <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight drop-shadow-sm">
               {isLoginMode ? '로그인' : '회원가입'}
             </h1>
+            <p className="text-sm font-medium text-slate-500 mt-2">
+              신뢰할 수 있는 파트너십의 시작
+            </p>
           </div>
 
           <form onSubmit={handleAuth}>
-            <div className="space-y-8">
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-0 bottom-2 text-slate-500 text-[20px]">person_outline</span>
+            <div className="space-y-6">
+              <div className="relative group">
+                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 group-focus-within:text-blue-600 transition-colors">person</span>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full border-b-[1.5px] border-slate-300 py-2 pl-10 outline-none focus:border-fuchsia-500 text-[13px] placeholder-slate-400 text-slate-800 bg-transparent transition-colors font-medium"
+                  className="w-full border-2 border-blue-100 rounded-2xl py-3.5 pl-12 pr-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 text-[15px] placeholder-slate-400 text-slate-800 bg-blue-50/30 transition-all font-semibold"
                   placeholder="아이디를 입력하세요"
                 />
               </div>
-              <div className="relative">
-                <span className="material-symbols-outlined absolute left-0 bottom-2 text-slate-500 text-[20px]">lock_outline</span>
+              <div className="relative group">
+                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 group-focus-within:text-blue-600 transition-colors">lock</span>
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full border-b-[1.5px] border-slate-300 py-2 pl-10 outline-none focus:border-fuchsia-500 text-[13px] placeholder-slate-400 text-slate-800 bg-transparent transition-colors font-medium"
+                  className="w-full border-2 border-blue-100 rounded-2xl py-3.5 pl-12 pr-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 text-[15px] placeholder-slate-400 text-slate-800 bg-blue-50/30 transition-all font-semibold"
                   placeholder="비밀번호를 입력하세요"
                 />
               </div>
 
               {!isLoginMode && (
-                <div className="relative animate-slide-up">
-                  <span className="material-symbols-outlined absolute left-0 bottom-2 text-slate-500 text-[20px]">group_add</span>
+                <div className="relative group animate-slide-up">
+                  <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 group-focus-within:text-blue-600 transition-colors">group_add</span>
                   <input
                     type="text"
                     value={inviteCode}
                     onChange={e => setInviteCode(e.target.value)}
-                    className="w-full border-b-[1.5px] border-slate-300 py-2 pl-10 outline-none focus:border-fuchsia-500 text-[13px] placeholder-slate-400 text-slate-800 bg-transparent transition-colors font-medium"
+                    className="w-full border-2 border-blue-100 rounded-2xl py-3.5 pl-12 pr-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 text-[15px] placeholder-slate-400 text-slate-800 bg-blue-50/30 transition-all font-semibold"
                     placeholder="초대 코드 (선택사항)"
                   />
                 </div>
               )}
             </div>
 
-            <div className="mt-8">
+            <div className="mt-10">
               <button
                 disabled={authLoading}
                 type="submit"
-                className="w-full py-3.5 rounded-full bg-gradient-to-r from-cyan-400 to-fuchsia-500 text-white font-bold text-[15px] tracking-wide shadow-lg hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-[17px] tracking-wide shadow-xl shadow-blue-500/30 hover:from-blue-700 hover:to-indigo-700 hover:shadow-blue-600/40 active:scale-[0.98] transition-all flex items-center justify-center transform"
               >
                 {authLoading ? (
-                  <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+                  <span className="material-symbols-outlined animate-spin text-xl">progress_activity</span>
                 ) : (
                   isLoginMode ? '로그인' : '회원가입'
                 )}
@@ -625,11 +628,11 @@ function App() {
             </div>
           </form>
 
-          <div className="mt-8 text-center pt-5 border-t border-slate-100">
+          <div className="mt-8 text-center pt-6 border-t border-slate-100">
             <button
               onClick={() => setIsLoginMode(!isLoginMode)}
               type="button"
-              className="text-[13px] font-bold text-slate-400 hover:text-fuchsia-500 transition-colors"
+              className="text-[14px] font-bold text-slate-500 hover:text-blue-600 transition-colors"
             >
               {isLoginMode ? '처음이신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
             </button>
