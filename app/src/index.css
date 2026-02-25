@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    min-height: max(884px, 100dvh);
+  }
+}
+
+@layer utilities {
+  .ai-bubble-tail {
+    clip-path: polygon(0 0, 100% 0, 100% 100%);
+  }
+  .user-bubble-tail {
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+  }
+}

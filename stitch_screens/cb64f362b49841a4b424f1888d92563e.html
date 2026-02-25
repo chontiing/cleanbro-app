@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html class="light" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>예약 상세 정보</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2463eb",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111621",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+<div class="flex items-center justify-between px-4 py-4 max-w-md mx-auto w-full">
+<button class="p-2 -ml-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">arrow_back</span>
+</button>
+<h1 class="text-lg font-bold">예약 상세 정보</h1>
+<div class="relative w-10">
+</div>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto pb-24">
+<div class="max-w-md mx-auto w-full px-4 pt-6 space-y-6">
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+<div class="flex flex-col items-center mb-6">
+<div class="relative">
+<img alt="Portrait of Sarah Jenkins" class="h-20 w-20 rounded-full object-cover border-4 border-slate-50 dark:border-slate-800" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWpPY7W6MpBpoc8GOkWrh_gTrMznutd53kV9Ib0rs5O12QTu0DGjvEPb9uevJjwnt5LljIR7nWl_b255-gx4KRYi4UnoDPx-eKQ6anYeCxD5ZdOMjt4q2H3k5rdQv96--nFjLLdvMXXxmOKwYEMCwcsEMQ3fNhTEv5cRG-kSHMoMhx0aUHIo5gbQPGmEdIz4lPAWga3R-HPEV217HF8StSSTdlcRiDOytBb5wepSJd0baj14gm2_rSAQrzOnO7Z9FZMlhcjifehLo"/>
+<div class="absolute bottom-0 right-0 bg-green-500 h-5 w-5 rounded-full border-2 border-white dark:border-slate-900"></div>
+</div>
+<h2 class="mt-3 text-xl font-bold text-slate-900 dark:text-slate-100">Sarah Jenkins</h2>
+<p class="text-primary font-medium mt-1">에어컨 세척</p>
+</div>
+<div class="space-y-4">
+<div class="flex items-start gap-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+<div class="mt-0.5 p-2 bg-white dark:bg-slate-800 rounded-full shadow-sm">
+<span class="material-symbols-outlined text-primary text-xl">schedule</span>
+</div>
+<div>
+<p class="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">방문 시간</p>
+<p class="text-base font-semibold text-slate-900 dark:text-slate-100">09:00 AM</p>
+<p class="text-sm text-slate-500">2023년 10월 12일</p>
+</div>
+</div>
+<div class="flex items-start gap-4 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+<div class="mt-0.5 p-2 bg-white dark:bg-slate-800 rounded-full shadow-sm">
+<span class="material-symbols-outlined text-primary text-xl">location_on</span>
+</div>
+<div class="flex-1">
+<p class="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">주소</p>
+<p class="text-base font-semibold text-slate-900 dark:text-slate-100 break-words">123 Maple St, North Sydney</p>
+</div>
+<button class="self-center p-2 text-primary hover:bg-primary/10 rounded-full">
+<span class="material-symbols-outlined">directions</span>
+</button>
+</div>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+<h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">pending_actions</span>
+                    진행 상태
+                </h3>
+<div class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+<button class="flex-1 py-2 px-1 text-sm font-medium rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200">
+                        대기 중
+                    </button>
+<button class="flex-1 py-2 px-1 text-sm font-bold rounded-md bg-white dark:bg-slate-700 text-primary shadow-sm border border-slate-200 dark:border-slate-600">
+                        진행 중
+                    </button>
+<button class="flex-1 py-2 px-1 text-sm font-medium rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200">
+                        완료
+                    </button>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-bold text-lg flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">sticky_note_2</span>
+                        파트너 메모
+                    </h3>
+<button class="text-primary text-sm font-semibold hover:underline">추가</button>
+</div>
+<div class="space-y-3">
+<div class="p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-100 dark:border-yellow-900/30 rounded-lg">
+<p class="text-slate-800 dark:text-slate-200 text-sm">필터 상태 꼭 확인해주세요.</p>
+<div class="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+<span class="material-symbols-outlined text-[14px]">account_circle</span>
+<span>김철수 파트너 • 2시간 전</span>
+</div>
+</div>
+<div class="p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-900/30 rounded-lg">
+<p class="text-slate-800 dark:text-slate-200 text-sm">고객님이 소음에 민감하십니다. 조용한 작업 부탁드려요.</p>
+<div class="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+<span class="material-symbols-outlined text-[14px]">account_circle</span>
+<span>이영희 매니저 • 어제</span>
+</div>
+</div>
+</div>
+<div class="mt-4 relative">
+<input class="w-full pl-4 pr-10 py-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all" placeholder="메모 남기기..." type="text"/>
+<button class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-primary hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md">
+<span class="material-symbols-outlined text-xl">send</span>
+</button>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+<h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">photo_camera</span>
+                    작업 사진
+                </h3>
+<div class="grid grid-cols-2 gap-4">
+<div class="space-y-2">
+<p class="text-sm font-semibold text-slate-500 dark:text-slate-400 text-center">작업 전 (Before)</p>
+<div class="aspect-square rounded-lg bg-slate-100 dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary text-3xl mb-1">add_a_photo</span>
+<span class="text-xs text-slate-400 group-hover:text-primary">사진 추가</span>
+</div>
+</div>
+<div class="space-y-2">
+<p class="text-sm font-semibold text-slate-500 dark:text-slate-400 text-center">작업 후 (After)</p>
+<div class="aspect-square rounded-lg bg-slate-100 dark:bg-slate-800 border-2 border-dashed border-slate-300 dark:border-slate-700 flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary text-3xl mb-1">add_a_photo</span>
+<span class="text-xs text-slate-400 group-hover:text-primary">사진 추가</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-30">
+<div class="max-w-md mx-auto flex h-20 items-center justify-between px-6">
+<a class="flex flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">calendar_month</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">일정</span>
+</a>
+<a class="flex flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">고객</span>
+</a>
+<a class="flex flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">handshake</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">파트너</span>
+</a>
+<a class="flex flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">설정</span>
+</a>
+</div>
+</nav>
+
+</body></html>

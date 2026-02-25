@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html class="light" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>문의 상세 및 등록</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2463eb",
+                        "background-light": "#f1f5f9",
+                        "background-dark": "#0f172a",
+                        "ai-bubble": "#ffffff",
+                        "user-bubble": "#dbeafe",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            min-height: 100dvh;
+        }
+        .ai-bubble-tail {
+            clip-path: polygon(0 0, 100% 0, 100% 100%);
+        }
+        .user-bubble-tail {
+            clip-path: polygon(0 0, 100% 0, 0 100%);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col pb-20">
+<header class="sticky top-0 z-20 flex items-center bg-white/80 dark:bg-slate-900/80 backdrop-blur-md p-4 border-b border-slate-200 dark:border-slate-800 justify-between">
+<div class="flex items-center gap-3">
+<div class="text-slate-900 dark:text-slate-100 flex items-center justify-center cursor-pointer">
+<span class="material-symbols-outlined">arrow_back</span>
+</div>
+<h1 class="text-lg font-bold leading-tight tracking-tight">문의 등록</h1>
+</div>
+<div class="flex gap-2">
+<button class="p-2 text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</header>
+<main class="flex-1 p-4 space-y-6 max-w-lg mx-auto w-full">
+<div class="flex items-center gap-2 px-1">
+<div class="bg-primary/10 p-2 rounded-full">
+<span class="material-symbols-outlined text-primary text-sm font-fill">auto_awesome</span>
+</div>
+<p class="text-xs font-bold text-primary uppercase tracking-wider">AI 비서가 분석 중...</p>
+</div>
+<div class="space-y-6">
+<div class="flex flex-col gap-2 items-start max-w-[90%]">
+<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl rounded-tl-none shadow-sm border border-slate-200 dark:border-slate-700 relative">
+<p class="text-sm font-medium mb-3">새로운 문의 메시지를 분석했어요! 아래 내용을 확인해 주세요.</p>
+<div class="flex items-center gap-3 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl mb-3 border border-slate-100 dark:border-slate-800">
+<div class="bg-primary/10 flex items-center justify-center rounded-full h-10 w-10 text-primary">
+<span class="material-symbols-outlined text-xl">person</span>
+</div>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-bold truncate">홍길동 고객님</p>
+<p class="text-xs text-slate-500">010-1234-5678</p>
+</div>
+</div>
+<div class="space-y-2">
+<div class="relative rounded-lg overflow-hidden aspect-video">
+<img class="w-full h-full object-cover" data-alt="Modern indoor air conditioning unit mounted on wall" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCGAxGsWrdvTUz7gYLrSC-eEtM5dsxDh4-LwlQ8aowKv4jYIq-RysPEPbrYPkHBFQzi-QA0JGzjCyO_LFmyRRaPhxY_IPj86Sf9zPOSb6rn_gVCK3KEMfdhTmKp3T90ZhycALAyxhewF9zsRgXKhEYKdHNTsS3qkxFpP7mBvozF3UX6mKj9Cei-pHF7AsNUVL6Ctkv5z4Te5N4XkC7P2lEiEQ83SXfSWyItyhfW7P0V2jdvDVo89L9eKiAgnIUTsr5AvilxrV8_RrA"/>
+<div class="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm text-white px-2 py-1 rounded text-[10px] flex items-center gap-1">
+<span class="material-symbols-outlined text-xs">image</span> 이미지 분석: 에어컨
+                        </div>
+</div>
+<div class="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-sm text-primary">location_on</span>
+<span>서울시 강남구 테헤란로 123</span>
+</div>
+<div class="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-400">
+<span class="material-symbols-outlined text-sm text-primary">calendar_today</span>
+<span>다음 주 금요일 오후 2시쯤</span>
+</div>
+</div>
+</div>
+<span class="text-[10px] text-slate-400 ml-1">오전 10:24</span>
+</div>
+<div class="flex flex-col gap-2 items-end ml-auto max-w-[90%]">
+<div class="bg-primary text-white p-4 rounded-2xl rounded-tr-none shadow-md">
+<p class="text-xs opacity-80 mb-2">서비스 유형 선택</p>
+<select class="w-full bg-white/10 border-none rounded-lg text-sm text-white focus:ring-0 focus:bg-white/20 py-2">
+<option class="text-slate-900">에어컨 분해 세척</option>
+<option class="text-slate-900">세탁기 정밀 세척</option>
+<option class="text-slate-900">주방 후드 클리닝</option>
+<option class="text-slate-900">이사/입주 청소</option>
+</select>
+</div>
+</div>
+<div class="flex flex-col gap-2 items-end ml-auto max-w-[90%]">
+<div class="bg-primary text-white p-4 rounded-2xl rounded-tr-none shadow-md space-y-4 w-full">
+<div>
+<p class="text-xs opacity-80 mb-1">방문 주소 확인</p>
+<div class="relative">
+<input class="w-full bg-white/10 border-none rounded-lg text-sm text-white placeholder:text-white/50 focus:ring-0 pr-8" type="text" value="서울특별시 강남구 테헤란로 123, 405호"/>
+<span class="material-symbols-outlined absolute right-2 top-2 text-white/70 text-sm">map</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div>
+<p class="text-xs opacity-80 mb-1">예약 날짜</p>
+<input class="w-full bg-white/10 border-none rounded-lg text-[13px] text-white focus:ring-0 p-2" type="date" value="2024-11-22"/>
+</div>
+<div>
+<p class="text-xs opacity-80 mb-1">시작 시간</p>
+<input class="w-full bg-white/10 border-none rounded-lg text-[13px] text-white focus:ring-0 p-2" type="time" value="14:00"/>
+</div>
+</div>
+<div>
+<p class="text-xs opacity-80 mb-1">예상 견적 (원)</p>
+<input class="w-full bg-white/10 border-none rounded-lg text-sm text-white focus:ring-0 font-bold" type="number" value="120000"/>
+</div>
+</div>
+<span class="text-[10px] text-slate-400 mr-1">방금 전</span>
+</div>
+<div class="flex flex-col gap-2 items-start max-w-[90%]">
+<div class="bg-white dark:bg-slate-800 p-4 rounded-2xl rounded-tl-none shadow-sm border border-slate-200 dark:border-slate-700">
+<p class="text-sm font-medium italic text-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">check_circle</span>
+                    정보가 모두 정확한가요?
+                </p>
+<p class="text-xs text-slate-500 mt-1">확인 버튼을 누르면 고객님께 예약 완료 안내 문자가 발송됩니다.</p>
+</div>
+</div>
+</div>
+<div class="pt-4 flex flex-col gap-3">
+<button class="w-full py-4 bg-primary text-white font-bold rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center gap-2 hover:bg-primary/90 transition-all active:scale-[0.98]">
+<span class="material-symbols-outlined">send</span>
+            확인 및 예약 완료 SMS 전송
+        </button>
+<div class="flex gap-2">
+<button class="flex-1 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-base">chat</span> 원본 메시지
+            </button>
+<button class="flex-1 py-3 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm font-semibold rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-base">edit_note</span> 직접 수정
+            </button>
+</div>
+</div>
+</main>
+<nav class="fixed bottom-0 w-full border-t border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md px-4 pb-4 pt-2 z-30">
+<div class="flex gap-2 max-w-lg mx-auto">
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined font-fill text-[24px]">inbox</span>
+<p class="text-[10px] font-bold">문의관리</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined text-[24px]">calendar_month</span>
+<p class="text-[10px] font-medium">일정</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined text-[24px]">group</span>
+<p class="text-[10px] font-medium">고객</p>
+</a>
+<a class="flex flex-1 flex-col items-center justify-center gap-1 text-slate-400" href="#">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+<p class="text-[10px] font-medium">설정</p>
+</a>
+</div>
+</nav>
+
+</body></html>
