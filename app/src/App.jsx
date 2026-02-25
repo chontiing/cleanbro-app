@@ -513,11 +513,11 @@ function App() {
     }, 600);
 
     return (
-      <div {...longPressHooks} className={`relative p-4 rounded-2xl border shadow-sm transition-all active:scale-[0.98] ${c.is_completed ? 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 opacity-60' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'}`}>
+      <div {...longPressHooks} className={`relative p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 transition-all active:scale-[0.98] ${c.is_completed ? 'bg-slate-50 dark:bg-slate-800/50 opacity-60' : 'bg-white dark:bg-slate-800'}`}>
 
         {/* 완료 상태 뱃지 및 안개 효과 */}
         {c.is_completed && (
-          <div className="absolute top-0 right-0 p-2 text-green-600 font-bold flex items-center gap-1 bg-green-50 rounded-bl-xl rounded-tr-xl border-l border-b border-green-200">
+          <div className="absolute top-0 right-0 p-2 text-green-600 font-bold flex items-center gap-1 bg-green-50 rounded-bl-[1.5rem] rounded-tr-[1.5rem]">
             <span className="material-symbols-outlined text-sm">task_alt</span> 완료됨
           </div>
         )}
@@ -648,37 +648,29 @@ function App() {
   const roleName = isCeo ? '대표님' : '파트너님';
 
   return (
-    <div className="flex flex-col min-h-screen bg-background-light dark:bg-background-dark pb-24 text-slate-900 dark:text-slate-100 font-display">
+    <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 text-slate-900 dark:text-slate-100 font-display">
 
       {/* 헤더 */}
-      <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center shadow-sm">
-        <div className="flex gap-3 items-center">
+      <header className="sticky top-0 z-30 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-md px-5 py-4 flex justify-between items-center">
+        <div className="flex gap-2 items-center">
           {businessProfile.logo_url ? (
-            <img src={businessProfile.logo_url} alt="Logo" className="w-10 h-10 object-contain rounded border bg-white" />
+            <img src={businessProfile.logo_url} alt="Logo" className="w-8 h-8 object-contain rounded-full border border-slate-200 bg-white shadow-sm" />
           ) : (
-            <div className="w-10 h-10 bg-gradient-to-br from-primary to-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-xl shadow-md">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-black text-sm shadow-sm">
               {businessProfile.company_name.substring(0, 1)}
             </div>
           )}
-          <div>
-            <h1 className="text-xl font-black text-slate-800 dark:text-white tracking-tight flex items-center gap-2">
-              {businessProfile.company_name} <span className="text-[10px] font-normal text-slate-400 border px-1.5 py-0.5 rounded-md bg-slate-50 dark:bg-slate-800">파트너 모드</span>
-            </h1>
-            <p className="text-xs font-bold text-primary mt-0.5">반갑습니다, {userName} {roleName}!</p>
-          </div>
+          <h1 className="text-xl font-extrabold text-slate-800 dark:text-white tracking-tight flex items-center gap-1">
+            {businessProfile.company_name}
+          </h1>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={() => {
-            const inviteUrl = myBusinessId;
-            navigator.clipboard.writeText(`클린브로 파트너 초대!\n여기로 들어와서 회원가입 시 아래 초대 코드를 붙여넣어주세요.\n[초대코드]: ${inviteUrl}`);
-            alert('초대 코드가 클립보드에 복사되었습니다. 파트너에게 카톡으로 보내주세요!');
-          }} className="text-xs font-bold text-indigo-500 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded-lg flex items-center gap-1">
-            <span className="material-symbols-outlined text-[14px]">person_add</span> 파트너 초대
+        <div className="flex items-center gap-3">
+          <button className="text-slate-400 hover:text-blue-500 transition-colors">
+            <span className="material-symbols-outlined text-[26px]">notifications</span>
           </button>
-          <button onClick={handleLogout} className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">로그아웃</button>
-          <button onClick={() => setCurrentTab('add')} className="bg-primary text-white p-2 rounded-full shadow-md shadow-primary/30 active:scale-90 transition-transform">
-            <span className="material-symbols-outlined font-bold text-xl block">add</span>
-          </button>
+          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm shadow-sm border border-blue-200 cursor-pointer">
+            {userName.substring(0, 1).toUpperCase()}
+          </div>
         </div>
       </header>
 
@@ -692,7 +684,7 @@ function App() {
 
           {/* 아침 알림 리스트 */}
           {todayTargetList.length > 0 && selectedDate === getTodayStr() && (
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-700 p-4 rounded-2xl border border-blue-100 dark:border-slate-600 shadow-sm animate-fade-in">
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-700 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 animate-fade-in">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold text-primary flex items-center gap-1">
                   <span className="material-symbols-outlined text-[18px]">notifications_active</span>오늘 방문 예정 ({todayTargetList.length})
@@ -723,8 +715,8 @@ function App() {
           {(() => {
             const todayDash = calcDashboard(selectedDate);
             return (
-              <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                <p className="text-xs font-bold text-slate-500 mb-1">{selectedDate === getTodayStr() ? '오늘의 합계 매출' : `${selectedDate.split('-')[1]}월 ${selectedDate.split('-')[2]}일 매출`}</p>
+              <div className="bg-white dark:bg-slate-800 p-6 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0">
+                <p className="text-xs font-bold text-slate-400 mb-1">{selectedDate === getTodayStr() ? '오늘의 합계 매출' : `${selectedDate.split('-')[1]}월 ${selectedDate.split('-')[2]}일 매출`}</p>
                 <div className="text-3xl font-black text-primary mb-3">
                   {fmtNum(todayDash.total)}<span className="text-lg text-slate-400 font-bold ml-1">원</span>
                 </div>
@@ -743,7 +735,7 @@ function App() {
           })()}
 
           {/* 캘린더 구역 */}
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 mb-4">
             <div className="flex justify-between items-center mb-4">
               <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1))} className="p-1 text-slate-400 hover:text-primary">
                 <span className="material-symbols-outlined">chevron_left</span>
@@ -798,7 +790,7 @@ function App() {
               <span className="font-normal text-xs">(항목을 길게 누르면 수정/삭제)</span>
             </h3>
             {calcDashboard(selectedDate).list.length === 0 ? (
-              <div className="text-center py-8 text-slate-400 text-sm bg-white dark:bg-slate-800 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+              <div className="text-center py-8 text-slate-400 text-sm bg-white/50 dark:bg-slate-800/50 rounded-[1.5rem]">
                 예약이 없습니다.
               </div>
             ) : (
@@ -821,7 +813,7 @@ function App() {
             )}
           </div>
 
-          <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm space-y-5">
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-5">
 
             <div className="space-y-3">
               <h3 className="text-sm font-bold text-primary border-b border-primary/20 pb-1">1. 기본 정보</h3>
@@ -977,7 +969,7 @@ function App() {
         <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-6">
           <h2 className="text-2xl font-black mb-2">클라우드 매출 통계</h2>
 
-          <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 shadow-sm flex items-end gap-2">
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-[1.5rem] border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] flex items-end gap-2">
             <div className="flex-1">
               <label className="block text-xs font-bold text-slate-500 mb-1">시작일</label>
               <input type="date" value={statStart} onChange={e => setStatStart(e.target.value)} className="w-full p-2 bg-slate-50 border rounded-lg text-sm" />
@@ -989,7 +981,7 @@ function App() {
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
+          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-[1.5rem] p-6 text-white shadow-lg shadow-slate-900/20 relative overflow-hidden">
             <span className="material-symbols-outlined absolute -right-4 -bottom-4 text-[100px] text-white/5 font-fill">monitoring</span>
             <p className="text-sm font-medium text-slate-300 mb-1">해당 기간 총 매출</p>
             <p className="text-4xl font-black mb-4">{fmtNum(statsData.total)}<span className="text-xl ml-1 font-bold text-slate-400">원</span></p>
@@ -1010,7 +1002,7 @@ function App() {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-[1.5rem] border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]">
             <h3 className="font-bold text-sm text-slate-600 mb-4 flex items-center gap-1">
               <span className="material-symbols-outlined text-[18px]">bar_chart</span>
               이번 달 vs 지난 달 매출 비교
@@ -1041,7 +1033,7 @@ function App() {
             <h3 className="font-bold text-sm text-slate-600 mb-2 px-1">조회된 결제 리스트 ({statsData.list.length}건)</h3>
             <div className="space-y-2">
               {statsData.list.map(c => (
-                <div key={c.id} className="bg-white dark:bg-slate-800 flex justify-between p-3 rounded-xl border border-slate-200 shadow-sm text-sm">
+                <div key={c.id} className="bg-white dark:bg-slate-800 flex justify-between p-4 rounded-2xl border-0 shadow-[0_2px_15px_-5px_rgba(0,0,0,0.05)] text-sm">
                   <div>
                     <span
                       onClick={(e) => { e.stopPropagation(); setMapPopupMemo(c.memo); }}
@@ -1070,7 +1062,7 @@ function App() {
             <span className="material-symbols-outlined text-primary">storefront</span> 업체 프로필 설정
           </h2>
 
-          <form onSubmit={handleSaveProfile} className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm space-y-5">
+          <form onSubmit={handleSaveProfile} className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-5">
             <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">업체명</label>
               <input type="text" required value={editCompanyName} onChange={e => setEditCompanyName(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="업체명 입력" />
