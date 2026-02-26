@@ -68,7 +68,7 @@ function App() {
   const [rememberMe, setRememberMe] = useState(true);
 
   // 계정 및 업체 정보
-  const [businessProfile, setBusinessProfile] = useState({ company_name: '클린브로', phone: '', logo_url: '' });
+  const [businessProfile, setBusinessProfile] = useState({ company_name: '클린브로', phone: '', logo_url: '', monthly_target_revenue: 5000000, taxpayer_type: '간이과세자', default_completion_message: '', ac_guide_url: '', washer_guide_url: '' });
 
   const [currentTab, setCurrentTab] = useState('calendar'); // calendar, add, list, stats, settings
   const [customers, setCustomers] = useState([]);
@@ -506,6 +506,9 @@ function App() {
   const [editLogoFile, setEditLogoFile] = useState(null);
   const [editNickname, setEditNickname] = useState(''); // 본인 닉네임 설정
   const [editTaxpayerType, setEditTaxpayerType] = useState('간이과세자'); // 과세자 유형
+  const [editDefaultMessage, setEditDefaultMessage] = useState('');
+  const [editAcGuideFile, setEditAcGuideFile] = useState(null);
+  const [editWasherGuideFile, setEditWasherGuideFile] = useState(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   // 일괄 변경 State
@@ -521,6 +524,7 @@ function App() {
       setEditLogoFile(null);
       setEditNickname(myNickname || '');
       setEditTaxpayerType(businessProfile.taxpayer_type || '간이과세자');
+      setEditDefaultMessage(businessProfile.default_completion_message || `[클린브로] 청소 작업 완료 안내\n안녕하세요, 고객님! {customer_name}님 {memo} 작업이 완료되었습니다.\n\n📸 작업 사진 확인하기:\n{after_url}\n\n만족하셨다면 리뷰 부탁드립니다!\n[리뷰링크]`);
     }
   }, [currentTab, businessProfile, myNickname]);
 
@@ -551,7 +555,34 @@ function App() {
       phone: editBusinessPhone,
       logo_url: logoUrl,
       taxpayer_type: editTaxpayerType,
+      default_completion_message: editDefaultMessage,
     };
+
+    // 가이드 이미지 업로드 (에어컨)
+    if (editAcGuideFile) {
+      const fileExt = editAcGuideFile.name.split('.').pop();
+      const fileName = `${myBusinessId}_ac_guide_${Date.now()}.${fileExt}`;
+      const { error: upErr } = await supabase.storage.from('logos').upload(fileName, editAcGuideFile, { upsert: true });
+      if (!upErr) {
+        const { data } = supabase.storage.from('logos').getPublicUrl(fileName);
+        upsertData.ac_guide_url = data.publicUrl;
+      }
+    } else {
+      upsertData.ac_guide_url = businessProfile.ac_guide_url;
+    }
+
+    // 가이드 이미지 업로드 (세탁기)
+    if (editWasherGuideFile) {
+      const fileExt = editWasherGuideFile.name.split('.').pop();
+      const fileName = `${myBusinessId}_washer_guide_${Date.now()}.${fileExt}`;
+      const { error: upErr } = await supabase.storage.from('logos').upload(fileName, editWasherGuideFile, { upsert: true });
+      if (!upErr) {
+        const { data } = supabase.storage.from('logos').getPublicUrl(fileName);
+        upsertData.washer_guide_url = data.publicUrl;
+      }
+    } else {
+      upsertData.washer_guide_url = businessProfile.washer_guide_url;
+    }
 
     const { error: bError } = await supabase.from('businesses').upsert([upsertData]);
 
@@ -1068,7 +1099,20 @@ function App() {
 
       // MMS 발송 시트 제작 (실제 전송은 여기서 Edge Function 호출하거나 window.open 등으로 유도)
       // 여기서는 UI 로직에 따라 문자 발송 안내를 띄움
-      const mmsText = `[클린브로] 청소 작업 완료 안내\n안녕하세요, 고객님! ${completionTarget.memo} 작업이 완료되었습니다.\n\n📸 전/후 사진 확인하기:\n${uploadResults.after[0]}\n\n만족하셨다면 리뷰 부탁드립니다!\n[리뷰링크]`;
+      // MMS 발송 시트 제작
+      let mmsText = businessProfile.default_completion_message || `[클린브로] 청소 작업 완료 안내\n안녕하세요, 고객님! {customer_name}님 {memo} 작업이 완료되었습니다.\n\n📸 작업 사진 확인하기:\n{after_url}\n\n만족하셨다면 리뷰 부탁드립니다!\n[리뷰링크]`;
+
+      mmsText = mmsText
+        .replace(/{customer_name}/g, completionTarget.customer_name || '고객')
+        .replace(/{memo}/g, completionTarget.memo || '')
+        .replace(/{after_url}/g, uploadResults.after[0] || '');
+
+      // 가이드 이미지 포함 로직
+      if (completionTarget.category === '에어컨' && businessProfile.ac_guide_url) {
+        mmsText += `\n\n❄️ 에어컨 사후관리 가이드:\n${businessProfile.ac_guide_url}`;
+      } else if (completionTarget.category === '세탁기' && businessProfile.washer_guide_url) {
+        mmsText += `\n\n🧺 세탁기 사후관리 가이드:\n${businessProfile.washer_guide_url}`;
+      }
 
       const smsUrl = `sms:${completionTarget.phone}?body=${encodeURIComponent(mmsText)}`;
       window.open(smsUrl);
@@ -1729,6 +1773,65 @@ function App() {
               </button>
             </div>
           </form>
+
+          {/* 작업 완료 자동 메시지 관리 섹션 */}
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-6">
+            <h3 className="text-lg font-black flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">chat</span> 작업 완료 자동 메시지 관리
+            </h3>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">고객 전송 메시지 템플릿</label>
+              <textarea
+                value={editDefaultMessage}
+                onChange={e => setEditDefaultMessage(e.target.value)}
+                className="w-full h-40 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none"
+                placeholder="메시지 내용을 입력하세요. {customer_name}, {memo}, {after_url} 변수를 사용할 수 있습니다."
+              />
+              <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                * 사용 가능 치환자 : <span className="font-bold text-primary">{`{customer_name}`}</span>(고객 이름), <span className="font-bold text-primary">{`{memo}`}</span>(작업 내용), <span className="font-bold text-primary">{`{after_url}`}</span>(작업 사진 링크)
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1.5">❄️ 에어컨 관리 가이드</label>
+                {businessProfile.ac_guide_url && <img src={businessProfile.ac_guide_url} className="w-full h-20 object-cover rounded-lg mb-2 border" />}
+                <input type="file" accept="image/*" onChange={e => setEditAcGuideFile(e.target.files[0])} className="w-full text-[9px]" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1.5">🧺 세탁기 관리 가이드</label>
+                {businessProfile.washer_guide_url && <img src={businessProfile.washer_guide_url} className="w-full h-20 object-cover rounded-lg mb-2 border" />}
+                <input type="file" accept="image/*" onChange={e => setEditWasherGuideFile(e.target.files[0])} className="w-full text-[9px]" />
+              </div>
+            </div>
+
+            <button onClick={handleSaveProfile} disabled={isSavingSettings} className="w-full py-4 bg-slate-800 text-white font-bold rounded-[1.2rem] shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2">
+              <span className="material-symbols-outlined">save</span>
+              {isSavingSettings ? '저장 중...' : '메시지 및 가이드 설정 저장'}
+            </button>
+
+            {/* 문자 미리보기 */}
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
+              <p className="text-xs font-bold text-slate-400 mb-3 flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm">preview</span> 고객 수신 문자 미리보기
+              </p>
+              <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-[2rem] border border-slate-200 dark:border-slate-700 max-w-[280px] mx-auto shadow-inner relative">
+                <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-10 h-1 bg-slate-300 rounded-full"></div>
+                <div className="mt-4 break-words whitespace-pre-wrap text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 font-display">
+                  {editDefaultMessage
+                    .replace(/{customer_name}/g, '홍길동')
+                    .replace(/{memo}/g, '삼성 무풍 벽걸이 에어컨')
+                    .replace(/{after_url}/g, 'https://supabase-url.com/after_photo.jpg')
+                  }
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 text-[9px] text-blue-500 font-bold flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[12px]">info</span>
+                  가이드 이미지는 하단에 링크형태로 자동 첨부됩니다.
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="text-center">
             <p className="text-xs text-slate-400 font-bold mb-1">우리 업체 식별 코드 (파트너 초대 시 필요)</p>
