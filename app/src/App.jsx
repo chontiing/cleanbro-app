@@ -532,6 +532,7 @@ function App() {
   const [exMemo, setExMemo] = useState('');
   const [exReceiptFile, setExReceiptFile] = useState(null);
   const [isSavingExpense, setIsSavingExpense] = useState(false);
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
 
   const handleSaveExpense = async (e) => {
     e.preventDefault();
@@ -539,6 +540,11 @@ function App() {
     setIsSavingExpense(true);
 
     let receiptUrl = null;
+    if (editingExpenseId) {
+      const existing = expenses.find(exp => exp.id === editingExpenseId);
+      receiptUrl = existing?.receipt_url;
+    }
+
     if (exReceiptFile) {
       const fileExt = exReceiptFile.name.split('.').pop();
       const fileName = `${myBusinessId}_${Date.now()}.${fileExt}`;
@@ -552,25 +558,53 @@ function App() {
       receiptUrl = data.publicUrl;
     }
 
-    const { error } = await supabase.from('expenses').insert([{
+    const payload = {
       user_id: session.user.id,
       business_id: myBusinessId,
       amount: parseInt(exAmount.toString().replace(/[^0-9]/g, '') || 0),
       category: exCategory,
       memo: exMemo,
       receipt_url: receiptUrl,
-      date_created: getTodayStr(),
-      applied_tax_type: businessProfile?.taxpayer_type || '간이과세자'
-    }]);
+    };
+
+    let error;
+    if (editingExpenseId) {
+      const { error: updErr } = await supabase.from('expenses').update(payload).eq('id', editingExpenseId);
+      error = updErr;
+    } else {
+      payload.date_created = getTodayStr();
+      payload.applied_tax_type = businessProfile?.taxpayer_type || '간이과세자';
+      const { error: insErr } = await supabase.from('expenses').insert([payload]);
+      error = insErr;
+    }
 
     if (error) {
       alert('지출 저장 실패: ' + error.message);
     } else {
-      alert('지출이 성공적으로 등록되었습니다!');
+      alert(editingExpenseId ? '지출이 수정되었습니다.' : '지출이 성공적으로 등록되었습니다!');
       setExAmount(''); setExMemo(''); setExReceiptFile(null);
+      setEditingExpenseId(null);
       fetchExpenses();
     }
     setIsSavingExpense(false);
+  };
+
+  const handleEditExpense = (exp) => {
+    setEditingExpenseId(exp.id);
+    setExAmount(fmtNum(exp.amount.toString()));
+    setExCategory(exp.category);
+    setExMemo(exp.memo || '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDeleteExpense = async (id) => {
+    if (!window.confirm("이 지출 내역을 정말 삭제할까요?")) return;
+    const { error } = await supabase.from('expenses').delete().eq('id', id);
+    if (error) alert('삭제 실패: ' + error.message);
+    else {
+      alert('삭제되었습니다.');
+      fetchExpenses();
+    }
   };
 
   // ==========================================
@@ -1554,25 +1588,46 @@ function App() {
               <input type="text" value={exMemo} onChange={e => setExMemo(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 outline-none focus:ring-2" placeholder="예: 철물점 마스킹 테이프" />
             </div>
 
-            <button disabled={isSavingExpense} type="submit" className="w-full py-3.5 bg-primary text-white font-bold rounded-xl active:scale-95 transition-transform flex justify-center gap-2 items-center">
-              <span className="material-symbols-outlined">{isSavingExpense ? 'sync' : 'add_circle'}</span>
-              {isSavingExpense ? '저장 중...' : '지출 내역 등록'}
-            </button>
+            <div className="flex gap-2">
+              <button disabled={isSavingExpense} type="submit" className="flex-1 py-3.5 bg-primary text-white font-bold rounded-xl active:scale-95 transition-transform flex justify-center gap-2 items-center">
+                <span className="material-symbols-outlined">{isSavingExpense ? 'sync' : editingExpenseId ? 'save' : 'add_circle'}</span>
+                {isSavingExpense ? '저장 중...' : editingExpenseId ? '지출 내역 수정 완료' : '지출 내역 등록'}
+              </button>
+              {editingExpenseId && (
+                <button
+                  type="button"
+                  onClick={() => { setEditingExpenseId(null); setExAmount(''); setExMemo(''); setExReceiptFile(null); }}
+                  className="px-4 bg-slate-200 text-slate-600 font-bold rounded-xl active:scale-95 transition-all"
+                >
+                  취소
+                </button>
+              )}
+            </div>
           </form>
 
           <div>
             <h3 className="font-bold text-sm text-slate-600 mb-2 px-1">최근 지출 내역 ({expenses.length}건)</h3>
             <div className="space-y-2">
               {expenses.map(e => (
-                <div key={e.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-[0_2px_15px_-5px_rgba(0,0,0,0.05)] text-sm border-0 flex justify-between items-center">
-                  <div>
+                <div key={e.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-[0_2px_15px_-5px_rgba(0,0,0,0.05)] text-sm border-0 flex justify-between items-center group">
+                  <div className="flex-1">
                     <span className="font-bold flex items-center gap-1">
                       {e.memo || e.category}
                       {e.receipt_url && <a href={e.receipt_url} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded ml-1 font-bold">영수증 보기</a>}
                     </span>
                     <span className="text-xs text-slate-400 block mt-1">{e.date_created} · {e.category}</span>
+                    <div className="flex gap-2 mt-2">
+                      <button onClick={() => handleEditExpense(e)} className="text-[10px] font-bold text-slate-400 hover:text-primary flex items-center gap-0.5">
+                        <span className="material-symbols-outlined text-[12px]">edit</span> 수정
+                      </button>
+                      <button onClick={() => handleDeleteExpense(e.id)} className="text-[10px] font-bold text-slate-400 hover:text-red-500 flex items-center gap-0.5">
+                        <span className="material-symbols-outlined text-[12px]">delete</span> 삭제
+                      </button>
+                    </div>
                   </div>
-                  <div className="font-black text-red-500">{fmtNum(e.amount)}원</div>
+                  <div className="font-black text-red-500 text-right">
+                    {fmtNum(e.amount)}원
+                  </div>
                 </div>
               ))}
               {expenses.length === 0 && <p className="text-center text-xs text-slate-400 py-4">등록된 지출 내역이 없습니다.</p>}
