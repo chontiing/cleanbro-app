@@ -229,7 +229,7 @@ function App() {
     setDiscountVal(c.discount_value || 0);
     setPayment(c.payment_method || '현금');
     setBookDate(c.book_date || getTodayStr());
-    setBookTimeType(c.book_time_type || '오전');
+    setBookTimeType(c.book_time_type || '09:00');
     setBookTimeCustom(c.book_time_custom || '');
     setAssignee(c.assignee || '');
     setIsCompleted(c.is_completed || false);
@@ -274,7 +274,7 @@ function App() {
     tmr.setDate(tmr.getDate() + 1);
     return tmr.toISOString().split('T')[0];
   });
-  const [bookTimeType, setBookTimeType] = useState('오전');
+  const [bookTimeType, setBookTimeType] = useState('09:00');
   const [bookTimeCustom, setBookTimeCustom] = useState('14:00');
   const [assignee, setAssignee] = useState(''); // 작업 담당자: 본인이름, 파트너, 2인1조
   const [isCompleted, setIsCompleted] = useState(false); // 완료 상태 유지용
@@ -807,8 +807,8 @@ function App() {
                 if (!dStr) return <div key={`empty-${idx}`} className="h-14"></div>;
 
                 const dList = customers.filter(c => c.book_date === dStr);
-                const hasMorning = dList.some(c => c.book_time_type === '오전');
-                const hasAfternoon = dList.some(c => c.book_time_type === '오후');
+                const hasMorning = dList.some(c => c.book_time_type === '오전' || (parseInt((c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type)?.split(':')[0]) < 12));
+                const hasAfternoon = dList.some(c => c.book_time_type === '오후' || (parseInt((c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type)?.split(':')[0]) >= 12));
                 const dObj = new Date(dStr);
                 const isToday = dStr === getTodayStr();
                 const isSelected = dStr === selectedDate;
@@ -975,9 +975,11 @@ function App() {
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1">방문 시간대</label>
                   <select value={bookTimeType} onChange={e => setBookTimeType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2">
-                    <option value="오전">오전 (9시~12시)</option>
-                    <option value="오후">오후 (1시~6시)</option>
-                    <option value="직접입력">직접 입력 시간</option>
+                    {Array.from({ length: 16 }, (_, i) => i + 7).map(hour => {
+                      const timeStr = `${String(hour).padStart(2, '0')}:00`;
+                      return <option key={timeStr} value={timeStr}>{timeStr}</option>;
+                    })}
+                    <option value="직접입력">직접 입력 (분 단위 등)</option>
                   </select>
                 </div>
               </div>
