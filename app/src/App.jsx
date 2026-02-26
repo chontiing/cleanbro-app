@@ -235,10 +235,14 @@ function App() {
   // [공통 모달/수정/삭제 로직]
   // ==========================================
   const handleDelete = async (id) => {
-    if (window.confirm('선택한 예약을 정말 삭제하시겠습니까?')) {
+    if (window.confirm('정말로 이 예약을 삭제하시겠습니까? 삭제된 데이터는 복구할 수 없습니다.')) {
       const { error } = await supabase.from('bookings').delete().eq('id', id);
-      if (error) alert('삭제 실패: ' + error.message);
-      else fetchCustomers();
+      if (error) {
+        alert('삭제 실패: ' + error.message);
+      } else {
+        alert('삭제되었습니다.');
+        fetchCustomers();
+      }
     }
   };
 
@@ -306,8 +310,23 @@ function App() {
   });
   const [bookTimeType, setBookTimeType] = useState('09:00');
   const [bookTimeCustom, setBookTimeCustom] = useState('14:00');
-  const [assignee, setAssignee] = useState('ccy6208'); // 작업 담당자 기본값
+  const [assignee, setAssignee] = useState(() => localStorage.getItem('default_assignee') || '');
+  const [isAssigneePinned, setIsAssigneePinned] = useState(() => localStorage.getItem('default_assignee') !== null);
   const [isCompleted, setIsCompleted] = useState(false); // 완료 상태 유지용
+
+  useEffect(() => {
+    if (!assignee && myNickname) {
+      setAssignee(myNickname);
+    }
+  }, [myNickname, assignee]);
+
+  useEffect(() => {
+    if (isAssigneePinned && assignee) {
+      localStorage.setItem('default_assignee', assignee);
+    } else if (!isAssigneePinned) {
+      localStorage.removeItem('default_assignee');
+    }
+  }, [assignee, isAssigneePinned]);
 
   useEffect(() => {
     if (editingId) return;
@@ -378,6 +397,7 @@ function App() {
       assignee: assignee || 'ccy6208',
       is_completed: isCompleted,
       date_created: getTodayStr(),
+      applied_tax_type: businessProfile?.taxpayer_type || '간이과세자',
     };
 
     let error;
@@ -416,16 +436,24 @@ function App() {
   const [editBusinessPhone, setEditBusinessPhone] = useState('');
   const [editLogoFile, setEditLogoFile] = useState(null);
   const [editNickname, setEditNickname] = useState(''); // 본인 닉네임 설정
+  const [editTaxpayerType, setEditTaxpayerType] = useState('간이과세자'); // 과세자 유형
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  // 일괄 변경 State
+  const [bulkStartDate, setBulkStartDate] = useState(getTodayStr());
+  const [bulkEndDate, setBulkEndDate] = useState(getTodayStr());
+  const [bulkTaxType, setBulkTaxType] = useState('일반과세자');
+  const [isBulking, setIsBulking] = useState(false);
 
   useEffect(() => {
     if (currentTab === 'settings') {
-      setEditCompanyName(businessProfile.company_name);
+      setEditCompanyName(businessProfile.company_name || '');
       setEditBusinessPhone(businessProfile.phone || '');
       setEditLogoFile(null);
       setEditNickname(myNickname || '');
+      setEditTaxpayerType(businessProfile.taxpayer_type || '간이과세자');
     }
-  }, [currentTab, businessProfile]);
+  }, [currentTab, businessProfile, myNickname]);
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
@@ -453,6 +481,7 @@ function App() {
       company_name: editCompanyName,
       phone: editBusinessPhone,
       logo_url: logoUrl,
+      taxpayer_type: editTaxpayerType,
     };
 
     const { error: bError } = await supabase.from('businesses').upsert([upsertData]);
@@ -473,6 +502,26 @@ function App() {
       fetchTeamMembers(); // 업데이트 후 팀원 목록 즉시 갱신
     }
     setIsSavingSettings(false);
+  };
+
+  const handleBulkTaxUpdate = async () => {
+    if (!window.confirm(`${bulkStartDate} ~ ${bulkEndDate} 기간의 모든 데이터 세무 기준을 '${bulkTaxType}'(으)로 일괄 변경할까요?\n이 작업은 되돌릴 수 없습니다.`)) return;
+    setIsBulking(true);
+
+    const { error: err1 } = await supabase.from('bookings').update({ applied_tax_type: bulkTaxType })
+      .gte('book_date', bulkStartDate).lte('book_date', bulkEndDate).eq('business_id', myBusinessId);
+
+    const { error: err2 } = await supabase.from('expenses').update({ applied_tax_type: bulkTaxType })
+      .gte('date_created', bulkStartDate).lte('date_created', bulkEndDate).eq('business_id', myBusinessId);
+
+    if (err1 || err2) {
+      alert('일괄 업데이트 중 오류가 발생했습니다.');
+    } else {
+      alert('세무 기준 일괄 업데이트가 성공적으로 완료되었습니다.');
+      fetchCustomers();
+      fetchExpenses();
+    }
+    setIsBulking(false);
   };
 
   // ==========================================
@@ -510,7 +559,8 @@ function App() {
       category: exCategory,
       memo: exMemo,
       receipt_url: receiptUrl,
-      date_created: getTodayStr()
+      date_created: getTodayStr(),
+      applied_tax_type: businessProfile?.taxpayer_type || '간이과세자'
     }]);
 
     if (error) {
@@ -526,32 +576,130 @@ function App() {
   // ==========================================
   // [세무 대시보드 계산]
   // ==========================================
+  const [taxYear, setTaxYear] = useState(() => new Date().getFullYear());
+  const [taxMonth, setTaxMonth] = useState(() => new Date().getMonth() + 1);
+
   const calcTax = () => {
-    const currentMonthStr = getTodayStr().slice(0, 7); // 'YYYY-MM'
+    const targetMonthStr = `${taxYear}-${String(taxMonth).padStart(2, '0')}`;
 
-    // 이번 달 과세 매출: 카드 결제이거나, (현금이면서 증빙 체크가 된 경우)
-    const taxableSales = customers.filter(c => {
-      if (!c.book_date?.startsWith(currentMonthStr)) return false;
-      if (c.payment_method === '카드') return true;
-      if (c.payment_method === '현금' && (c.has_cash_receipt || c.has_tax_invoice)) return true;
-      return false;
-    }).reduce((acc, c) => acc + c.final_price, 0);
+    let totalTaxableSales = 0;
+    let totalGrossSales = 0;
 
-    const salesTax = Math.floor(taxableSales * 0.1);
+    let totalSalesTax = 0;
+    let totalPurchaseTax = 0;
+    let totalCreditCardDeduction = 0;
 
-    // 이번 달 지출 내역
-    const thisMonthExpenses = expenses.filter(e => e.date_created?.startsWith(currentMonthStr))
-      .reduce((acc, e) => acc + e.amount, 0);
+    customers.filter(c => c.book_date?.startsWith(targetMonthStr)).forEach(c => {
+      const isRecognizedSale = c.payment_method === '카드' || (c.payment_method === '현금' && (c.has_cash_receipt || c.has_tax_invoice));
+      const taxType = c.applied_tax_type || '간이과세자';
 
-    const purchaseTax = Math.floor(thisMonthExpenses * 0.1);
+      totalGrossSales += c.final_price;
+
+      if (taxType === '일반과세자') {
+        if (isRecognizedSale) {
+          totalTaxableSales += c.final_price;
+          totalSalesTax += Math.floor(c.final_price * 0.1);
+          totalCreditCardDeduction += Math.floor(c.final_price * 0.013);
+        }
+      } else {
+        totalSalesTax += Math.floor(c.final_price * 0.3 * 0.1);
+        if (isRecognizedSale) {
+          totalTaxableSales += c.final_price;
+          totalCreditCardDeduction += Math.floor(c.final_price * 0.013);
+        }
+      }
+    });
+
+    let thisMonthExpenses = 0;
+    expenses.filter(e => e.date_created?.startsWith(targetMonthStr)).forEach(e => {
+      thisMonthExpenses += e.amount;
+      const taxType = e.applied_tax_type || '간이과세자';
+
+      if (taxType === '일반과세자') {
+        totalPurchaseTax += Math.floor(e.amount * 0.1);
+      } else {
+        totalPurchaseTax += Math.floor(e.amount * 0.005);
+      }
+    });
+
+    const finalTax = Math.max(0, totalSalesTax - totalPurchaseTax - totalCreditCardDeduction);
 
     return {
-      taxableSales,
-      salesTax,
+      taxableSales: totalTaxableSales,
+      salesTax: totalSalesTax,
       thisMonthExpenses,
-      purchaseTax,
-      finalTax: Math.max(0, salesTax - purchaseTax)
+      purchaseTax: totalPurchaseTax,
+      creditCardDeduction: totalCreditCardDeduction,
+      finalTax
     };
+  };
+
+  const exportToCSV = () => {
+    const yearStr = `${taxYear}-`;
+    const yrBookings = customers.filter(c => c.book_date?.startsWith(yearStr));
+    const yrExpenses = expenses.filter(e => e.date_created?.startsWith(yearStr));
+
+    let csv = '\uFEFF';
+    csv += '=== 매출 내역 ===\n';
+    csv += '날짜,고객/내용,카테고리,상품,카드 매출액,현금영수증 매출액,기타(무증빙) 매출액,세금적용기준\n';
+    yrBookings.forEach(c => {
+      let cardSales = 0; let cashReceiptSales = 0; let otherSales = 0;
+      if (c.payment_method === '카드') cardSales = c.final_price;
+      else if (c.has_cash_receipt || c.has_tax_invoice) cashReceiptSales = c.final_price;
+      else otherSales = c.final_price;
+
+      const safeMemo = (c.customer_name || c.memo || '').replace(/"/g, '""');
+      csv += `${c.book_date},"${safeMemo}","${c.category}","${c.product}",${cardSales},${cashReceiptSales},${otherSales},${c.applied_tax_type || '간이과세자'}\n`;
+    });
+
+    csv += '\n=== 지출 내역 ===\n';
+    csv += '날짜,카테고리,내용,금액,영수증첨부,세금적용기준\n';
+    yrExpenses.forEach(e => {
+      const hasReceipt = e.receipt_url ? 'O' : 'X';
+      const safeMemo = (e.memo || '').replace(/"/g, '""');
+      csv += `${e.date_created},${e.category},"${safeMemo}",${e.amount},${hasReceipt},${e.applied_tax_type || '간이과세자'}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `클린브로_${taxYear}년도_세무자료.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    setTimeout(() => {
+      const subject = encodeURIComponent(`[클린브로] ${taxYear}년도 세무 신고 자료`);
+      const body = encodeURIComponent(`세무사님,\n\n${taxYear}년도 클린브로 매출 및 지출 내역 자료를 보내드립니다.\n\n* 방금 기기에 다운로드된 [클린브로_${taxYear}년도_세무자료.csv] 파일을 첨부하여 보내주세요.\n\n감사합니다.`);
+      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    }, 500);
+  };
+
+  const getAiTaxAdvice = () => {
+    const yearStr = `${taxYear}-`;
+    const yrSales = customers.filter(c => c.book_date?.startsWith(yearStr)).reduce((sum, c) => sum + c.final_price, 0);
+
+    const targetMonthStr = `${taxYear}-${String(taxMonth).padStart(2, '0')}`;
+    const moExpenses = expenses.filter(e => e.date_created?.startsWith(targetMonthStr));
+    const totalMoExp = moExpenses.reduce((sum, e) => sum + e.amount, 0);
+    const expWithReceipt = moExpenses.filter(e => e.receipt_url).reduce((sum, e) => sum + e.amount, 0);
+    const receiptRatio = totalMoExp > 0 ? expWithReceipt / totalMoExp : 1;
+
+    let genSalesTax = 0; let genPurchaseTax = 0; let genCardDeduct = 0;
+    customers.filter(c => c.book_date?.startsWith(targetMonthStr)).forEach(c => {
+      const isRecognized = c.payment_method === '카드' || (c.payment_method === '현금' && (c.has_cash_receipt || c.has_tax_invoice));
+      if (isRecognized) {
+        genSalesTax += Math.floor(c.final_price * 0.1);
+        genCardDeduct += Math.floor(c.final_price * 0.013);
+      }
+    });
+    expenses.filter(e => e.date_created?.startsWith(targetMonthStr)).forEach(e => {
+      genPurchaseTax += Math.floor(e.amount * 0.1);
+    });
+    const genFinalTax = Math.max(0, genSalesTax - genPurchaseTax - genCardDeduct);
+
+    return { yrSales, receiptRatio, totalMoExp, simulatedGenTax: genFinalTax };
   };
 
   // ==========================================
@@ -713,6 +861,9 @@ function App() {
 
         {/* 하단 액션 버튼들 */}
         <div className="mt-3 flex justify-end gap-2">
+          <button onClick={() => handleDelete(c.id)} className="text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors bg-red-50 text-red-600 border-red-200 hover:bg-red-100 shadow-sm">
+            🗑️ 삭제하기
+          </button>
           <button onClick={() => handleEdit(c)} className="text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors bg-white text-slate-500 border-slate-300 hover:bg-slate-50 shadow-sm">
             ✏️ 수정하기
           </button>
@@ -1121,15 +1272,22 @@ function App() {
 
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">작업 담당자 지정</label>
+                  <div className="flex justify-between items-end mb-1">
+                    <label className="block text-xs font-semibold text-slate-500">작업 담당자 지정</label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input type="checkbox" checked={isAssigneePinned} onChange={(e) => setIsAssigneePinned(e.target.checked)} className="w-3.5 h-3.5 text-primary rounded border-slate-300 focus:ring-primary" />
+                      <span className="text-[10px] font-bold text-slate-600">🌟 고정</span>
+                    </label>
+                  </div>
                   <select
                     value={assignee}
                     onChange={e => setAssignee(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 bg-white"
                   >
-                    {[...new Set(['ccy6208', myNickname, ...teamMembers, '파트너'])].filter(Boolean).map(nickname => (
+                    {[...new Set([myNickname, ...teamMembers])].filter(Boolean).map(nickname => (
                       <option key={nickname} value={nickname}>{nickname}</option>
                     ))}
+                    <option value="파트너">파트너 (닉네임 미지정)</option>
                     <option value="2인 1조 팀">2인 1조 팀</option>
                   </select>
                 </div>
@@ -1283,6 +1441,14 @@ function App() {
             </div>
 
             <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">과세자 유형</label>
+              <select value={editTaxpayerType} onChange={e => setEditTaxpayerType(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary">
+                <option value="간이과세자">간이과세자</option>
+                <option value="일반과세자">일반과세자</option>
+              </select>
+            </div>
+
+            <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">대표 연락처</label>
               <input type="tel" value={editBusinessPhone} onChange={e => setEditBusinessPhone(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="예: 1588-0000" />
             </div>
@@ -1308,6 +1474,36 @@ function App() {
           <div className="text-center">
             <p className="text-xs text-slate-400 font-bold mb-1">우리 업체 식별 코드 (파트너 초대 시 필요)</p>
             <p className="text-[10px] bg-slate-200 p-2 rounded text-slate-600 break-all select-all font-mono">{myBusinessId}</p>
+          </div>
+
+          <div className="bg-red-50 p-5 rounded-2xl border border-red-100">
+            <h3 className="font-bold text-sm text-red-600 mb-3 flex items-center gap-1">
+              <span className="material-symbols-outlined text-[18px]">rule_folder</span> 과세 유형 일괄 변경
+            </h3>
+            <p className="text-[10px] text-red-500/80 font-medium mb-4 leading-tight">
+              특정 기간 동안 저장된 매출(예약)과 지출 내역의 과세 기준을 일괄 업데이트합니다.
+            </p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <div>
+                <label className="block text-[10px] font-bold text-red-400 mb-1">시작 날짜</label>
+                <input type="date" value={bulkStartDate} onChange={e => setBulkStartDate(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white outline-none focus:ring-1 focus:ring-red-400 text-slate-700" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-red-400 mb-1">종료 날짜</label>
+                <input type="date" value={bulkEndDate} onChange={e => setBulkEndDate(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white outline-none focus:ring-1 focus:ring-red-400 text-slate-700" />
+              </div>
+            </div>
+            <div className="mb-4">
+              <label className="block text-[10px] font-bold text-red-400 mb-1">변경할 과세 유형</label>
+              <select value={bulkTaxType} onChange={e => setBulkTaxType(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white outline-none focus:ring-1 focus:ring-red-400 text-slate-700">
+                <option value="간이과세자">간이과세자</option>
+                <option value="일반과세자">일반과세자</option>
+              </select>
+            </div>
+            <button disabled={isBulking} onClick={handleBulkTaxUpdate} className="w-full py-2.5 bg-red-600 text-white text-xs font-bold rounded-lg shadow-sm active:scale-95 transition-transform flex justify-center items-center gap-1.5">
+              <span className="material-symbols-outlined text-[14px]">{isBulking ? 'sync' : 'auto_fix_high'}</span>
+              {isBulking ? '일괄 업데이트 중...' : '데이터 일괄 적용하기'}
+            </button>
           </div>
 
           <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
@@ -1341,6 +1537,8 @@ function App() {
                 <select value={exCategory} onChange={e => setExCategory(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2">
                   <option value="자재/장비">자재/장비</option>
                   <option value="유류비">유류비</option>
+                  <option value="차량유지비">차량유지비</option>
+                  <option value="광고비">광고비</option>
                   <option value="식대">식대</option>
                   <option value="기타">기타</option>
                 </select>
@@ -1386,27 +1584,60 @@ function App() {
       {/* ======================= [탭 6: 세무 대시보드] ======================= */}
       {currentTab === 'tax' && (() => {
         const taxInfo = calcTax();
+        const aiAdvice = getAiTaxAdvice();
+        const currentYear = new Date().getFullYear();
+        const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+        const isTaxMonth = [1, 5, 7, 11].includes(taxMonth);
+        const taxAlertText = taxMonth === 1 || taxMonth === 7 ? "부가가치세 확정 신고 달입니다!" : taxMonth === 5 ? "종합소득세 신고 달입니다!" : taxMonth === 11 ? "종합소득세 중간예납 달입니다!" : "";
+        const isCurrentlyGeneral = businessProfile?.taxpayer_type === '일반과세자';
+
         return (
-          <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-6 animate-slide-up">
-            <h2 className="text-2xl font-black mb-2 flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary">account_balance</span> 이달의 세무 예측
+          <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-5 animate-slide-up pb-24">
+            <h2 className="text-2xl font-black flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">account_balance</span> 세무 및 절세 대시보드
             </h2>
 
+            <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-xl border-2 border-slate-100 dark:border-slate-700 shadow-sm">
+              <select value={taxYear} onChange={e => setTaxYear(Number(e.target.value))} className="bg-transparent font-bold text-center px-2 py-2 outline-none w-1/2 border-r dark:border-slate-700">
+                {years.map(y => <option key={y} value={y}>{y}년</option>)}
+              </select>
+              <select value={taxMonth} onChange={e => setTaxMonth(Number(e.target.value))} className="bg-transparent font-bold text-center px-2 py-2 outline-none w-1/2">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => <option key={m} value={m}>{m}월</option>)}
+              </select>
+            </div>
+
+            {isTaxMonth && (
+              <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-xl border border-red-200 dark:border-red-800/50 flex font-bold items-center gap-2 animate-pulse">
+                <span className="material-symbols-outlined">notification_important</span>
+                이 달은 {taxAlertText}
+              </div>
+            )}
+
             <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0">
-              <p className="text-xs font-bold text-slate-400 text-center mb-6">이번 달 예상 부가가치세</p>
+              <p className="text-xs font-bold text-slate-400 text-center mb-1">선택 기간 예상 부가가치세</p>
+              <p className="text-[10px] text-primary bg-primary/10 w-fit mx-auto px-2 py-0.5 rounded-full font-bold mb-5">
+                현재 [{businessProfile.taxpayer_type || '간이과세자'}] 과세자 기준
+              </p>
 
               <div className="space-y-4 mb-6">
                 <div className="flex justify-between items-center pb-3 border-b border-dashed border-slate-200 dark:border-slate-700">
-                  <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➕ 이번 달 과세 매출 부가세 (10%)</span>
+                  <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➕ 기간 내 매출 세액</span>
                   <span className="font-black text-red-500">{fmtNum(taxInfo.salesTax)}원</span>
-                  <p className="w-full text-[10px] text-slate-400 mt-1 col-span-2 text-right">과세매출 합계: {fmtNum(taxInfo.taxableSales)}원 (카드 및 현금영수증/계산서)</p>
+                  <p className="w-full text-[10px] text-slate-400 mt-1 col-span-2 text-right">과세매출 합계: {fmtNum(taxInfo.taxableSales)}원</p>
                 </div>
 
                 <div className="flex justify-between items-center pb-3 border-b border-dashed border-slate-200 dark:border-slate-700">
-                  <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➖ 이번 달 매입 공제 세액 (10%)</span>
+                  <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➖ 매입(지출) 공제 세액</span>
                   <span className="font-black text-green-600">-{fmtNum(taxInfo.purchaseTax)}원</span>
                   <p className="w-full text-[10px] text-slate-400 mt-1 col-span-2 text-right">등록된 총 지출액 합계: {fmtNum(taxInfo.thisMonthExpenses)}원</p>
                 </div>
+
+                {taxInfo.creditCardDeduction > 0 && (
+                  <div className="flex justify-between items-center pb-3 border-b border-dashed border-slate-200 dark:border-slate-700">
+                    <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➖ 신용카드 등 발행공제</span>
+                    <span className="font-black text-green-600">-{fmtNum(taxInfo.creditCardDeduction)}원</span>
+                  </div>
+                )}
               </div>
 
               <div className="bg-slate-50 dark:bg-slate-900 rounded-xl p-4 text-center border overflow-hidden relative">
@@ -1415,14 +1646,88 @@ function App() {
               </div>
             </div>
 
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/50 p-4 rounded-xl shadow-sm">
-              <h4 className="font-bold text-yellow-800 dark:text-yellow-500 text-sm mb-2 flex items-center gap-1">
-                <span className="material-symbols-outlined text-[16px]">lightbulb</span> 절세 가이드
+            <button onClick={exportToCSV} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl active:scale-95 transition-transform flex justify-center items-center gap-2 shadow-md">
+              <span className="material-symbols-outlined">mail</span>
+              {taxYear}년치 자료 엑셀(CSV) 저장 & 세무사 메일 보내기
+            </button>
+
+            {/* 부가세 환급 대상 분석 */}
+            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800/50 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]">
+              <h4 className="font-extrabold text-indigo-800 dark:text-indigo-400 text-base mb-3 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[20px]">recommend</span> 부가세 환급 대상 분석 (선택 기간)
               </h4>
-              <ul className="text-xs text-yellow-700 dark:text-yellow-600/90 space-y-1.5 list-disc pl-4 font-medium break-keep">
-                <li>사업용 소모품, 장비, 자재 구입 시 꼭 현금영수증(지출증빙) 또는 세금계산서를 수취하세요.</li>
-                <li>업무용 주유비, 식대 카드 결제 내역도 지출 관리에 꼼꼼히 등록해 공제를 받으세요.</li>
-                <li>위 세액은 단면적인 부가가치세(10%) 계산으로, 추가 공제 비율이나 사업소득에 대한 종합소득세는 별도로 세무사와 상담을 권장합니다.</li>
+              <p className="text-[10px] text-indigo-500 font-bold mb-3">
+                * 자재/장비, 유류비, 차량유지비, 광고비 카테고리에 해당하는 지출만 필터링합니다.
+              </p>
+
+              <div className="space-y-2">
+                {expenses
+                  .filter(e => e.date_created?.startsWith(`${taxYear}-${String(taxMonth).padStart(2, '0')}`))
+                  .filter(e => ['자재/장비', '유류비', '차량유지비', '광고비'].includes(e.category))
+                  .map(e => (
+                    <div key={e.id} className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-indigo-100 flex justify-between items-center text-sm">
+                      <div className="flex-1 overflow-hidden">
+                        <span className="font-bold flex items-center gap-1 truncate text-slate-700 dark:text-slate-300">
+                          {e.memo || e.category}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">{e.date_created} · {e.category}</span>
+                      </div>
+                      <div className="text-right ml-2 flex-shrink-0">
+                        <div className="font-black text-slate-600">{fmtNum(e.amount)}원</div>
+                        {e.receipt_url ? (
+                          <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1 py-0.5 rounded">
+                            환급 예상: {fmtNum(Math.floor(e.amount * 0.1))}원 (10%)
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-red-500 font-bold bg-red-50 px-1 py-0.5 rounded">
+                            🚨 증빙 보완 필요
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                {expenses
+                  .filter(e => e.date_created?.startsWith(`${taxYear}-${String(taxMonth).padStart(2, '0')}`))
+                  .filter(e => ['자재/장비', '유류비', '차량유지비', '광고비'].includes(e.category)).length === 0 && (
+                    <p className="text-center text-xs text-slate-400 py-3 bg-white/50 rounded-xl">해당 기간 환급 가능 지출이 없습니다.</p>
+                  )}
+              </div>
+            </div>
+
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]">
+              <h4 className="font-extrabold text-blue-800 dark:text-blue-400 text-base mb-3 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[20px]">smart_toy</span> AI 세무 전략 어드바이저
+              </h4>
+              <div className="space-y-3">
+                {aiAdvice.yrSales >= 70000000 && aiAdvice.yrSales < 104000000 && !isCurrentlyGeneral && (
+                  <p className="text-sm bg-white dark:bg-slate-800 p-3 rounded-xl border border-blue-100 dark:border-blue-800/50 leading-relaxed font-medium text-slate-700 dark:text-slate-300">
+                    <span className="text-red-500 font-bold mr-1">⚠️ 주의:</span>
+                    올해 누적 매출이 8천만 원에 근접했습니다. 내년에 <span className="font-bold underline">일반과세자로 강제 전환</span>될 가능성이 매우 높습니다. 매입 세금계산서를 철저히 준비하세요!
+                  </p>
+                )}
+                {aiAdvice.totalMoExp > 0 && aiAdvice.receiptRatio < 0.5 && (
+                  <p className="text-sm bg-white dark:bg-slate-800 p-3 rounded-xl border border-blue-100 dark:border-blue-800/50 leading-relaxed font-medium text-slate-700 dark:text-slate-300">
+                    <span className="text-orange-500 font-bold mr-1">💡 조언:</span>
+                    이번 달 지출 대비 수취한 증빙(영수증) 내역이 {Math.round(aiAdvice.receiptRatio * 100)}% 로 현저히 부족합니다! 자재 구입 시 꼭 세금계산서나 현금영수증(지출증빙용)을 챙기세요.
+                  </p>
+                )}
+                <p className="text-sm bg-white dark:bg-slate-800 p-3 rounded-xl border border-blue-100 dark:border-blue-800/50 leading-relaxed font-medium text-slate-700 dark:text-slate-300">
+                  <span className="text-blue-500 font-bold mr-1">📊 시뮬레이터:</span>
+                  만약 이번 달부터 <span className="font-bold">일반과세자</span>였다면, {isCurrentlyGeneral ? "현재와 동일한" : `예상 세액은 약 [${fmtNum(aiAdvice.simulatedGenTax)}원] 입니다.`}
+                  {!isCurrentlyGeneral && aiAdvice.simulatedGenTax < taxInfo.finalTax && " (현행 간이과세 유지보다 일반과세 전환 시 매입 공제 환급 혜택이 더 클 수 있습니다!)"}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/50 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]">
+              <h4 className="font-extrabold text-yellow-800 dark:text-yellow-500 text-base mb-3 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[20px]">lightbulb</span> [청소업 특화] 절세 가이드
+              </h4>
+              <ul className="text-sm text-yellow-800 dark:text-yellow-600/90 space-y-2.5 list-disc pl-4 font-medium break-keep">
+                <li><span className="font-bold">고가의 청소 장비(고압세척기, 산업용 청소기 등)</span> 구입 시 반드시 세금계산서를 발급받으세요. 부가세 10% 전액 공제가 가능합니다.</li>
+                <li>청소업종 특성 상 <span className="font-bold">차량 유지비와 유류비</span> 비중이 높습니다. 홈택스에 사업자 카드를 등록하여 매입세액 공제를 극대화하세요!</li>
+                <li>오픈마켓(숨고, 미소 등) 플랫폼 이용 수수료 역시 국세청 홈택스에서 전자세금계산서로 자동 수취 가능 여부를 세팅해 두시면 편합니다.</li>
+                <li className="text-[11px] text-yellow-600/70 mt-3 list-none -ml-4">* 위 세액은 단순 부가가치세(10%) 계산으로, 추가 공제 비율이나 사업소득 종합소득세는 세무사와 상담을 권장합니다.</li>
               </ul>
             </div>
           </main>
