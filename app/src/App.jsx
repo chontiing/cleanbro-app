@@ -73,6 +73,11 @@ function App() {
   const [loadingData, setLoadingData] = useState(false);
   const [mapPopupMemo, setMapPopupMemo] = useState(null);
 
+  // 추가 기능: 프로필 닉네임, 팀원 리스트, 지출 리스트
+  const [myNickname, setMyNickname] = useState('');
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+
   // ==========================================
   // [인증 관련 (Supabase Auth)]
   // ==========================================
@@ -139,8 +144,31 @@ function App() {
 
   const fetchProfile = async () => {
     if (!myBusinessId) return;
-    const { data } = await supabase.from('businesses').select('*').eq('id', myBusinessId).single();
-    if (data) setBusinessProfile(data);
+    // 업체 정보
+    const { data: bData } = await supabase.from('businesses').select('*').eq('id', myBusinessId).single();
+    if (bData) setBusinessProfile(bData);
+
+    // 내 닉네임 프로필 정보
+    const { data: pData } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
+    if (pData?.nickname) setMyNickname(pData.nickname);
+  };
+
+  const fetchTeamMembers = async () => {
+    if (!myBusinessId) return;
+    const { data, error } = await supabase.from('profiles').select('*').eq('business_id', myBusinessId);
+    if (!error && data) {
+      setTeamMembers(data.map(p => p.nickname).filter(Boolean));
+    }
+  };
+
+  const fetchExpenses = async () => {
+    if (!myBusinessId) return;
+    const { data, error } = await supabase
+      .from('expenses')
+      .select('*')
+      .eq('business_id', myBusinessId)
+      .order('id', { ascending: false });
+    if (!error && data) setExpenses(data);
   };
 
   const fetchCustomers = async () => {
@@ -165,6 +193,8 @@ function App() {
   useEffect(() => {
     if (session) {
       fetchProfile();
+      fetchTeamMembers();
+      fetchExpenses();
       fetchCustomers();
 
       // 실시간 데이터 동기화 구독 추가
@@ -231,7 +261,7 @@ function App() {
     setBookDate(c.book_date || getTodayStr());
     setBookTimeType(c.book_time_type || '09:00');
     setBookTimeCustom(c.book_time_custom || '');
-    setAssignee(c.assignee || '');
+    setAssignee(c.assignee || 'ccy6208');
     setIsCompleted(c.is_completed || false);
     setEditingId(c.id);
     setCurrentTab('add');
@@ -276,7 +306,7 @@ function App() {
   });
   const [bookTimeType, setBookTimeType] = useState('09:00');
   const [bookTimeCustom, setBookTimeCustom] = useState('14:00');
-  const [assignee, setAssignee] = useState(''); // 작업 담당자: 본인이름, 파트너, 2인1조
+  const [assignee, setAssignee] = useState('ccy6208'); // 작업 담당자 기본값
   const [isCompleted, setIsCompleted] = useState(false); // 완료 상태 유지용
 
   useEffect(() => {
@@ -345,7 +375,7 @@ function App() {
       book_date: bookDate,
       book_time_type: bookTimeType,
       book_time_custom: bookTimeType === '직접입력' ? bookTimeCustom : null,
-      assignee: assignee || session?.user?.email.split('@')[0] || '사용자',
+      assignee: assignee || 'ccy6208',
       is_completed: isCompleted,
       date_created: getTodayStr(),
     };
@@ -385,6 +415,7 @@ function App() {
   const [editCompanyName, setEditCompanyName] = useState('');
   const [editBusinessPhone, setEditBusinessPhone] = useState('');
   const [editLogoFile, setEditLogoFile] = useState(null);
+  const [editNickname, setEditNickname] = useState(''); // 본인 닉네임 설정
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   useEffect(() => {
@@ -392,6 +423,7 @@ function App() {
       setEditCompanyName(businessProfile.company_name);
       setEditBusinessPhone(businessProfile.phone || '');
       setEditLogoFile(null);
+      setEditNickname(myNickname || '');
     }
   }, [currentTab, businessProfile]);
 
@@ -423,14 +455,103 @@ function App() {
       logo_url: logoUrl,
     };
 
-    const { error } = await supabase.from('businesses').upsert([upsertData]);
-    if (error) {
-      alert('프로필 저장 실패: ' + error.message);
+    const { error: bError } = await supabase.from('businesses').upsert([upsertData]);
+
+    // 유저 프로필(닉네임) 저장 (현재 로그인된 user.id 기준)
+    const { error: pError } = await supabase.from('profiles').upsert([{
+      id: session.user.id,
+      business_id: myBusinessId,
+      nickname: editNickname
+    }]);
+
+    if (bError || pError) {
+      alert('프로필 저장 실패: ' + (bError?.message || pError?.message));
     } else {
       setBusinessProfile(upsertData);
-      alert('업체 정보가 성공적으로 업데이트되었습니다.');
+      setMyNickname(editNickname);
+      alert('업체 정보 및 내 닉네임이 성공적으로 업데이트되었습니다.');
+      fetchTeamMembers(); // 업데이트 후 팀원 목록 즉시 갱신
     }
     setIsSavingSettings(false);
+  };
+
+  // ==========================================
+  // [탭: 지출 관리 (Expenses)]
+  // ==========================================
+  const [exAmount, setExAmount] = useState('');
+  const [exCategory, setExCategory] = useState('자재/장비');
+  const [exMemo, setExMemo] = useState('');
+  const [exReceiptFile, setExReceiptFile] = useState(null);
+  const [isSavingExpense, setIsSavingExpense] = useState(false);
+
+  const handleSaveExpense = async (e) => {
+    e.preventDefault();
+    if (!exAmount) return alert('지출 금액을 입력해 주세요.');
+    setIsSavingExpense(true);
+
+    let receiptUrl = null;
+    if (exReceiptFile) {
+      const fileExt = exReceiptFile.name.split('.').pop();
+      const fileName = `${myBusinessId}_${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage.from('receipts').upload(fileName, exReceiptFile);
+      if (uploadError) {
+        alert('영수증 이미지 업로드 실패: ' + uploadError.message);
+        setIsSavingExpense(false);
+        return;
+      }
+      const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
+      receiptUrl = data.publicUrl;
+    }
+
+    const { error } = await supabase.from('expenses').insert([{
+      user_id: session.user.id,
+      business_id: myBusinessId,
+      amount: parseInt(exAmount.toString().replace(/[^0-9]/g, '') || 0),
+      category: exCategory,
+      memo: exMemo,
+      receipt_url: receiptUrl,
+      date_created: getTodayStr()
+    }]);
+
+    if (error) {
+      alert('지출 저장 실패: ' + error.message);
+    } else {
+      alert('지출이 성공적으로 등록되었습니다!');
+      setExAmount(''); setExMemo(''); setExReceiptFile(null);
+      fetchExpenses();
+    }
+    setIsSavingExpense(false);
+  };
+
+  // ==========================================
+  // [세무 대시보드 계산]
+  // ==========================================
+  const calcTax = () => {
+    const currentMonthStr = getTodayStr().slice(0, 7); // 'YYYY-MM'
+
+    // 이번 달 과세 매출: 카드 결제이거나, (현금이면서 증빙 체크가 된 경우)
+    const taxableSales = customers.filter(c => {
+      if (!c.book_date?.startsWith(currentMonthStr)) return false;
+      if (c.payment_method === '카드') return true;
+      if (c.payment_method === '현금' && (c.has_cash_receipt || c.has_tax_invoice)) return true;
+      return false;
+    }).reduce((acc, c) => acc + c.final_price, 0);
+
+    const salesTax = Math.floor(taxableSales * 0.1);
+
+    // 이번 달 지출 내역
+    const thisMonthExpenses = expenses.filter(e => e.date_created?.startsWith(currentMonthStr))
+      .reduce((acc, e) => acc + e.amount, 0);
+
+    const purchaseTax = Math.floor(thisMonthExpenses * 0.1);
+
+    return {
+      taxableSales,
+      salesTax,
+      thisMonthExpenses,
+      purchaseTax,
+      finalTax: Math.max(0, salesTax - purchaseTax)
+    };
   };
 
   // ==========================================
@@ -569,6 +690,14 @@ function App() {
             </h4>
             <p className="text-slate-400 font-mono text-sm">{c.phone ? c.phone.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`) : '번호 없음'}</p>
             {c.memo && <p className="text-xs text-slate-500 mt-1 line-clamp-1">{c.memo}</p>}
+            <div className="flex items-center gap-2 mt-2">
+              <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${c.sms_sent_initial ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                <span className="material-symbols-outlined text-[12px]">sms</span> 안내 문자
+              </span>
+              <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${c.sms_sent_reminder ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                <span className="material-symbols-outlined text-[12px]">alarm</span> 알림 문자
+              </span>
+            </div>
           </div>
           <div className="text-right pt-6">
             <p className="font-bold text-primary text-lg">{fmtNum(c.final_price)}원</p>
@@ -992,22 +1121,17 @@ function App() {
 
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-2">작업 담당자 지정</label>
-                  <div className="flex gap-2">
-                    {[(userName || '본인'), '파트너', '2인 1조 팀'].map(person => {
-                      const isSelected = (assignee || userName || '본인') === person;
-                      const activeColor = 'bg-indigo-500 text-white border-indigo-600 shadow-md shadow-indigo-500/30';
-                      const defaultColor = 'bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-200';
-                      return (
-                        <button
-                          key={person} onClick={() => setAssignee(person)}
-                          className={`flex-1 py-2 rounded-xl text-[11px] px-1 font-bold transition-all border ${isSelected ? activeColor : defaultColor}`}
-                        >
-                          {person}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">작업 담당자 지정</label>
+                  <select
+                    value={assignee}
+                    onChange={e => setAssignee(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 bg-white"
+                  >
+                    {[...new Set(['ccy6208', myNickname, ...teamMembers, '파트너'])].filter(Boolean).map(nickname => (
+                      <option key={nickname} value={nickname}>{nickname}</option>
+                    ))}
+                    <option value="2인 1조 팀">2인 1조 팀</option>
+                  </select>
                 </div>
 
                 <div>
@@ -1154,6 +1278,11 @@ function App() {
             </div>
 
             <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">내 닉네임 (작업 담당자 노출용)</label>
+              <input type="text" required value={editNickname} onChange={e => setEditNickname(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="예: 구로구점 김길동, 마스터" />
+            </div>
+
+            <div>
               <label className="block text-xs font-bold text-slate-500 mb-1">대표 연락처</label>
               <input type="tel" value={editBusinessPhone} onChange={e => setEditBusinessPhone(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="예: 1588-0000" />
             </div>
@@ -1192,6 +1321,113 @@ function App() {
           </div>
         </main>
       )}
+
+      {/* ======================= [탭 5: 지출 관리] ======================= */}
+      {currentTab === 'expenses' && (
+        <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-6 animate-slide-up">
+          <h2 className="text-2xl font-black mb-2 flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary">receipt_long</span> 지출 관리
+          </h2>
+
+          <form onSubmit={handleSaveExpense} className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-5 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">지출 금액 (원)</label>
+              <input type="text" required value={exAmount} onChange={e => setExAmount(fmtNum(e.target.value.replace(/[^0-9]/g, '')))} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-right focus:ring-2" placeholder="0" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">카테고리</label>
+                <select value={exCategory} onChange={e => setExCategory(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2">
+                  <option value="자재/장비">자재/장비</option>
+                  <option value="유류비">유류비</option>
+                  <option value="식대">식대</option>
+                  <option value="기타">기타</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">영수증 캡쳐 (선택)</label>
+                <input type="file" accept="image/*" onChange={e => setExReceiptFile(e.target.files[0])} className="w-full text-[10px] p-2 border rounded-xl" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1">메모 (어디서 뭘 샀는지)</label>
+              <input type="text" value={exMemo} onChange={e => setExMemo(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 outline-none focus:ring-2" placeholder="예: 철물점 마스킹 테이프" />
+            </div>
+
+            <button disabled={isSavingExpense} type="submit" className="w-full py-3.5 bg-primary text-white font-bold rounded-xl active:scale-95 transition-transform flex justify-center gap-2 items-center">
+              <span className="material-symbols-outlined">{isSavingExpense ? 'sync' : 'add_circle'}</span>
+              {isSavingExpense ? '저장 중...' : '지출 내역 등록'}
+            </button>
+          </form>
+
+          <div>
+            <h3 className="font-bold text-sm text-slate-600 mb-2 px-1">최근 지출 내역 ({expenses.length}건)</h3>
+            <div className="space-y-2">
+              {expenses.map(e => (
+                <div key={e.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-[0_2px_15px_-5px_rgba(0,0,0,0.05)] text-sm border-0 flex justify-between items-center">
+                  <div>
+                    <span className="font-bold flex items-center gap-1">
+                      {e.memo || e.category}
+                      {e.receipt_url && <a href={e.receipt_url} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded ml-1 font-bold">영수증 보기</a>}
+                    </span>
+                    <span className="text-xs text-slate-400 block mt-1">{e.date_created} · {e.category}</span>
+                  </div>
+                  <div className="font-black text-red-500">{fmtNum(e.amount)}원</div>
+                </div>
+              ))}
+              {expenses.length === 0 && <p className="text-center text-xs text-slate-400 py-4">등록된 지출 내역이 없습니다.</p>}
+            </div>
+          </div>
+        </main>
+      )}
+
+      {/* ======================= [탭 6: 세무 대시보드] ======================= */}
+      {currentTab === 'tax' && (() => {
+        const taxInfo = calcTax();
+        return (
+          <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-6 animate-slide-up">
+            <h2 className="text-2xl font-black mb-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">account_balance</span> 이달의 세무 예측
+            </h2>
+
+            <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0">
+              <p className="text-xs font-bold text-slate-400 text-center mb-6">이번 달 예상 부가가치세</p>
+
+              <div className="space-y-4 mb-6">
+                <div className="flex justify-between items-center pb-3 border-b border-dashed border-slate-200 dark:border-slate-700">
+                  <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➕ 이번 달 과세 매출 부가세 (10%)</span>
+                  <span className="font-black text-red-500">{fmtNum(taxInfo.salesTax)}원</span>
+                  <p className="w-full text-[10px] text-slate-400 mt-1 col-span-2 text-right">과세매출 합계: {fmtNum(taxInfo.taxableSales)}원 (카드 및 현금영수증/계산서)</p>
+                </div>
+
+                <div className="flex justify-between items-center pb-3 border-b border-dashed border-slate-200 dark:border-slate-700">
+                  <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➖ 이번 달 매입 공제 세액 (10%)</span>
+                  <span className="font-black text-green-600">-{fmtNum(taxInfo.purchaseTax)}원</span>
+                  <p className="w-full text-[10px] text-slate-400 mt-1 col-span-2 text-right">등록된 총 지출액 합계: {fmtNum(taxInfo.thisMonthExpenses)}원</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-900 rounded-xl p-4 text-center border overflow-hidden relative">
+                <p className="text-xs font-bold text-slate-500 mb-1">최종 예상 납부 세액</p>
+                <p className="text-3xl font-black text-primary">{fmtNum(taxInfo.finalTax)}원</p>
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/50 p-4 rounded-xl shadow-sm">
+              <h4 className="font-bold text-yellow-800 dark:text-yellow-500 text-sm mb-2 flex items-center gap-1">
+                <span className="material-symbols-outlined text-[16px]">lightbulb</span> 절세 가이드
+              </h4>
+              <ul className="text-xs text-yellow-700 dark:text-yellow-600/90 space-y-1.5 list-disc pl-4 font-medium break-keep">
+                <li>사업용 소모품, 장비, 자재 구입 시 꼭 현금영수증(지출증빙) 또는 세금계산서를 수취하세요.</li>
+                <li>업무용 주유비, 식대 카드 결제 내역도 지출 관리에 꼼꼼히 등록해 공제를 받으세요.</li>
+                <li>위 세액은 단면적인 부가가치세(10%) 계산으로, 추가 공제 비율이나 사업소득에 대한 종합소득세는 별도로 세무사와 상담을 권장합니다.</li>
+              </ul>
+            </div>
+          </main>
+        );
+      })()}
 
       {/* ==========================================
           [지도/네비게이션 팝업]
@@ -1241,26 +1477,36 @@ function App() {
       {/* ==========================================
           [하단 네비게이션 탭]
           ========================================== */}
-      <nav className="fixed bottom-0 w-full border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg px-4 pb-safe pt-2 z-40" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
-        <div className="flex gap-2 max-w-lg mx-auto justify-around">
-          <button onClick={() => setCurrentTab('calendar')} className={`flex flex-col items-center justify-center gap-1 w-16 transition-colors ${currentTab === 'calendar' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
-            <span className={`material-symbols-outlined text-[26px] ${currentTab === 'calendar' ? 'font-fill' : ''}`}>calendar_month</span>
-            <p className={`text-[10px] ${currentTab === 'calendar' ? 'font-bold' : 'font-medium'}`}>일정/홈</p>
+      <nav className="fixed bottom-0 w-full border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg px-2 pb-safe pt-2 z-40" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+        <div className="flex gap-1 max-w-lg mx-auto justify-between">
+          <button onClick={() => setCurrentTab('calendar')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'calendar' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
+            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'calendar' ? 'font-fill' : ''}`}>calendar_month</span>
+            <p className={`text-[9px] ${currentTab === 'calendar' ? 'font-bold' : 'font-medium'}`}>홈</p>
           </button>
 
-          <button onClick={() => setCurrentTab('add')} className={`flex flex-col items-center justify-center gap-1 w-16 transition-colors ${currentTab === 'add' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
-            <span className={`material-symbols-outlined text-[26px] ${currentTab === 'add' ? 'font-fill' : ''}`}>edit_calendar</span>
-            <p className={`text-[10px] ${currentTab === 'add' ? 'font-bold' : 'font-medium'}`}>예약등록</p>
+          <button onClick={() => setCurrentTab('add')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'add' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
+            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'add' ? 'font-fill' : ''}`}>edit_calendar</span>
+            <p className={`text-[9px] ${currentTab === 'add' ? 'font-bold' : 'font-medium'}`}>예약</p>
           </button>
 
-          <button onClick={() => setCurrentTab('stats')} className={`flex flex-col items-center justify-center gap-1 w-16 transition-colors ${currentTab === 'stats' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
-            <span className={`material-symbols-outlined text-[26px] ${currentTab === 'stats' ? 'font-fill' : ''}`}>monitoring</span>
-            <p className={`text-[10px] ${currentTab === 'stats' ? 'font-bold' : 'font-medium'}`}>통계</p>
+          <button onClick={() => setCurrentTab('stats')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'stats' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
+            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'stats' ? 'font-fill' : ''}`}>monitoring</span>
+            <p className={`text-[9px] ${currentTab === 'stats' ? 'font-bold' : 'font-medium'}`}>통계</p>
           </button>
 
-          <button onClick={() => setCurrentTab('settings')} className={`flex flex-col items-center justify-center gap-1 w-16 transition-colors ${currentTab === 'settings' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
-            <span className={`material-symbols-outlined text-[26px] ${currentTab === 'settings' ? 'font-fill' : ''}`}>manage_accounts</span>
-            <p className={`text-[10px] ${currentTab === 'settings' ? 'font-bold' : 'font-medium'}`}>설정</p>
+          <button onClick={() => setCurrentTab('expenses')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'expenses' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
+            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'expenses' ? 'font-fill' : ''}`}>receipt_long</span>
+            <p className={`text-[9px] ${currentTab === 'expenses' ? 'font-bold' : 'font-medium'}`}>지출</p>
+          </button>
+
+          <button onClick={() => setCurrentTab('tax')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'tax' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
+            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'tax' ? 'font-fill' : ''}`}>account_balance</span>
+            <p className={`text-[9px] ${currentTab === 'tax' ? 'font-bold' : 'font-medium'}`}>세무</p>
+          </button>
+
+          <button onClick={() => setCurrentTab('settings')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'settings' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
+            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'settings' ? 'font-fill' : ''}`}>manage_accounts</span>
+            <p className={`text-[9px] ${currentTab === 'settings' ? 'font-bold' : 'font-medium'}`}>설정</p>
           </button>
         </div>
       </nav>
