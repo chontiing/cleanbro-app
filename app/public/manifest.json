@@ -1,0 +1,15 @@
+{
+    "name": "클린브로 - 똑똑한 청소 파트너",
+    "short_name": "클린브로",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#2563eb",
+    "icons": [
+        {
+            "src": "vite.svg",
+            "sizes": "32x32",
+            "type": "image/svg+xml"
+        }
+    ]
+}

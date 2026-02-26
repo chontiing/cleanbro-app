@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from './supabase';
+import confetti from 'canvas-confetti';
+import imageCompression from 'browser-image-compression';
 
 // --- 유틸리티 및 데이터 ---
 const getTodayStr = () => {
@@ -78,6 +80,21 @@ function App() {
   const [teamMembers, setTeamMembers] = useState([]);
   const [expenses, setExpenses] = useState([]);
 
+  // 매출 분석용 추가 상태
+  const [showTargetEdit, setShowTargetEdit] = useState(false);
+  const [newTargetRevenue, setNewTargetRevenue] = useState('');
+  const [showConfettiOnce, setShowConfettiOnce] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [completionTarget, setCompletionTarget] = useState(null);
+  const [beforeFiles, setBeforeFiles] = useState([]);
+  const [afterFiles, setAfterFiles] = useState([]);
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
+
+  // PWA 업데이트 감지용
+  const [showUpdateToast, setShowUpdateToast] = useState(false);
+  const [swRegistration, setSwRegistration] = useState(null);
+  const APP_VERSION = "v1.1.0"; // 현재 버전
+
   // ==========================================
   // [인증 관련 (Supabase Auth)]
   // ==========================================
@@ -89,6 +106,22 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
+
+    // 서비스 워커 등록 및 업데이트 감지
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js')
+        .then(reg => {
+          setSwRegistration(reg);
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                setShowUpdateToast(true);
+              }
+            });
+          });
+        });
+    }
 
     // 자동 로그인 해제 시 브라우저 종료할 때 로그아웃 처리
     const handleUnload = () => {
@@ -355,6 +388,42 @@ function App() {
 
     return totalBase;
   }, [basePrice, qty, discountType, discountVal, payment, hasCashReceipt, hasTaxInvoice]);
+
+  // 매출 실적 계산
+  const revenueStats = useMemo(() => {
+    const today = getTodayStr();
+    const curYearMonth = today.substring(0, 7);
+
+    // 지난달 구하기
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    const prevYearMonth = d.toISOString().substring(0, 7);
+
+    const todaySales = customers.filter(c => c.book_date === today).reduce((acc, c) => acc + (c.final_price || 0), 0);
+    const monthSales = customers.filter(c => c.book_date?.startsWith(curYearMonth)).reduce((acc, c) => acc + (c.final_price || 0), 0);
+    const lastMonthSales = customers.filter(c => c.book_date?.startsWith(prevYearMonth)).reduce((acc, c) => acc + (c.final_price || 0), 0);
+
+    const growth = lastMonthSales === 0 ? 100 : Math.round(((monthSales / lastMonthSales) * 100) - 100);
+
+    // 목표 달성률
+    const target = businessProfile.monthly_target_revenue || 5000000;
+    const achieveRate = Math.min(100, Math.floor((monthSales / target) * 100));
+
+    return { todaySales, monthSales, growth, target, achieveRate };
+  }, [customers, businessProfile.monthly_target_revenue]);
+
+  useEffect(() => {
+    if (revenueStats.achieveRate >= 100 && !showConfettiOnce) {
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#FFD700', '#FFA500', '#FF4500']
+      });
+      setShowConfettiOnce(true);
+      alert("축하합니다! 대표님, 이번 달 목표를 달성하셨습니다! 클린브로 화이팅! 🎉");
+    }
+  }, [revenueStats.achieveRate, showConfettiOnce]);
 
   const handleSaveBooking = async () => {
     if (!customerName.trim() || !newPhone.trim() || !address.trim()) {
@@ -901,12 +970,118 @@ function App() {
           <button onClick={() => handleEdit(c)} className="text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors bg-white text-slate-500 border-slate-300 hover:bg-slate-50 shadow-sm">
             ✏️ 수정하기
           </button>
-          <button onClick={() => toggleCompletion(c)} className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors shadow-sm ${c.is_completed ? 'bg-slate-50 text-slate-500 border-slate-300 hover:bg-slate-100' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}>
+          <button onClick={() => {
+            if (c.is_completed) {
+              toggleCompletion(c);
+            } else {
+              setCompletionTarget(c);
+              setShowCompletionModal(true);
+            }
+          }} className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors shadow-sm ${c.is_completed ? 'bg-slate-50 text-slate-500 border-slate-300 hover:bg-slate-100' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}>
             {c.is_completed ? '작업 취소 (미완료로 변경)' : '✨ 작업 완료 체크하기'}
           </button>
         </div>
       </div>
     );
+  };
+
+  // --- 목표 매출 수정 처리 ---
+  const handleSaveTarget = async () => {
+    const targetVal = parseInt(newTargetRevenue.replace(/[^0-9]/g, '') || 0);
+    const { error } = await supabase.from('businesses').update({ monthly_target_revenue: targetVal }).eq('id', myBusinessId);
+    if (!error) {
+      setBusinessProfile({ ...businessProfile, monthly_target_revenue: targetVal });
+      setShowTargetEdit(false);
+      alert('목표 매출이 수정되었습니다.');
+    } else alert('수정 실패: ' + error.message);
+  };
+
+  // --- 이미지 워터마크 & 압축 로직 ---
+  const processImage = async (file) => {
+    // 1. 이미지 압축 (최대 1MB, 1280px)
+    const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
+    const compressedFile = await imageCompression(file, options);
+
+    // 2. 워터마크 합성
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(compressedFile);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+
+          // 워터마크 스타일
+          const fontSize = Math.max(img.width * 0.03, 20);
+          ctx.font = `bold ${fontSize}px sans-serif`;
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+          ctx.textAlign = 'right';
+
+          const text1 = `Clean Bro | ${businessProfile.company_name}`;
+          const text2 = getTodayStr();
+          ctx.fillText(text1, canvas.width - 20, canvas.height - 45);
+          ctx.fillText(text2, canvas.width - 20, canvas.height - 15);
+
+          canvas.toBlob((blob) => {
+            resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+          }, 'image/jpeg', 0.85);
+        };
+      };
+    });
+  };
+
+  // --- 작업 완료 & 사진 업로드 & MMS 발송 ---
+  const handleFinalComplete = async () => {
+    if (beforeFiles.length === 0 || afterFiles.length === 0) return alert('전/후 사진을 최소 1장씩은 등록해주세요.');
+    setIsUploadingPhotos(true);
+
+    try {
+      const uploadResults = { before: [], after: [] };
+
+      const doUpload = async (files, type) => {
+        for (const file of files) {
+          const processed = await processImage(file);
+          const fileName = `${myBusinessId}/${completionTarget.id}/${type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.jpg`;
+          const { error: upErr } = await supabase.storage.from('receipts').upload(fileName, processed);
+          if (upErr) throw upErr;
+          const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
+          uploadResults[type].push(data.publicUrl);
+        }
+      };
+
+      await doUpload(beforeFiles, 'before');
+      await doUpload(afterFiles, 'after');
+
+      // DB 업데이트
+      const { error: dbErr } = await supabase.from('bookings').update({
+        is_completed: true,
+        photo_before: uploadResults.before,
+        photo_after: uploadResults.after
+      }).eq('id', completionTarget.id);
+
+      if (dbErr) throw dbErr;
+
+      // MMS 발송 시트 제작 (실제 전송은 여기서 Edge Function 호출하거나 window.open 등으로 유도)
+      // 여기서는 UI 로직에 따라 문자 발송 안내를 띄움
+      const mmsText = `[클린브로] 청소 작업 완료 안내\n안녕하세요, 고객님! ${completionTarget.memo} 작업이 완료되었습니다.\n\n📸 전/후 사진 확인하기:\n${uploadResults.after[0]}\n\n만족하셨다면 리뷰 부탁드립니다!\n[리뷰링크]`;
+
+      const smsUrl = `sms:${completionTarget.phone}?body=${encodeURIComponent(mmsText)}`;
+      window.open(smsUrl);
+
+      alert('작업이 완료 처리되었으며 사진이 저장되었습니다.');
+      setShowCompletionModal(false);
+      setBeforeFiles([]); setAfterFiles([]);
+      fetchCustomers();
+    } catch (err) {
+      alert('저장 중 오류: ' + err.message);
+    } finally {
+      setIsUploadingPhotos(false);
+    }
   };
 
   // --- 로그인 처리 안되었을 시 화면 출력 ---
@@ -1078,27 +1253,59 @@ function App() {
           )}
 
           {/* 대시보드 */}
-          {(() => {
-            const todayDash = calcDashboard(selectedDate);
-            return (
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0">
-                <p className="text-xs font-bold text-slate-400 mb-1">{selectedDate === getTodayStr() ? '오늘의 합계 매출' : `${selectedDate.split('-')[1]}월 ${selectedDate.split('-')[2]}일 매출`}</p>
-                <div className="text-3xl font-black text-primary mb-3">
-                  {fmtNum(todayDash.total)}<span className="text-lg text-slate-400 font-bold ml-1">원</span>
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-[0_10px_30px_-5px_rgba(0,0,0,0.05)] border-0">
+            <div className="grid grid-cols-[1fr,1px,1.2fr] items-center gap-4">
+              <div className="cursor-pointer transition-transform active:scale-95" onClick={() => setCurrentTab('stats')}>
+                <p className="text-[11px] font-bold text-slate-400 mb-1 leading-none">오늘의 합계 매출</p>
+                <div className="text-2xl font-black text-slate-800 dark:text-white flex items-baseline truncate">
+                  {fmtNum(revenueStats.todaySales)}<span className="text-[13px] text-slate-400 font-bold ml-0.5">원</span>
                 </div>
-                <div className="flex gap-2">
-                  <div className="flex-1 bg-green-50 dark:bg-green-500/10 border border-green-100 dark:border-green-500/20 p-2 rounded-xl text-center">
-                    <p className="text-[10px] text-green-700 dark:text-green-400 font-bold">현금 합계</p>
-                    <p className="text-sm font-bold text-green-800 dark:text-green-300">{fmtNum(todayDash.cash)}원</p>
+              </div>
+
+              <div className="h-10 w-[1px] bg-slate-100 dark:bg-slate-700"></div>
+
+              <div className="cursor-pointer transition-transform active:scale-95" onClick={() => setCurrentTab('stats')}>
+                <p className="text-[11px] font-bold text-slate-400 mb-1 leading-none">이번 달 총 매출</p>
+                <div className="flex flex-col">
+                  <div className="text-2xl font-black text-primary flex items-baseline truncate">
+                    {fmtNum(revenueStats.monthSales)}<span className="text-[13px] text-slate-400 font-bold ml-0.5">원</span>
                   </div>
-                  <div className="flex-1 bg-blue-50 dark:bg-blue-500/10 border border-blue-100 dark:border-blue-500/20 p-2 rounded-xl text-center">
-                    <p className="text-[10px] text-blue-700 dark:text-blue-400 font-bold">카드 합계</p>
-                    <p className="text-sm font-bold text-blue-800 dark:text-blue-300">{fmtNum(todayDash.card)}원</p>
+                  <div className={`text-[10px] font-bold mt-0.5 flex items-center gap-0.5 ${revenueStats.growth >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                    {revenueStats.growth >= 0 ? '▲' : '▼'} {Math.abs(revenueStats.growth)}% <span className="text-slate-400 font-medium">전월대비</span>
                   </div>
                 </div>
               </div>
-            );
-          })()}
+            </div>
+
+            {/* 목표 달성 게이지 */}
+            <div className="mt-6 pt-5 border-t border-slate-50 dark:border-slate-700">
+              <div className="flex justify-between items-center mb-2">
+                <p className="text-xs font-bold text-slate-500 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-amber-500">military_tech</span>
+                  목표 달성률 <span className="text-slate-900 dark:text-white">{revenueStats.achieveRate}%</span>
+                </p>
+                <button onClick={() => { setNewTargetRevenue(revenueStats.target.toString()); setShowTargetEdit(true); }} className="p-1 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors text-slate-400 flex items-center">
+                  <span className="material-symbols-outlined text-[16px]">settings</span>
+                </button>
+              </div>
+              <div className="w-full h-3 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden flex p-0.5 border border-slate-50">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ease-out shadow-sm relative ${revenueStats.achieveRate < 50 ? 'bg-orange-500' :
+                    revenueStats.achieveRate < 80 ? 'bg-yellow-400' :
+                      revenueStats.achieveRate < 100 ? 'bg-green-500' :
+                        'bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 animate-pulse'
+                    }`}
+                  style={{ width: `${revenueStats.achieveRate}%` }}
+                >
+                  {revenueStats.achieveRate >= 100 && <span className="absolute inset-0 bg-white/30 animate-pulse"></span>}
+                </div>
+              </div>
+              <div className="flex justify-between mt-2 px-0.5">
+                <span className="text-[10px] text-slate-400 font-bold">이번 달 목표액</span>
+                <span className="text-[11px] text-slate-600 font-black">{fmtNum(revenueStats.target)}원</span>
+              </div>
+            </div>
+          </div>
 
           {/* 캘린더 구역 */}
           <div className="bg-white dark:bg-slate-800 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 mb-4">
@@ -1499,10 +1706,28 @@ function App() {
               <p className="text-[10px] text-slate-400 mt-1">선택하면 로고가 덮어씌어 저장됩니다.</p>
             </div>
 
-            <button disabled={isSavingSettings} type="submit" className="w-full py-4 bg-slate-800 text-white text-lg font-black rounded-xl shadow-md active:scale-95 transition-transform flex justify-center items-center gap-2">
+            <button disabled={isSavingSettings} type="submit" className="w-full py-4 bg-primary text-white text-lg font-black rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-transform flex justify-center items-center gap-2">
               <span className="material-symbols-outlined">{isSavingSettings ? 'sync' : 'save'}</span>
-              {isSavingSettings ? '업데이트 중...' : '프로필 저장하기'}
+              {isSavingSettings ? '업데이트 중...' : '프로필 정보 업데이트'}
             </button>
+
+            {/* PWA 버전 정보 및 업데이트 체크 */}
+            <div className="pt-4 border-t border-slate-100 flex flex-col items-center gap-2">
+              <p className="text-[10px] text-slate-400 font-bold">App Version: {APP_VERSION}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (swRegistration) {
+                    swRegistration.update().then(() => alert('업데이트 확인을 완료했습니다.'));
+                  } else {
+                    alert('서비스 워커가 활성화되지 않았습니다.');
+                  }
+                }}
+                className="text-[11px] text-slate-500 hover:text-primary underline font-bold"
+              >
+                새로운 업데이트 확인하기
+              </button>
+            </div>
           </form>
 
           <div className="text-center">
@@ -1785,6 +2010,28 @@ function App() {
                 <li className="text-[11px] text-yellow-600/70 mt-3 list-none -ml-4">* 위 세액은 단순 부가가치세(10%) 계산으로, 추가 공제 비율이나 사업소득 종합소득세는 세무사와 상담을 권장합니다.</li>
               </ul>
             </div>
+
+            {/* 과세 유형 일괄 변경 섹션 (새로 추가) */}
+            <div className="bg-slate-100 dark:bg-slate-800 p-5 rounded-[1.5rem] mt-6 border-2 border-dashed border-slate-300">
+              <h4 className="font-bold text-sm mb-3 text-slate-600">⚠️ 과세 유형 일괄 소급 적용</h4>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="date" value={bulkStartDate} onChange={e => setBulkStartDate(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white" />
+                  <input type="date" value={bulkEndDate} onChange={e => setBulkEndDate(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white" />
+                </div>
+                <select value={bulkTaxType} onChange={e => setBulkTaxType(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white">
+                  <option value="간이과세자">간이과세자</option>
+                  <option value="일반과세자">일반과세자</option>
+                </select>
+                <button
+                  onClick={handleBulkTaxUpdate}
+                  disabled={isBulking}
+                  className="w-full py-2 bg-slate-600 text-white text-xs font-bold rounded-lg hover:bg-slate-700 active:scale-95 transition-all"
+                >
+                  {isBulking ? '적용 중...' : '[일괄 적용] 선택 기간 데이터 변경'}
+                </button>
+              </div>
+            </div>
           </main>
         );
       })()}
@@ -1871,6 +2118,166 @@ function App() {
         </div>
       </nav>
 
+      {/* ======================= [탭 7: 모달들] ======================= */}
+
+      {/* 1. 목표 매출 수정 모달 */}
+      {showTargetEdit && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md p-6">
+          <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-[2rem] p-8 shadow-2xl animate-slide-up">
+            <h3 className="text-xl font-black mb-1 flex items-center gap-2">
+              <span className="material-symbols-outlined text-amber-500">trending_up</span> 목표 매출 설정
+            </h3>
+            <p className="text-xs font-bold text-slate-400 mb-6 font-display">이번 달 대표님의 꿈의 매출액을 적어주세요!</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 mb-1 ml-1">목표 금액 (원)</label>
+                <input
+                  type="text"
+                  value={fmtNum(newTargetRevenue)}
+                  onChange={e => setNewTargetRevenue(e.target.value.replace(/[^0-9]/g, ''))}
+                  className="w-full p-4 rounded-2xl border-2 border-slate-100 focus:border-primary outline-none text-2xl font-black text-right pr-4"
+                  placeholder="0"
+                  autoFocus
+                />
+              </div>
+              <div className="flex gap-3 pt-2 font-display">
+                <button
+                  onClick={() => setShowTargetEdit(false)}
+                  className="flex-1 py-4 bg-slate-100 text-slate-500 font-bold rounded-2xl active:scale-95 transition-all text-sm"
+                >취소</button>
+                <button
+                  onClick={handleSaveTarget}
+                  className="flex-1 py-4 bg-primary text-white font-black rounded-2xl shadow-lg shadow-primary/30 active:scale-95 transition-all text-sm"
+                >저장하기</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2. 작업 완료 & 사진 업로드 모달 */}
+      {showCompletionModal && completionTarget && (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-md p-0 overflow-hidden font-display">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-t-[2.5rem] shadow-2xl h-[92vh] flex flex-col animate-slide-up relative">
+
+            <div className="h-1.5 w-12 bg-slate-300 rounded-full mx-auto my-4 shrink-0"></div>
+
+            <div className="flex justify-between items-center px-6 mb-2 shrink-0">
+              <div>
+                <h2 className="text-xl font-black">{completionTarget.customer_name || '고객'}님 작업 완료</h2>
+                <p className="text-xs font-bold text-slate-400 mt-1">현장 사진을 등록하고 고객님께 보고하세요.</p>
+              </div>
+              <button onClick={() => setShowCompletionModal(false)} className="p-2 bg-slate-100 rounded-full">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+
+              {/* BEFORE */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-end">
+                  <h4 className="font-black text-blue-600 flex items-center gap-1 text-sm"><span className="material-symbols-outlined text-sm">cleaning_services</span> 작업 전 실황 (Before)</h4>
+                  <span className="text-[10px] font-bold text-slate-400">{beforeFiles.length}/5</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {beforeFiles.map((f, i) => (
+                    <div key={i} className="aspect-square rounded-xl bg-slate-100 relative overflow-hidden group">
+                      <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" />
+                      <button onClick={() => setBeforeFiles(beforeFiles.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="material-symbols-outlined text-xs">close</span>
+                      </button>
+                    </div>
+                  ))}
+                  {beforeFiles.length < 5 && (
+                    <label className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 cursor-pointer active:bg-slate-50 transition-colors">
+                      <span className="material-symbols-outlined text-2xl">add_a_photo</span>
+                      <span className="text-[10px] font-black mt-1">사진 추가</span>
+                      <input type="file" multiple accept="image/*" onChange={e => setBeforeFiles([...beforeFiles, ...Array.from(e.target.files)].slice(0, 5))} className="hidden" />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              {/* AFTER */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-end">
+                  <h4 className="font-black text-green-600 flex items-center gap-1 text-sm"><span className="material-symbols-outlined text-sm">magic_button</span> 작업 후 광채 (After)</h4>
+                  <span className="text-[10px] font-bold text-slate-400">{afterFiles.length}/5</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {afterFiles.map((f, i) => (
+                    <div key={i} className="aspect-square rounded-xl bg-slate-100 relative overflow-hidden group">
+                      <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" />
+                      <button onClick={() => setAfterFiles(afterFiles.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="material-symbols-outlined text-xs">close</span>
+                      </button>
+                    </div>
+                  ))}
+                  {afterFiles.length < 5 && (
+                    <label className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 cursor-pointer active:bg-slate-50 transition-colors">
+                      <span className="material-symbols-outlined text-2xl">add_a_photo</span>
+                      <span className="text-[10px] font-black mt-1">사진 추가</span>
+                      <input type="file" multiple accept="image/*" onChange={e => setAfterFiles([...afterFiles, ...Array.from(e.target.files)].slice(0, 5))} className="hidden" />
+                    </label>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 space-y-2">
+                <p className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1"><span className="material-symbols-outlined text-xs">info</span> AI 이미지 자동 처리 안내</p>
+                <ul className="text-[10px] text-slate-400 font-medium space-y-1 ml-1">
+                  <li>- 이미지는 최적의 품질로 압축 및 리사이징됩니다 (데이터 절약)</li>
+                  <li>- 사진 우측 하단에 [클린브로 | {businessProfile.company_name}] 워터마크가 삽입됩니다.</li>
+                </ul>
+              </div>
+
+            </div>
+
+            <div className="p-6 shrink-0 border-t bg-white dark:bg-slate-900 pb-10">
+              <button
+                disabled={isUploadingPhotos}
+                onClick={handleFinalComplete}
+                className="w-full py-4.5 bg-primary text-white font-black rounded-[1.5rem] shadow-xl shadow-primary/30 flex items-center justify-center gap-2 active:scale-95 transition-all text-lg"
+              >
+                {isUploadingPhotos ? (
+                  <><span className="material-symbols-outlined animate-spin">sync</span> 처리 및 업로드 중...</>
+                ) : (
+                  <><span className="material-symbols-outlined">send</span> 완벽하게 완료 & 고객 메시지 전송</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. 업데이트 토스트 (PWA Update) */}
+      {showUpdateToast && (
+        <div className="fixed bottom-24 left-4 right-4 z-[100] animate-slide-up font-display">
+          <div className="bg-slate-800 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between border border-slate-700 backdrop-blur-md bg-slate-800/95">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
+                <span className="material-symbols-outlined text-primary">system_update</span>
+              </div>
+              <div>
+                <p className="text-sm font-black">새로운 기능이 추가되었습니다!</p>
+                <p className="text-[10px] text-slate-400">앱을 새로고침하여 최신 버전을 적용하세요.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (swRegistration && swRegistration.waiting) {
+                  swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+                window.location.reload();
+              }}
+              className="bg-primary text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg shadow-primary/20 active:scale-95 transition-all"
+            >
+              지금 업데이트
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
