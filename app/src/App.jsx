@@ -213,10 +213,15 @@ function App() {
       .order('id', { ascending: false });
 
     if (error) {
-      console.error(error);
+      console.error('Fetch customers error:', error);
       // 기존 데이터의 business_id 누락 고려한 폴백
-      const { data: fallbackData } = await supabase.from('bookings').select('*').eq('user_id', session.user.id).order('id', { ascending: false });
-      if (fallbackData) setCustomers(fallbackData);
+      try {
+        const { data: fallbackData, error: fbErr } = await supabase.from('bookings').select('*').eq('user_id', session?.user?.id).order('id', { ascending: false });
+        if (!fbErr && fallbackData) setCustomers(fallbackData);
+        else setCustomers([]);
+      } catch (e) {
+        setCustomers([]);
+      }
     } else {
       setCustomers(data || []);
     }
@@ -1224,7 +1229,8 @@ function App() {
   }
 
   // --- 메인 앱 ---
-  const userName = session.user.email.split('@')[0];
+  const userEmail = session?.user?.email || 'user@cleanbro.com';
+  const userName = userEmail.split('@')[0];
   const isCeo = userName.includes('admin') || userName.includes('ceo') || userName.includes('master');
   const roleName = isCeo ? '대표님' : '파트너님';
 
@@ -1238,11 +1244,11 @@ function App() {
             <img src={businessProfile.logo_url} alt="Logo" className="w-8 h-8 object-contain rounded-full border border-slate-200 bg-white shadow-sm" />
           ) : (
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full flex items-center justify-center text-white font-black text-sm shadow-sm">
-              {businessProfile.company_name.substring(0, 1)}
+              {businessProfile?.company_name?.substring(0, 1) || 'B'}
             </div>
           )}
           <h1 className="text-xl font-extrabold text-slate-800 dark:text-white tracking-tight flex items-center gap-1">
-            {businessProfile.company_name}
+            {businessProfile?.company_name || '클린브로'}
           </h1>
         </div>
         <div className="flex items-center gap-3">

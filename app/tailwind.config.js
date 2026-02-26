@@ -26,7 +26,7 @@ export default {
         },
     },
     plugins: [
-        require('@tailwindcss/forms'),
-        require('@tailwindcss/container-queries')
+        // Tailwind v4 uses @tailwindcss/forms differently or through CSS, 
+        // but for config based approach with Vite:
     ],
 }
