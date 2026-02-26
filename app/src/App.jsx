@@ -10,7 +10,8 @@ const getTodayStr = () => {
 
 const CATEGORIES = {
   '에어컨': ['벽걸이', '스탠드', '2in1', '시스템'],
-  '세탁기': ['통돌이', '드럼', '아기용']
+  '세탁기': ['통돌이', '드럼', '아기용'],
+  '에어컨 설치': ['스탠드 설치', '벽걸이 설치', '냉매 보충']
 };
 
 const DEFAULT_PRICES = {
@@ -213,19 +214,24 @@ function App() {
 
   const handleEdit = (customer) => {
     const c = customer;
-    setNewPhone(c.phone);
-    setNewMemo(c.memo);
+    setCustomerName(c.customer_name || '');
+    setNewPhone(c.phone || '');
+    setAddress(c.address || '');
+    setAddressDetail(c.address_detail || '');
+    setHasCashReceipt(c.has_cash_receipt || false);
+    setHasTaxInvoice(c.has_tax_invoice || false);
+    setNewMemo(c.memo || '');
     setCategory(c.category || '에어컨');
     setProduct(c.product || '벽걸이');
     setQty(c.quantity || 1);
     setBasePrice(c.base_price || DEFAULT_PRICES['벽걸이']);
     setDiscountType(c.discount_type || 'none');
     setDiscountVal(c.discount_value || 0);
-    setPayment(c.payment_method || '미결제');
+    setPayment(c.payment_method || '현금');
     setBookDate(c.book_date || getTodayStr());
     setBookTimeType(c.book_time_type || '오전');
     setBookTimeCustom(c.book_time_custom || '');
-    setAssignee(c.assignee || '찬용');
+    setAssignee(c.assignee || '');
     setIsCompleted(c.is_completed || false);
     setEditingId(c.id);
     setCurrentTab('add');
@@ -249,7 +255,12 @@ function App() {
   // [탭: 예약 등록 (Add)]
   // ==========================================
   const [editingId, setEditingId] = useState(null);
+  const [customerName, setCustomerName] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [addressDetail, setAddressDetail] = useState('');
+  const [hasCashReceipt, setHasCashReceipt] = useState(false);
+  const [hasTaxInvoice, setHasTaxInvoice] = useState(false);
   const [newMemo, setNewMemo] = useState('');
   const [category, setCategory] = useState('에어컨');
   const [product, setProduct] = useState('벽걸이');
@@ -257,7 +268,7 @@ function App() {
   const [basePrice, setBasePrice] = useState(DEFAULT_PRICES['벽걸이']);
   const [discountType, setDiscountType] = useState('none');
   const [discountVal, setDiscountVal] = useState('');
-  const [payment, setPayment] = useState('미결제');
+  const [payment, setPayment] = useState('현금');
   const [bookDate, setBookDate] = useState(() => {
     const tmr = new Date();
     tmr.setDate(tmr.getDate() + 1);
@@ -265,7 +276,7 @@ function App() {
   });
   const [bookTimeType, setBookTimeType] = useState('오전');
   const [bookTimeCustom, setBookTimeCustom] = useState('14:00');
-  const [assignee, setAssignee] = useState('찬용'); // 작업 담당자: 찬용, 파트너
+  const [assignee, setAssignee] = useState(''); // 작업 담당자: 본인이름, 파트너, 2인1조
   const [isCompleted, setIsCompleted] = useState(false); // 완료 상태 유지용
 
   useEffect(() => {
@@ -279,19 +290,26 @@ function App() {
   }, [category, product]);
 
   const finalPrice = useMemo(() => {
-    const totalBase = (Number(basePrice) || 0) * (Number(qty) || 1);
+    let totalBase = (Number(basePrice) || 0) * (Number(qty) || 1);
     const dVal = Number(discountVal) || 0;
+
     if (discountType === 'percent') {
-      return Math.max(0, totalBase - (totalBase * (dVal / 100)));
+      totalBase = Math.max(0, totalBase - (totalBase * (dVal / 100)));
     } else if (discountType === 'amount') {
-      return Math.max(0, totalBase - dVal);
+      totalBase = Math.max(0, totalBase - dVal);
     }
+
+    // 현금 결제이면서 영수증/계산서 필요시 10% 부가세 추가 (원단위 내림 처리)
+    if (payment === '현금' && (hasCashReceipt || hasTaxInvoice)) {
+      totalBase = Math.floor(totalBase * 1.1);
+    }
+
     return totalBase;
-  }, [basePrice, qty, discountType, discountVal]);
+  }, [basePrice, qty, discountType, discountVal, payment, hasCashReceipt, hasTaxInvoice]);
 
   const handleSaveBooking = async () => {
-    if (!newPhone.trim() || !newMemo.trim()) {
-      alert('전화번호와 성함/메모를 입력해주세요.');
+    if (!customerName.trim() || !newPhone.trim() || !address.trim()) {
+      alert('성함, 전화번호, 기본 주소를 모두 입력해주세요.');
       return;
     }
 
@@ -311,7 +329,12 @@ function App() {
     const entry = {
       user_id: session.user.id,
       business_id: myBusinessId,
+      customer_name: customerName,
       phone: newPhone.replace(/[^0-9]/g, ''),
+      address: address,
+      address_detail: addressDetail,
+      has_cash_receipt: payment === '현금' ? hasCashReceipt : false,
+      has_tax_invoice: payment === '현금' ? hasTaxInvoice : false,
       memo: newMemo,
       category, product, quantity: qty,
       base_price: basePrice,
@@ -322,7 +345,7 @@ function App() {
       book_date: bookDate,
       book_time_type: bookTimeType,
       book_time_custom: bookTimeType === '직접입력' ? bookTimeCustom : null,
-      assignee: assignee,
+      assignee: assignee || session?.user?.email.split('@')[0] || '사용자',
       is_completed: isCompleted,
       date_created: getTodayStr(),
     };
@@ -344,13 +367,15 @@ function App() {
 
     await fetchCustomers();
     setEditingId(null);
-    setNewPhone(''); setNewMemo('');
+    setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
+    setHasCashReceipt(false); setHasTaxInvoice(false);
     setCurrentTab('calendar');
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
-    setNewPhone(''); setNewMemo('');
+    setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
+    setHasCashReceipt(false); setHasTaxInvoice(false);
     setCurrentTab('calendar');
   };
 
@@ -526,7 +551,7 @@ function App() {
         <div className="flex justify-between items-start mb-2 mt-1">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${c.assignee === '찬용' ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-orange-50 text-orange-600 border-orange-200'}`}>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${c.assignee?.includes('2인') ? 'bg-purple-50 text-purple-600 border-purple-200' : c.assignee === '파트너' ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
                 👤 {c.assignee}
               </span>
               <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded">
@@ -535,26 +560,35 @@ function App() {
               <span className="text-slate-500 text-xs font-medium">{c.category} &gt; {c.product} ({c.quantity}대)</span>
             </div>
             <h4
-              onClick={(e) => { e.stopPropagation(); setMapPopupMemo(c.memo); }}
+              onClick={(e) => { e.stopPropagation(); setMapPopupMemo(c.address || c.memo); }}
               className={`font-bold text-base cursor-pointer hover:text-primary flex items-center transition-colors ${c.is_completed ? 'text-slate-500 line-through decoration-2' : 'text-slate-800 dark:text-slate-100'}`}
             >
-              {c.memo}
+              {c.customer_name || (c.memo ? c.memo.split(' ')[0] : '고객')}
+              {c.address && <span className="text-[13px] font-medium text-slate-500 ml-1.5">({c.address.split(' ').slice(0, 2).join(' ')})</span>}
               <span className="material-symbols-outlined text-[16px] ml-1.5 text-blue-500 bg-blue-50 p-0.5 rounded-full border border-blue-200">location_on</span>
             </h4>
-            <p className="text-slate-400 font-mono text-sm">{c.phone.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`)}</p>
+            <p className="text-slate-400 font-mono text-sm">{c.phone ? c.phone.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`) : '번호 없음'}</p>
+            {c.memo && <p className="text-xs text-slate-500 mt-1 line-clamp-1">{c.memo}</p>}
           </div>
           <div className="text-right pt-6">
             <p className="font-bold text-primary text-lg">{fmtNum(c.final_price)}원</p>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${c.payment_method === '현금' ? 'text-green-600 bg-green-50 border-green-200' : c.payment_method === '카드' ? 'text-blue-600 bg-blue-50 border-blue-200' : 'text-red-600 bg-red-50 border-red-200'}`}>
-              {c.payment_method}
-            </span>
+            <div className="flex flex-col items-end gap-1 mt-1">
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${c.payment_method === '현금' ? 'text-green-600 bg-green-50 border-green-200' : c.payment_method === '카드' ? 'text-blue-600 bg-blue-50 border-blue-200' : 'text-slate-600 bg-slate-50 border-slate-200'}`}>
+                {c.payment_method || '미결제'}
+              </span>
+              {c.has_cash_receipt && <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded border border-slate-200">현금영수증</span>}
+              {c.has_tax_invoice && <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded border border-slate-200">세금계산서</span>}
+            </div>
           </div>
         </div>
 
-        {/* 완료 토글 버튼 추가 */}
-        <div className="mt-3 flex justify-end">
-          <button onClick={() => toggleCompletion(c)} className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors ${c.is_completed ? 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}>
-            {c.is_completed ? '작업 취소 (미완료로 변경)' : '✨ 청소 완료 체크하기'}
+        {/* 하단 액션 버튼들 */}
+        <div className="mt-3 flex justify-end gap-2">
+          <button onClick={() => handleEdit(c)} className="text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors bg-white text-slate-500 border-slate-300 hover:bg-slate-50 shadow-sm">
+            ✏️ 수정하기
+          </button>
+          <button onClick={() => toggleCompletion(c)} className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors shadow-sm ${c.is_completed ? 'bg-slate-50 text-slate-500 border-slate-300 hover:bg-slate-100' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}>
+            {c.is_completed ? '작업 취소 (미완료로 변경)' : '✨ 작업 완료 체크하기'}
           </button>
         </div>
       </div>
@@ -567,6 +601,19 @@ function App() {
       <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-indigo-900 via-blue-900 to-purple-900">
         <div className="relative z-10 bg-white w-full max-w-sm px-8 pt-12 pb-10 rounded-[2rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] border border-white/20 backdrop-blur-sm">
           <div className="text-center mb-10">
+            {/* 상단 장식 이모티콘 추가 */}
+            <div className="flex justify-center items-center gap-3 mb-4 select-none animate-fade-in relative">
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl flex items-center justify-center text-2xl shadow-sm border border-blue-200/50 transform -rotate-6">
+                ✨
+              </div>
+              <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-3xl flex items-center justify-center text-3xl shadow-lg shadow-indigo-500/30 transform scale-110 z-10">
+                🌬️
+              </div>
+              <div className="w-14 h-14 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl flex items-center justify-center text-2xl shadow-sm border border-blue-200/50 transform rotate-6">
+                🫧
+              </div>
+            </div>
+
             <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight drop-shadow-sm">
               {isLoginMode ? '로그인' : '회원가입'}
             </h1>
@@ -823,12 +870,33 @@ function App() {
             <div className="space-y-3">
               <h3 className="text-sm font-bold text-primary border-b border-primary/20 pb-1">1. 기본 정보</h3>
               <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">성함</label>
+                <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="고객님 성함" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
+              </div>
+              <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">전화번호</label>
                 <input type="tel" value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="010-0000-0000" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">성함 / 요약 메모 (주소 등)</label>
-                <input type="text" value={newMemo} onChange={e => setNewMemo(e.target.value)} placeholder="홍길동, OO아파트 201호" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                <label className="block text-xs font-semibold text-slate-500 mb-1">주소</label>
+                <div className="flex gap-2 mb-2">
+                  <input type="text" readOnly value={address} placeholder="주소 검색 버튼을 눌러주세요" className="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 rounded-xl p-3 text-sm outline-none text-slate-500" />
+                  <button type="button" onClick={() => {
+                    new window.daum.Postcode({
+                      oncomplete: function (data) {
+                        setAddress(data.address);
+                        setAddressDetail('');
+                      }
+                    }).open();
+                  }} className="bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-1 active:scale-95 transition-all w-[120px] shrink-0">
+                    <span className="material-symbols-outlined text-[18px]">search</span> 주소 검색
+                  </button>
+                </div>
+                <input type="text" value={addressDetail} onChange={e => setAddressDetail(e.target.value)} placeholder="상세 주소 (동/호수)" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">요약 메모 / 특이사항</label>
+                <input type="text" value={newMemo} onChange={e => setNewMemo(e.target.value)} placeholder="참고사항을 적어주세요" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
               </div>
             </div>
 
@@ -924,16 +992,14 @@ function App() {
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-2">작업 담당자 지정</label>
                   <div className="flex gap-2">
-                    {['찬용', '파트너'].map(person => {
-                      const isSelected = assignee === person;
-                      const activeColor = person === '찬용'
-                        ? 'bg-indigo-500 text-white border-indigo-600 shadow-md shadow-indigo-500/30'
-                        : 'bg-orange-500 text-white border-orange-600 shadow-md shadow-orange-500/30';
+                    {[(userName || '본인'), '파트너', '2인 1조 팀'].map(person => {
+                      const isSelected = (assignee || userName || '본인') === person;
+                      const activeColor = 'bg-indigo-500 text-white border-indigo-600 shadow-md shadow-indigo-500/30';
                       const defaultColor = 'bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-200';
                       return (
                         <button
                           key={person} onClick={() => setAssignee(person)}
-                          className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-all border ${isSelected ? activeColor : defaultColor}`}
+                          className={`flex-1 py-2 rounded-xl text-[11px] px-1 font-bold transition-all border ${isSelected ? activeColor : defaultColor}`}
                         >
                           {person}
                         </button>
@@ -944,16 +1010,28 @@ function App() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-2">결제 수단</label>
-                  <div className="flex gap-2 text-xs">
-                    {['미결제', '현금', '카드'].map(pay => (
+                  <div className="flex gap-2 text-xs mb-3">
+                    {['현금', '카드'].map(pay => (
                       <button
                         key={pay} onClick={() => setPayment(pay)}
-                        className={`flex-1 py-1 rounded-lg font-bold transition-all border ${payment === pay ? 'bg-primary/10 text-primary border-primary/20 shadow-sm' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-200'}`}
+                        className={`flex-1 py-2 rounded-lg font-bold transition-all border ${payment === pay ? 'bg-primary/10 text-primary border-primary/20 shadow-sm' : 'bg-slate-50 text-slate-500 hover:bg-slate-100 border-slate-200'}`}
                       >
                         {pay}
                       </button>
                     ))}
                   </div>
+                  {payment === '현금' && (
+                    <div className="space-y-2 animate-fade-in bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-lg p-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={hasCashReceipt} onChange={(e) => setHasCashReceipt(e.target.checked)} className="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary" />
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">현금영수증 필요</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={hasTaxInvoice} onChange={(e) => setHasTaxInvoice(e.target.checked)} className="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary" />
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-400">세금계산서 필요</span>
+                      </label>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
