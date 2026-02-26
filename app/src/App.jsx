@@ -68,7 +68,18 @@ function App() {
   const [rememberMe, setRememberMe] = useState(true);
 
   // 계정 및 업체 정보
-  const [businessProfile, setBusinessProfile] = useState({ company_name: '클린브로', phone: '', logo_url: '', monthly_target_revenue: 5000000, taxpayer_type: '간이과세자', default_completion_message: '', ac_guide_url: '', washer_guide_url: '' });
+  const [businessProfile, setBusinessProfile] = useState({
+    company_name: '클린브로',
+    phone: '',
+    logo_url: '',
+    monthly_target_revenue: 5000000,
+    taxpayer_type: '간이과세자',
+    default_completion_message: '',
+    ac_guide_url: '',
+    washer_guide_url: '',
+    notice_template: '',
+    reminder_template: ''
+  });
 
   const [currentTab, setCurrentTab] = useState('calendar'); // calendar, add, list, stats, settings
   const [customers, setCustomers] = useState([]);
@@ -512,6 +523,8 @@ function App() {
   const [editNickname, setEditNickname] = useState(''); // 본인 닉네임 설정
   const [editTaxpayerType, setEditTaxpayerType] = useState('간이과세자'); // 과세자 유형
   const [editDefaultMessage, setEditDefaultMessage] = useState('');
+  const [editNoticeTemplate, setEditNoticeTemplate] = useState('');
+  const [editReminderTemplate, setEditReminderTemplate] = useState('');
   const [editAcGuideFile, setEditAcGuideFile] = useState(null);
   const [editWasherGuideFile, setEditWasherGuideFile] = useState(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -530,6 +543,8 @@ function App() {
       setEditNickname(myNickname || '');
       setEditTaxpayerType(businessProfile.taxpayer_type || '간이과세자');
       setEditDefaultMessage(businessProfile.default_completion_message || `[클린브로] 청소 작업 완료 안내\n안녕하세요, 고객님! {customer_name}님 {memo} 작업이 완료되었습니다.\n\n📸 작업 사진 확인하기:\n{after_url}\n\n만족하셨다면 리뷰 부탁드립니다!\n[리뷰링크]`);
+      setEditNoticeTemplate(businessProfile.notice_template || `[안내] 오늘 방문 예정입니다. 시간 맞춰 뵙겠습니다.\n- 클린브로 ([시간])`);
+      setEditReminderTemplate(businessProfile.reminder_template || `[알림] [고객명]님, 곧 도착 예정입니다. 잠시만 기다려주세요!`);
     }
   }, [currentTab, businessProfile, myNickname]);
 
@@ -561,6 +576,8 @@ function App() {
       logo_url: logoUrl,
       taxpayer_type: editTaxpayerType,
       default_completion_message: editDefaultMessage,
+      notice_template: editNoticeTemplate,
+      reminder_template: editReminderTemplate,
     };
 
     // 가이드 이미지 업로드 (에어컨)
@@ -881,8 +898,16 @@ function App() {
   const todayTargetList = useMemo(() => customers.filter(c => c.book_date === getTodayStr()), [customers]);
   const [batchSmsIdx, setBatchSmsIdx] = useState(-1);
 
-  const handleSendSms = (c) => {
-    const msg = `[안내] 오늘 방문 예정입니다. 시간 맞춰 뵙겠습니다.\n- 클린브로 (${c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type})`;
+  const handleSendSms = (c, type = 'notice') => {
+    let template = type === 'notice'
+      ? (businessProfile.notice_template || `[안내] 오늘 방문 예정입니다. 시간 맞춰 뵙겠습니다.\n- 클린브로 ([시간])`)
+      : (businessProfile.reminder_template || `[알림] [고객명]님, 곧 도착 예정입니다. 잠시만 기다려주세요!`);
+
+    const timeValue = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
+    const msg = template
+      .replace(/\[고객명\]/g, c.customer_name || '고객')
+      .replace(/\[시간\]/g, timeValue);
+
     window.location.href = `sms:${c.phone}?body=${encodeURIComponent(msg)}`;
   };
 
@@ -1293,9 +1318,14 @@ function App() {
                       </span>
                       <p className="font-semibold text-sm truncate max-w-[120px]">{c.memo}</p>
                     </div>
-                    <button onClick={() => handleSendSms(c)} className="flex items-center gap-1 text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1.5 rounded-lg border border-blue-200 active:scale-95">
-                      <span className="material-symbols-outlined text-[14px]">sms</span> 문자
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => handleSendSms(c, 'notice')} className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200 active:scale-95">
+                        <span className="material-symbols-outlined text-[12px]">notifications</span> 안내
+                      </button>
+                      <button onClick={() => handleSendSms(c, 'reminder')} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200 active:scale-95">
+                        <span className="material-symbols-outlined text-[12px]">alarm</span> 알림
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1837,6 +1867,42 @@ function App() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* 문자 메시지 템플릿 관리 섹션 */}
+          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-6">
+            <h3 className="text-lg font-black flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">sms</span> 문자 메시지 템플릿 관리
+            </h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">방문 안내 문자 (Notice)</label>
+                <textarea
+                  value={editNoticeTemplate}
+                  onChange={e => setEditNoticeTemplate(e.target.value)}
+                  className="w-full h-24 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="예: [안내] 오늘 방문 예정입니다. 시간 맞춰 뵙겠습니다. - 클린브로 ([시간])"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">방문 알림 문자 (Reminder)</label>
+                <textarea
+                  value={editReminderTemplate}
+                  onChange={e => setEditReminderTemplate(e.target.value)}
+                  className="w-full h-24 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="예: [알림] [고객명]님, 곧 도착 예정입니다. 잠시만 기다려주세요!"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                * 사용 가능 치환자 : <span className="font-bold text-primary">[고객명]</span>, <span className="font-bold text-primary">[시간]</span>
+              </p>
+            </div>
+
+            <button onClick={handleSaveProfile} disabled={isSavingSettings} className="w-full py-4 bg-slate-800 text-white font-bold rounded-[1.2rem] shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2">
+              <span className="material-symbols-outlined">save</span>
+              {isSavingSettings ? '저장 중...' : '템플릿 설정 저장'}
+            </button>
           </div>
 
           <div className="text-center">
