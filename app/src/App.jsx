@@ -2041,24 +2041,7 @@ function App() {
             </h3>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">방문 안내 문자 (Notice)</label>
-                <textarea
-                  value={editNoticeTemplate}
-                  onChange={e => setEditNoticeTemplate(e.target.value)}
-                  className="w-full h-20 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none"
-                  placeholder="예: [안내] 오늘 방문 예정입니다. 시간 맞춰 뵙겠습니다. - 클린브로 ([시간])"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">방문 알림 문자 (Reminder)</label>
-                <textarea
-                  value={editReminderTemplate}
-                  onChange={e => setEditReminderTemplate(e.target.value)}
-                  className="w-full h-20 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none"
-                  placeholder="예: [알림] [고객명]님, 곧 도착 예정입니다. 잠시만 기다려주세요!"
-                />
-              </div>
+
               <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
                 <label className="block text-xs font-bold text-slate-500 mb-1 text-primary">예약 확정 자동 문자 (등록 시 바로 발송)</label>
                 <textarea
@@ -2185,9 +2168,39 @@ function App() {
             </button>
           </div>
 
-          <div className="text-center">
-            <p className="text-xs text-slate-400 font-bold mb-1">우리 업체 식별 코드 (파트너 초대 시 필요)</p>
-            <p className="text-[10px] bg-slate-200 p-2 rounded text-slate-600 break-all select-all font-mono">{myBusinessId}</p>
+          <div className="text-center space-y-3">
+            <div>
+              <p className="text-xs text-slate-400 font-bold mb-1">우리 업체 식별 코드 (파트너 초대 시 필요)</p>
+              <p
+                onClick={() => {
+                  navigator.clipboard.writeText(myBusinessId).then(() => {
+                    alert('코드가 복사되었습니다. 주소와 함께 전달하세요!');
+                  });
+                }}
+                className="text-[10px] bg-slate-200 p-2 rounded text-slate-600 break-all cursor-pointer hover:bg-slate-300 transition-colors font-mono select-all"
+              >
+                {myBusinessId}
+              </p>
+            </div>
+
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                const inviteMsg = `[클린브로] 최찬용 대표님이 파트너로 초대하셨습니다.\n아래 링크로 접속하여 가입 시 초대 코드를 입력해 주세요!\n\n1. 앱 주소: https://cleanbro-app.vercel.app/signup\n2. 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요!`;
+
+                // Trigger native SMS app if mobile
+                window.location.href = `sms:?body=${encodeURIComponent(inviteMsg)}`;
+
+                // Copy to clipboard as well for easy pasting
+                navigator.clipboard.writeText(inviteMsg).then(() => {
+                  alert('초대 메시지가 복사되었습니다. SMS 앱이 열리지 않으면 직접 붙여넣어 전달하세요!');
+                });
+              }}
+              className="w-full py-3 bg-blue-50 text-blue-600 font-bold rounded-xl shadow-sm active:scale-95 transition-all flex justify-center items-center gap-2 border border-blue-100"
+            >
+              <span className="material-symbols-outlined text-[18px]">share</span>
+              초대 링크 및 코드 발송하기
+            </button>
           </div>
 
           <div className="bg-red-50 p-5 rounded-2xl border border-red-100">
