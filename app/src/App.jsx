@@ -2144,21 +2144,39 @@ function App() {
               onClick={async (e) => {
                 e.preventDefault();
                 try {
-                  if (!editSolapiApiKey || !editSolapiFromNumber) return alert('화면 위쪽 설정에 키와 번호를 모두 입력해주세요.');
+                  if (!editSolapiApiKey || !editSolapiApiSecret || !editSolapiFromNumber) {
+                    return alert('API Key, API Secret, 발신번호를 모두 입력해주세요.');
+                  }
                   const date = new Date().toISOString();
                   const salt = window.crypto.randomUUID().replace(/-/g, '');
                   const encoder = new TextEncoder();
                   const key = await window.crypto.subtle.importKey('raw', encoder.encode(editSolapiApiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
                   const signatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
                   const signature = Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+                  const cleanNumber = editSolapiFromNumber.replace(/[^0-9]/g, '');
                   const res = await fetch('https://api.solapi.com/messages/v4/send', {
                     method: 'POST',
-                    headers: { 'Authorization': `HMAC-SHA256 apiKey=${editSolapiApiKey}, date=${date}, salt=${salt}, signature=${signature}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ messages: [{ to: editSolapiFromNumber.replace(/[^0-9]/g, ''), from: editSolapiFromNumber.replace(/[^0-9]/g, ''), text: '[클린브로] 솔라피 자동 발송 테스트 성공!' }] })
+                    headers: {
+                      'Authorization': `HMAC-SHA256 apiKey=${editSolapiApiKey}, date=${date}, salt=${salt}, signature=${signature}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      message: {
+                        to: cleanNumber,
+                        from: cleanNumber,
+                        text: '[클린브로] 솔라피 설정 성공! 테스트 문자가 정상 통신되었습니다.'
+                      }
+                    })
                   });
-                  if (res.ok) alert('성공! 대표님 폰으로 테스트 문자가 발송되었습니다.');
-                  else alert('발송 실패: ' + res.statusText);
-                } catch (e) { alert('오류: ' + e.message); }
+
+                  const resData = await res.json();
+                  if (res.ok) {
+                    alert('성공! 대표님 폰으로 테스트 문자가 발송되었습니다.');
+                  } else {
+                    alert(`발송 실패: ${resData.errorMessage || resData.errorCode || res.statusText}`);
+                  }
+                } catch (e) { alert('테스트 발송 중 오류: ' + e.message); }
               }}
               className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-[1.2rem] shadow-sm active:scale-95 transition-all flex justify-center items-center gap-2 border"
             >
