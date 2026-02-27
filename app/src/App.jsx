@@ -1526,14 +1526,20 @@ function App() {
             </button>
           </div>
 
-          {/* 아이폰 홈화면 추가 가이드 (iOS에서만 노출 유도 문구) */}
+          {/* 기기별 홈화면 추가 가이드 */}
           <div className="mt-10 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
             <p className="text-[11px] text-blue-600 font-bold flex items-center gap-1 justify-center">
-              <span className="material-symbols-outlined text-[14px]">smartphone</span> 아이폰 사용자 설치 가이드
+              <span className="material-symbols-outlined text-[14px]">smartphone</span> {isAndroid ? '안드로이드' : '아이폰'} 사용자 설치 가이드
             </p>
-            <p className="text-[10px] text-slate-500 mt-1 text-center leading-relaxed">
-              하단 <b>공유 버튼(↑)</b> 클릭 후 <b>'홈 화면에 추가'</b>를 누르시면<br />매번 주소를 칠 필요 없이 앱처럼 편하게 접속됩니다.
-            </p>
+            {isAndroid ? (
+              <p className="text-[10px] text-slate-500 mt-1 text-center leading-relaxed">
+                크롬 메뉴 <b>점 3개(⋮)</b> 클릭 후 <b>'홈 화면에 추가'</b>를 누르시면<br />바탕화면에 앱 아이콘이 생겨 바로 접속할 수 있습니다.
+              </p>
+            ) : (
+              <p className="text-[10px] text-slate-500 mt-1 text-center leading-relaxed">
+                하단 <b>공유 버튼(↑)</b> 클릭 후 <b>'홈 화면에 추가'</b>를 누르시면<br />매번 주소를 칠 필요 없이 앱처럼 편하게 접속됩니다.
+              </p>
+            )}
           </div>
         </div>
       </div>
