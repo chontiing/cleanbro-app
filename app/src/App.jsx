@@ -110,10 +110,12 @@ function App() {
   const [editSolapiFromNumber, setEditSolapiFromNumber] = useState('');
 
   // 프로 샵(Pro Shop) 상태
-  const [recommendedProducts, setRecommendedProducts] = useState([]);
+  const [products, setProducts] = useState([]);
   const [productCategory, setProductCategory] = useState('전체');
   const [showProductModal, setShowProductModal] = useState(false);
-  const [editingProduct, setEditingProduct] = useState({ title: '', description: '', image_url: '', link_url: '', category: '에어컨', platform: '쿠팡', tag: '' });
+  const [editingProduct, setEditingProduct] = useState({ title: '', description: '', image_url: '', link_url: '', category: '에어컨', platform: '쿠팡', tag: '', price: '', stock: '' });
+  const [productImageFile, setProductImageFile] = useState(null);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
 
   // PWA 업데이트 감지용
   const [showUpdateToast, setShowUpdateToast] = useState(false);
@@ -255,8 +257,8 @@ function App() {
   };
 
   const fetchProducts = async () => {
-    const { data, error } = await supabase.from('recommended_products').select('*').order('created_at', { ascending: false });
-    if (!error && data) setRecommendedProducts(data);
+    const { data, error } = await supabase.from('products').select('*').order('created_at', { ascending: false });
+    if (!error && data) setProducts(data);
   };
 
   useEffect(() => {
@@ -317,19 +319,14 @@ function App() {
       const bookingSubscription = supabase
         .channel('public:bookings')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, payload => {
-          console.log('Realtime change received!', payload);
-          // 알림 띄우기 (간단한 브라우저 알림, 권한 필요)
-          if (payload.event === 'INSERT' && payload.new.user_id !== session.user.id) {
-            if (Notification.permission === "granted") {
-              new Notification("새로운 예약이 등록되었습니다!", {
-                body: `${payload.new.memo} 고객님의 예약이 추가되었습니다.`
-              });
-            } else {
-              alert(`파트너가 새로운 예약을 추가했습니다: ${payload.new.memo}`);
-            }
-          }
-          // 등록/수정/삭제 이벤트가 오면 다시 데이터를 불러옴
           fetchCustomers();
+        })
+        .subscribe();
+
+      const productSubscription = supabase
+        .channel('public:products')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, payload => {
+          fetchProducts();
         })
         .subscribe();
 
@@ -340,6 +337,7 @@ function App() {
 
       return () => {
         supabase.removeChannel(bookingSubscription);
+        supabase.removeChannel(productSubscription);
       }
     } else {
       setCustomers([]);
@@ -1286,19 +1284,58 @@ function App() {
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
-    if (editingProduct.id) {
-      await supabase.from('recommended_products').update(editingProduct).eq('id', editingProduct.id);
-    } else {
-      await supabase.from('recommended_products').insert([editingProduct]);
+    setIsSavingProduct(true);
+    try {
+      let imageUrl = editingProduct.image_url;
+
+      // 이미지 업로드 로직
+      if (productImageFile) {
+        const fileExt = productImageFile.name.split('.').pop();
+        const fileName = `product_${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage
+          .from('products')
+          .upload(fileName, productImageFile, { upsert: true });
+
+        if (uploadError) {
+          // products 버킷이 없을 경우를 대비해 logos 버킷 재시도 또는 에러 알림
+          console.error('Upload error, checking bucket:', uploadError);
+          alert('상품 이미지 업로드 실패. 버킷 권한이나 존재 여부를 확인해주세요.');
+          setIsSavingProduct(false);
+          return;
+        }
+        const { data: publicUrlData } = supabase.storage.from('products').getPublicUrl(fileName);
+        imageUrl = publicUrlData.publicUrl;
+      }
+
+      const productData = {
+        ...editingProduct,
+        image_url: imageUrl,
+        price: parseInt(editingProduct.price.toString().replace(/[^0-9]/g, '') || 0),
+        stock: parseInt(editingProduct.stock.toString().replace(/[^0-9]/g, '') || 0)
+      };
+
+      if (editingProduct.id) {
+        const { error } = await supabase.from('products').update(productData).eq('id', editingProduct.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('products').insert([productData]);
+        if (error) throw error;
+      }
+      setShowProductModal(false);
+      setProductImageFile(null);
+      fetchProducts();
+    } catch (err) {
+      alert('상품 저장 중 오류: ' + err.message);
+    } finally {
+      setIsSavingProduct(false);
     }
-    setShowProductModal(false);
-    fetchProducts();
   };
 
   const handleDeleteProduct = async (id) => {
     if (window.confirm('정말 삭제하시겠습니까?')) {
-      await supabase.from('recommended_products').delete().eq('id', id);
-      fetchProducts();
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) alert('삭제 실패: ' + error.message);
+      else fetchProducts();
     }
   };
 
@@ -1423,7 +1460,8 @@ function App() {
   // --- 메인 앱 ---
   const userEmail = session?.user?.email || 'user@cleanbro.com';
   const userName = userEmail.split('@')[0];
-  const isCeo = userName.includes('admin') || userName.includes('ceo') || userName.includes('master');
+  const isAdmin = userProfile?.is_admin === true;
+  const isCeo = isAdmin || userName.includes('admin') || userName.includes('ceo') || userName.includes('master');
   const roleName = isCeo ? '대표님' : '파트너님';
 
   return (
@@ -2644,15 +2682,15 @@ function App() {
             <h2 className="text-2xl font-black flex items-center gap-2">
               <span className="material-symbols-outlined text-primary">local_mall</span> 프로 샵
             </h2>
-            {isCeo && (
-              <button onClick={() => { setEditingProduct({ title: '', description: '', image_url: '', link_url: '', category: '에어컨', platform: '쿠팡', tag: '' }); setShowProductModal(true); }} className="text-xs font-bold bg-slate-800 text-white px-3 py-1.5 rounded-xl active:scale-95 shadow-sm">
+            {isAdmin && (
+              <button onClick={() => { setEditingProduct({ title: '', description: '', image_url: '', link_url: '', category: '에어컨용', platform: '쿠팡', tag: '', price: '', stock: '' }); setProductImageFile(null); setShowProductModal(true); }} className="text-xs font-bold bg-slate-800 text-white px-3 py-1.5 rounded-xl active:scale-95 shadow-sm">
                 + 상품 추가
               </button>
             )}
           </div>
 
           <div className="flex gap-2 pb-2 overflow-x-auto scrollbar-hide">
-            {['전체', '에어컨', '세탁기'].map(cat => (
+            {['전체', '에어컨용', '세탁기용', '공용'].map(cat => (
               <button
                 key={cat}
                 onClick={() => setProductCategory(cat)}
@@ -2664,28 +2702,42 @@ function App() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {recommendedProducts
-              .filter(p => productCategory === '전체' || p.category === productCategory)
+            {products
+              .filter(p => {
+                if (productCategory === '전체') return true;
+                if (p.category === '공용') return true; // 공용 상품은 어느 탭에서나 보임
+                return p.category === productCategory;
+              })
               .map(p => (
-                <div key={p.id} className="bg-white dark:bg-slate-800 rounded-2xl p-3 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col cursor-pointer active:scale-95 transition-transform" onClick={() => window.open(p.link_url, '_blank')}>
+                <div key={p.id} className="bg-white dark:bg-slate-800 rounded-2xl p-3 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col cursor-pointer active:scale-95 transition-transform" onClick={() => p.link_url && window.open(p.link_url, '_blank')}>
                   <div className="relative aspect-square rounded-xl bg-slate-50 overflow-hidden mb-3">
-                    <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" />
+                    <img src={p.image_url || 'https://via.placeholder.com/300?text=No+Image'} alt={p.title} className="w-full h-full object-cover" />
                     <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
                       {p.platform === '쿠팡' && <span className="bg-[#C82A1D] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm tracking-wide">COUPANG</span>}
                       {p.platform === '알리' && <span className="bg-[#FF4747] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm tracking-wide">AliExpress</span>}
-                      <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm">🔥 10년 경력자 Pick</span>
+                      {p.stock <= 5 && p.stock > 0 && <span className="bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm">품절임박</span>}
+                      {p.stock <= 0 && <span className="bg-slate-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm">품절</span>}
                     </div>
                   </div>
                   {p.tag && <span className="self-start text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mb-1">{p.tag}</span>}
-                  <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 line-clamp-2 leading-tight mb-1">{p.title}</h4>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2 flex-1">{p.description}</p>
+                  <div className="flex items-center gap-1 mb-1">
+                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${p.category === '에어컨용' ? 'bg-blue-100 text-blue-600' : p.category === '세탁기용' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-600'}`}>
+                      {p.category}
+                    </span>
+                    <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 line-clamp-1 leading-tight">{p.title}</h4>
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2 flex-1 mb-1">{p.description}</p>
+                  <p className="font-black text-primary text-sm mb-1">{fmtNum(p.price)}원</p>
+                  <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold mb-1">
+                    <span>재고: {p.stock}개</span>
+                  </div>
                   {p.platform === '알리' && (
                     <p className="text-[9px] text-orange-500 font-bold mt-1.5 leading-tight flex items-start gap-0.5 bg-orange-50 p-1.5 rounded-lg border border-orange-100 shrink-0">
                       <span className="material-symbols-outlined text-[10px]">flight_takeoff</span>
-                      해외 직구 상품으로 배송에 7~14일이 소요될 수 있습니다.
+                      해외 직구 상품
                     </p>
                   )}
-                  {isCeo && (
+                  {isAdmin && (
                     <div className="mt-2 flex gap-1 justify-end border-t border-slate-50 pt-2" onClick={e => e.stopPropagation()}>
                       <button onClick={() => { setEditingProduct(p); setShowProductModal(true); }} className="text-[10px] text-blue-500 font-bold px-2 py-1 bg-blue-50 rounded">수정</button>
                       <button onClick={() => handleDeleteProduct(p.id)} className="text-[10px] text-red-500 font-bold px-2 py-1 bg-red-50 rounded">삭제</button>
@@ -2693,13 +2745,13 @@ function App() {
                   )}
                 </div>
               ))}
-            {recommendedProducts.filter(p => productCategory === '전체' || p.category === productCategory).length === 0 && (
+            {products.filter(p => productCategory === '전체' || p.category === productCategory).length === 0 && (
               <div className="col-span-2 text-center text-xs text-slate-400 py-10 bg-white/50 rounded-2xl">등록된 상품이 없습니다.</div>
             )}
           </div>
 
           <div className="mt-8 pt-4 border-t border-slate-200/50">
-            <p className="text-[10px] text-slate-400 text-center font-medium">이 포스팅은 쿠팡 파트너스 활동의 일환으로 수수료를 제공받습니다.</p>
+            <p className="text-[10px] text-slate-400 text-center font-medium">관리자가 직접 선정한 추천 제품 리스트입니다.</p>
           </div>
         </main>
       )}
@@ -2709,52 +2761,78 @@ function App() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in font-display">
           <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl overflow-hidden animate-slide-up">
             <h3 className="text-lg font-black mb-4 flex items-center gap-1.5"><span className="material-symbols-outlined text-primary">edit_square</span> 상품 등록 / 수정</h3>
-            <form onSubmit={handleSaveProduct} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">카테고리</label>
-                <select value={editingProduct.category} onChange={e => setEditingProduct({ ...editingProduct, category: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm">
-                  <option>에어컨</option>
-                  <option>세탁기</option>
-                </select>
-              </div>
+            <form onSubmit={handleSaveProduct} className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">플랫폼 연동 배지</label>
-                  <select value={editingProduct.platform || '쿠팡'} onChange={e => setEditingProduct({ ...editingProduct, platform: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm">
-                    <option value="쿠팡">쿠팡 (Coupang)</option>
-                    <option value="알리">알리 (AliExpress)</option>
-                    <option value="없음">사용 안함</option>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">카테고리</label>
+                  <select value={editingProduct.category} onChange={e => setEditingProduct({ ...editingProduct, category: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm">
+                    <option value="에어컨용">에어컨용</option>
+                    <option value="세탁기용">세탁기용</option>
+                    <option value="공용">공용</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">강조 태그</label>
-                  <select value={editingProduct.tag || ''} onChange={e => setEditingProduct({ ...editingProduct, tag: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm">
-                    <option value="">선택 안함</option>
-                    <option value="🚀 빠른배송">🚀 빠른배송</option>
-                    <option value="💰 가성비최고">💰 가성비최고</option>
-                    <option value="👍 경력자추천">👍 경력자추천</option>
-                  </select>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">상품명</label>
+                  <input type="text" required value={editingProduct.title} onChange={e => setEditingProduct({ ...editingProduct, title: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm" placeholder="제품명 입력" />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">상품명</label>
-                <input type="text" required value={editingProduct.title} onChange={e => setEditingProduct({ ...editingProduct, title: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm" />
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">가격 (원)</label>
+                  <input type="text" required value={fmtNum(editingProduct.price)} onChange={e => setEditingProduct({ ...editingProduct, price: e.target.value.replace(/[^0-9]/g, '') })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm" placeholder="0" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">재고 수량</label>
+                  <input type="number" required value={editingProduct.stock} onChange={e => setEditingProduct({ ...editingProduct, stock: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm" placeholder="0" />
+                </div>
               </div>
+
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">한줄 설명</label>
-                <input type="text" value={editingProduct.description} onChange={e => setEditingProduct({ ...editingProduct, description: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm" />
+                <label className="block text-xs font-bold text-slate-500 mb-1">상세 설명</label>
+                <textarea value={editingProduct.description} onChange={e => setEditingProduct({ ...editingProduct, description: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm h-20" placeholder="상품에 대한 상세 설명을 적어주세요."></textarea>
               </div>
+
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">이미지 URL</label>
-                <input type="url" required value={editingProduct.image_url} onChange={e => setEditingProduct({ ...editingProduct, image_url: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm placeholder:text-xs" placeholder="https://..." />
+                <label className="block text-xs font-bold text-slate-500 mb-1">상품 사진 (갤러리/카메라)</label>
+                <input type="file" accept="image/*" onChange={e => setProductImageFile(e.target.files[0])} className="w-full text-[10px] p-2 border rounded-xl" />
+                {editingProduct.image_url && !productImageFile && (
+                  <p className="text-[9px] text-slate-400 mt-1">현재 이미지: {editingProduct.image_url.substring(0, 30)}...</p>
+                )}
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">상품 외부 링크 URL</label>
-                <input type="url" required value={editingProduct.link_url} onChange={e => setEditingProduct({ ...editingProduct, link_url: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm placeholder:text-xs" placeholder="https://..." />
+
+              <div className="pt-2 border-t border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 mb-2">추가 정보 (선택사항)</p>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">플랫폼 연동</label>
+                    <select value={editingProduct.platform || ''} onChange={e => setEditingProduct({ ...editingProduct, platform: e.target.value })} className="w-full p-2 rounded-lg border bg-slate-50 text-[10px]">
+                      <option value="">없음</option>
+                      <option value="쿠팡">쿠팡</option>
+                      <option value="알리">알리</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1">강조 태그</label>
+                    <select value={editingProduct.tag || ''} onChange={e => setEditingProduct({ ...editingProduct, tag: e.target.value })} className="w-full p-2 rounded-lg border bg-slate-50 text-[10px]">
+                      <option value="">없음</option>
+                      <option value="🚀 빠른배송">🚀 빠른배송</option>
+                      <option value="👍 대표추천">👍 대표추천</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">외부 링크 (구매처)</label>
+                  <input type="url" value={editingProduct.link_url} onChange={e => setEditingProduct({ ...editingProduct, link_url: e.target.value })} className="w-full p-2 rounded-lg border bg-slate-50 text-[10px]" placeholder="https://..." />
+                </div>
               </div>
+
               <div className="flex gap-2 pt-2">
                 <button type="button" onClick={() => setShowProductModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl active:scale-95 text-sm">취소</button>
-                <button type="submit" className="flex-1 py-3 bg-primary text-white font-bold rounded-xl active:scale-95 text-sm">저장하기</button>
+                <button disabled={isSavingProduct} type="submit" className="flex-1 py-3 bg-primary text-white font-bold rounded-xl active:scale-95 text-sm flex justify-center items-center gap-2">
+                  {isSavingProduct && <span className="material-symbols-outlined animate-spin text-sm">sync</span>}
+                  {isSavingProduct ? '저장 중...' : '상품 저장하기'}
+                </button>
               </div>
             </form>
           </div>
