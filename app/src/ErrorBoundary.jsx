@@ -24,7 +24,9 @@ class ErrorBoundary extends React.Component {
                         </div>
                         <h2 className="text-xl font-black text-slate-900 mb-2">화면 접속 오류</h2>
                         <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-                            기종 호환성 또는 일시적인 네트워크 문제로<br />화면을 불러오지 못했습니다.
+                            구형 아이폰(iOS) 또는 특정 브라우저 환경에서<br />
+                            화면을 불러오지 못했습니다.<br />
+                            <span className="text-xs text-slate-400">(소프트웨어를 최신으로 업데이트하거나<br />크롬/사파리 최신 버전을 권장합니다)</span>
                         </p>
                         <button
                             onClick={() => window.location.reload()}

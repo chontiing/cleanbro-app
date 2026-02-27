@@ -4,6 +4,17 @@ import confetti from 'canvas-confetti';
 import imageCompression from 'browser-image-compression';
 
 // --- 유틸리티 및 데이터 ---
+// UUID v4 폴백 생성기 (구형 브라우저 대응)
+const genUUID = () => {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
+    return window.crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 const getTodayStr = () => {
   const d = new Date();
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -200,7 +211,7 @@ function App() {
         else sessionStorage.removeItem('no_remember');
       }
     } else {
-      const newBusinessId = inviteCode.trim() || window.crypto.randomUUID();
+      const newBusinessId = inviteCode.trim() || genUUID();
       const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -246,7 +257,7 @@ function App() {
     if (!activeApiKey || !activeApiSecret) { setSolapiBalance(null); return; }
     try {
       const date = new Date().toISOString();
-      const salt = window.crypto.randomUUID().replace(/-/g, '');
+      const salt = genUUID().replace(/-/g, '');
       const encoder = new TextEncoder();
       const key = await window.crypto.subtle.importKey('raw', encoder.encode(activeApiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
       const signatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
@@ -516,7 +527,7 @@ function App() {
     const activeFromNumber = userProfile?.solapi_from_number || businessProfile?.solapi_from_number;
     if (!activeApiKey || !activeApiSecret || !activeFromNumber) throw new Error("솔라피 연동 설정이 필요합니다.");
     const date = new Date().toISOString();
-    const salt = window.crypto.randomUUID().replace(/-/g, '');
+    const salt = genUUID().replace(/-/g, '');
     const encoder = new TextEncoder();
     const key = await window.crypto.subtle.importKey('raw', encoder.encode(activeApiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const signatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
@@ -2200,7 +2211,7 @@ function App() {
                     return alert('API Key, API Secret, 발신번호를 모두 입력해주세요.');
                   }
                   const date = new Date().toISOString();
-                  const salt = window.crypto.randomUUID().replace(/-/g, '');
+                  const salt = genUUID().replace(/-/g, '');
                   const encoder = new TextEncoder();
                   const key = await window.crypto.subtle.importKey('raw', encoder.encode(editSolapiApiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
                   const signatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
