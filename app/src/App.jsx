@@ -2087,7 +2087,7 @@ function App() {
 
               {solapiBalance !== null && solapiBalance < 2000 && (
                 <div className="mb-4 flex gap-2">
-                  <a href="https://solapi.com/cash/charge" target="_blank" rel="noopener noreferrer" className={`flex-1 flex items-center justify-center gap-1 bg-[#2563EB] text-white font-bold py-2.5 rounded-xl shadow-lg shadow-blue-500/30 border border-blue-600 active:scale-95 transition-all text-xs ${solapiBalance < 2000 ? 'animate-pulse' : ''}`}>
+                  <a href="https://solapi.com/cash/recharge" target="_blank" rel="noopener noreferrer" className={`flex-1 flex items-center justify-center gap-1 bg-[#2563EB] text-white font-bold py-2.5 rounded-xl shadow-lg shadow-blue-500/30 border border-blue-600 active:scale-95 transition-all text-xs ${solapiBalance < 2000 ? 'animate-pulse' : ''}`}>
                     <span className="material-symbols-outlined text-[16px]">payments</span> 즉시 충전하기
                   </a>
                   <a href="https://solapi.com/support" target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center justify-center gap-1 bg-yellow-400 text-yellow-900 font-bold px-3 py-2.5 rounded-xl shadow-sm border border-yellow-500 active:scale-95 transition-all text-xs">
