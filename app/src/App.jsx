@@ -129,6 +129,11 @@ function App() {
   const [editingProduct, setEditingProduct] = useState({ title: '', description: '', image_url: '', link_url: '', category: '에어컨', platform: '쿠팡', tag: '', price: '', stock: '' });
   const [productImageFile, setProductImageFile] = useState(null);
 
+  // 인증 및 모드 관련 상태
+  const [isResetMode, setIsResetMode] = useState(false);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+
   // 설치 가이드 및 온보딩 상태
   const [activeInstallGuide, setActiveInstallGuide] = useState(null); // 'iphone', 'android', or null
   const [hideNoticeAuto, setHideNoticeAuto] = useState(() => localStorage.getItem('hide_notice_v1') === 'true');
@@ -172,10 +177,14 @@ function App() {
       setSession(session);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+      // 비밀번호 재설정 링크로 접속한 경우 감지
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecoveryMode(true);
+      }
       // 로그인 시 공지사항 자동 이동 로직 (한 번도 안 봤을 경우)
-      if (session && localStorage.getItem('hide_notice_v1') !== 'true') {
+      if (session && localStorage.getItem('hide_notice_v1') !== 'true' && !isRecoveryMode) {
         setCurrentTab('notice');
       }
     });
@@ -214,7 +223,29 @@ function App() {
     e.preventDefault();
     setAuthLoading(true);
     let error;
-    if (isLoginMode) {
+
+    if (isRecoveryMode) {
+      // 비밀번호 변경 처리
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      error = updateError;
+      if (!error) {
+        alert('비밀번호가 성공적으로 변경되었습니다! 새로운 비밀번호로 로그인해 주세요.');
+        setIsRecoveryMode(false);
+        setIsLoginMode(true);
+        await supabase.auth.signOut();
+      }
+    } else if (isResetMode) {
+      // 비밀번호 재설정 메일 발송
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      error = resetError;
+      if (!error) {
+        alert('비밀번호 재설정 링크가 이메일로 발송되었습니다. 메일함을 확인해 주세요!');
+        setIsResetMode(false);
+        setIsLoginMode(true);
+      }
+    } else if (isLoginMode) {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       error = signInError;
       if (!error) {
@@ -252,6 +283,7 @@ function App() {
       if (msg.includes('Password should be at least 6 characters')) return '비밀번호는 최소 6자 이상이어야 합니다.';
       if (msg.includes('Invalid email')) return '올바른 이메일 형식을 입력해주세요.';
       if (msg.includes('rate limit')) return '너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.';
+      if (msg.includes('User not found')) return '등록되지 않은 이메일 주소입니다.';
       return `오류가 발생했습니다: ${msg}`;
     };
 
@@ -1435,11 +1467,11 @@ function App() {
   if (!session) {
     return (
       <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-indigo-900 via-blue-900 to-purple-900">
-        <div className="relative z-10 bg-white w-full max-w-sm px-8 pt-8 pb-10 rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] border border-white/20 backdrop-blur-sm">
-          <div className="text-center mb-8 pt-4">
+        <div className="relative z-10 bg-white w-full max-w-sm px-7 pt-7 pb-9 rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] border border-white/20 backdrop-blur-sm">
+          <div className="text-center mb-5 pt-1">
             {/* 3D Water Drop Icon */}
-            <div className="flex justify-center mb-4">
-              <div className="w-16 h-16 relative">
+            <div className="flex justify-center mb-3">
+              <div className="w-14 h-14 relative">
                 <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-[0_8px_16px_rgba(37,99,235,0.4)]">
                   <defs>
                     <linearGradient id="dropGradient" x1="10%" y1="0%" x2="90%" y2="100%">
@@ -1469,73 +1501,89 @@ function App() {
             </div>
 
             {/* Logo Text aligned with the card */}
-            <h2 className="text-[13px] font-black text-blue-900 tracking-[0.1em] uppercase mb-8">
+            <h2 className="text-[11px] font-black text-blue-900 tracking-[0.1em] uppercase mb-4">
               Cleaning Service All-in-One App
             </h2>
 
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight drop-shadow-sm">
-              {isLoginMode ? 'Cleanbro 시작하기' : 'Cleanbro 파트너 가입'}
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight drop-shadow-sm">
+              {isRecoveryMode ? '새 비밀번호 설정' : isResetMode ? '비밀번호 재설정' : isLoginMode ? 'Cleanbro 시작하기' : 'Cleanbro 파트너 가입'}
             </h1>
-            <p className="text-sm font-medium text-slate-600 mt-2 leading-relaxed">
-              {isLoginMode
-                ? '청소 전문가를 위한 국내 No.1 스마트 파트너\n지금 바로 접속하여 비즈니스를 관리하세요.'
-                : '최찬용 대표님과 함께 성장의 기회를 잡으세요.\n스마트한 일정 관리와 자동 보고서가 시작됩니다.'
+            <p className="text-xs font-medium text-slate-600 mt-1 leading-relaxed">
+              {isRecoveryMode
+                ? '보안을 위해 새로운 비밀번호를 입력해 주세요.'
+                : isResetMode
+                  ? '가입하신 이메일 주소를 입력하시면\n비밀번호 재설정 링크를 보내드립니다.'
+                  : isLoginMode
+                    ? '청소 전문가를 위한 국내 No.1 스마트 파트너\n지금 바로 접속하여 비즈니스를 관리하세요.'
+                    : '최찬용 대표님과 함께 성장의 기회를 잡으세요.\n스마트한 일정 관리와 자동 보고서가 시작됩니다.'
               }
             </p>
 
             {/* 앱 주요 특징 (로그인 모드일 때만 홍보용으로 노출) */}
             {isLoginMode && (
-              <div className="mt-8 grid grid-cols-2 gap-3 animate-fade-in">
-                <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
-                  <span className="material-symbols-outlined text-blue-600 mb-2">calendar_month</span>
-                  <p className="text-[11px] font-black text-slate-800">스마트 일정</p>
-                  <p className="text-[8px] text-slate-500 mt-0.5">실시간 스케줄 관리</p>
+              <div className="mt-5 grid grid-cols-2 gap-2 animate-fade-in">
+                <div className="bg-white/60 backdrop-blur-sm p-3 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
+                  <span className="material-symbols-outlined text-blue-600 mb-1 text-[20px]">calendar_month</span>
+                  <p className="text-[10px] font-black text-slate-800">스마트 일정</p>
                 </div>
-                <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
-                  <span className="material-symbols-outlined text-indigo-600 mb-2">assignment_turned_in</span>
-                  <p className="text-[11px] font-black text-slate-800">자동 보고서</p>
-                  <p className="text-[8px] text-slate-500 mt-0.5">사진 1장으로 전송</p>
+                <div className="bg-white/60 backdrop-blur-sm p-3 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
+                  <span className="material-symbols-outlined text-indigo-600 mb-1 text-[20px]">assignment_turned_in</span>
+                  <p className="text-[10px] font-black text-slate-800">자동 보고서</p>
                 </div>
-                <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
-                  <span className="material-symbols-outlined text-amber-600 mb-2">trending_up</span>
-                  <p className="text-[11px] font-black text-slate-800">매출 통계</p>
-                  <p className="text-[8px] text-slate-500 mt-0.5">정교한 정산 분석</p>
+                <div className="bg-white/60 backdrop-blur-sm p-3 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
+                  <span className="material-symbols-outlined text-amber-600 mb-1 text-[20px]">trending_up</span>
+                  <p className="text-[10px] font-black text-slate-800">매출 통계</p>
                 </div>
-                <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
-                  <span className="material-symbols-outlined text-green-600 mb-2">shopping_cart</span>
-                  <p className="text-[11px] font-black text-slate-800">프로 샵</p>
-                  <p className="text-[8px] text-slate-500 mt-0.5">전문 장비 최저가</p>
+                <div className="bg-white/60 backdrop-blur-sm p-3 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
+                  <span className="material-symbols-outlined text-green-600 mb-1 text-[20px]">shopping_cart</span>
+                  <p className="text-[10px] font-black text-slate-800">프로 샵</p>
                 </div>
               </div>
             )}
           </div>
 
           <form onSubmit={handleAuth}>
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div className="relative group">
                 <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 group-focus-within:text-blue-600 transition-colors">person</span>
                 <input
                   type="email"
                   required
                   value={email}
+                  disabled={isRecoveryMode}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full border-2 border-blue-100 rounded-2xl py-3.5 pl-12 pr-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 text-[15px] placeholder-slate-400 text-slate-800 bg-blue-50/30 transition-all font-semibold"
-                  placeholder="아이디를 입력하세요"
-                />
-              </div>
-              <div className="relative group">
-                <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 group-focus-within:text-blue-600 transition-colors">lock</span>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full border-2 border-blue-100 rounded-2xl py-3.5 pl-12 pr-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 text-[15px] placeholder-slate-400 text-slate-800 bg-blue-50/30 transition-all font-semibold"
-                  placeholder="비밀번호를 입력하세요"
+                  className={`w-full border-2 border-blue-100 rounded-2xl py-3.5 pl-12 pr-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 text-[15px] placeholder-slate-400 text-slate-800 transition-all font-semibold ${isRecoveryMode ? 'bg-slate-100 opacity-60' : 'bg-blue-50/30'}`}
+                  placeholder="이메일을 입력하세요"
                 />
               </div>
 
-              {!isLoginMode && (
+              {!isResetMode && (
+                <div className="relative group">
+                  <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 group-focus-within:text-blue-600 transition-colors">lock</span>
+                  <input
+                    type="password"
+                    required
+                    value={isRecoveryMode ? newPassword : password}
+                    onChange={e => isRecoveryMode ? setNewPassword(e.target.value) : setPassword(e.target.value)}
+                    className="w-full border-2 border-blue-100 rounded-2xl py-3.5 pl-12 pr-4 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 text-[15px] placeholder-slate-400 text-slate-800 bg-blue-50/30 transition-all font-semibold"
+                    placeholder={isRecoveryMode ? "새 비밀번호를 입력하세요" : "비밀번호를 입력하세요"}
+                  />
+                </div>
+              )}
+
+              {isLoginMode && !isResetMode && !isRecoveryMode && (
+                <div className="flex justify-end px-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsResetMode(true)}
+                    className="text-[11px] font-bold text-slate-400 hover:text-blue-600 transition-colors"
+                  >
+                    비밀번호를 잊으셨나요?
+                  </button>
+                </div>
+              )}
+
+              {!isLoginMode && !isResetMode && !isRecoveryMode && (
                 <div className="relative group animate-slide-up">
                   <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-blue-400 group-focus-within:text-blue-600 transition-colors">group_add</span>
                   <input
@@ -1549,7 +1597,7 @@ function App() {
               )}
             </div>
 
-            <div className="mt-10">
+            <div className="mt-7">
               <button
                 disabled={authLoading}
                 type="submit"
@@ -1558,27 +1606,37 @@ function App() {
                 {authLoading ? (
                   <span className="material-symbols-outlined animate-spin text-2xl">progress_activity</span>
                 ) : (
-                  isLoginMode ? '로그인' : '3초만에 회원가입 완료'
+                  isRecoveryMode ? '비밀번호 변경하기' : isResetMode ? '재설정 메일 보내기' : isLoginMode ? '로그인' : '3초만에 회원가입 완료'
                 )}
               </button>
             </div>
           </form>
 
-          <div className="mt-12 text-center pt-8 border-t border-slate-100 flex flex-col gap-6">
-            <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
-              <p className="text-sm font-bold text-slate-400 mb-4">{isLoginMode ? '클린브로가 처음이신가요?' : '이미 계정이 있으신가요?'}</p>
+          <div className="mt-8 text-center pt-5 border-t border-slate-100 flex flex-col gap-4">
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-[1.5rem] border border-slate-100 shadow-inner">
+              <p className="text-[11px] font-bold text-slate-400 mb-2">
+                {isResetMode || isRecoveryMode ? '다시 로그인 화면으로 돌아가시겠습니까?' : isLoginMode ? '클린브로가 처음이신가요?' : '이미 계정이 있으신가요?'}
+              </p>
               <button
-                onClick={() => setIsLoginMode(!isLoginMode)}
+                onClick={() => {
+                  if (isResetMode || isRecoveryMode) {
+                    setIsResetMode(false);
+                    setIsRecoveryMode(false);
+                    setIsLoginMode(true);
+                  } else {
+                    setIsLoginMode(!isLoginMode);
+                  }
+                }}
                 type="button"
-                className="w-full py-4 px-6 rounded-2xl bg-white border-2 border-primary/20 text-primary font-black text-base hover:bg-primary hover:text-white transition-all shadow-sm active:scale-95"
+                className="w-full py-3 px-4 rounded-xl bg-white border border-primary/20 text-primary font-black text-sm hover:bg-primary hover:text-white transition-all shadow-sm active:scale-95"
               >
-                {isLoginMode ? '🚀 파트너로 회원가입' : '🔑 로그인 화면으로'}
+                {isResetMode || isRecoveryMode ? '🔑 로그인으로 이동' : isLoginMode ? '🚀 파트너 회원가입 하기' : '🔑 로그인으로 이동'}
               </button>
             </div>
 
             {/* 설치 가이드 섹션 */}
-            <div className="space-y-3 pt-4">
-              <p className="text-xs font-black text-slate-400 mb-2">👇 아래 가이드를 눌러 바탕화면에 앱을 만드세요!</p>
+            <div className="space-y-2 pt-2">
+              <p className="text-[10px] font-black text-slate-400 mb-1">👇 아래 가이드를 눌러 바탕화면에 앱을 만드세요!</p>
 
               {/* iPhone 가이드 */}
               <div className="overflow-hidden bg-white rounded-2xl border border-slate-100 shadow-sm transition-all">
@@ -1622,9 +1680,9 @@ function App() {
                   onClick={() => setActiveInstallGuide(activeInstallGuide === 'android' ? null : 'android')}
                   className="w-full p-4 flex items-center justify-between font-bold text-slate-700"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-sm">
                     <span className="material-symbols-outlined text-green-500">robot</span>
-                    🤖 삼성/안드로이드 사용자 가이드
+                    🤖 안드로이드 사용자 가이드
                   </div>
                   <span className="material-symbols-outlined transition-transform" style={{ transform: activeInstallGuide === 'android' ? 'rotate(180deg)' : 'none' }}>expand_more</span>
                 </button>
@@ -1652,22 +1710,6 @@ function App() {
                 )}
               </div>
             </div>
-          </div>
-
-          {/* 기기별 홈화면 추가 가이드 */}
-          <div className="mt-10 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
-            <p className="text-[11px] text-blue-600 font-bold flex items-center gap-1 justify-center">
-              <span className="material-symbols-outlined text-[14px]">smartphone</span> {isAndroid ? '안드로이드' : '아이폰'} 사용자 설치 가이드
-            </p>
-            {isAndroid ? (
-              <p className="text-[10px] text-slate-500 mt-1 text-center leading-relaxed">
-                크롬 메뉴 <b>점 3개(⋮)</b> 클릭 후 <b>'홈 화면에 추가'</b>를 누르시면<br />바탕화면에 앱 아이콘이 생겨 바로 접속할 수 있습니다.
-              </p>
-            ) : (
-              <p className="text-[10px] text-slate-500 mt-1 text-center leading-relaxed">
-                사파리앱 접속 ➔ 하단 <b>공유 버튼(↑)</b> 클릭 후 <b>'홈 화면에 추가'</b>를 누르시면<br />매번 주소를 칠 필요 없이 앱처럼 편하게 접속됩니다.
-              </p>
-            )}
           </div>
         </div>
       </div>
