@@ -1414,11 +1414,40 @@ function App() {
             </h2>
 
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight drop-shadow-sm">
-              {isLoginMode ? '로그인' : '회원가입'}
+              {isLoginMode ? 'Cleanbro 시작하기' : 'Cleanbro 파트너 가입'}
             </h1>
-            <p className="text-sm font-medium text-slate-500 mt-2">
-              신뢰할 수 있는 파트너십의 시작
+            <p className="text-sm font-medium text-slate-600 mt-2 leading-relaxed">
+              {isLoginMode
+                ? '청소 전문가를 위한 국내 No.1 스마트 파트너\n지금 바로 접속하여 비즈니스를 관리하세요.'
+                : '최찬용 대표님과 함께 성장의 기회를 잡으세요.\n스마트한 일정 관리와 자동 보고서가 시작됩니다.'
+              }
             </p>
+
+            {/* 앱 주요 특징 (로그인 모드일 때만 홍보용으로 노출) */}
+            {isLoginMode && (
+              <div className="mt-8 grid grid-cols-2 gap-3 animate-fade-in">
+                <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
+                  <span className="material-symbols-outlined text-blue-600 mb-2">calendar_month</span>
+                  <p className="text-[11px] font-black text-slate-800">스마트 일정</p>
+                  <p className="text-[8px] text-slate-500 mt-0.5">실시간 스케줄 관리</p>
+                </div>
+                <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
+                  <span className="material-symbols-outlined text-indigo-600 mb-2">assignment_turned_in</span>
+                  <p className="text-[11px] font-black text-slate-800">자동 보고서</p>
+                  <p className="text-[8px] text-slate-500 mt-0.5">사진 1장으로 전송</p>
+                </div>
+                <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
+                  <span className="material-symbols-outlined text-amber-600 mb-2">trending_up</span>
+                  <p className="text-[11px] font-black text-slate-800">매출 통계</p>
+                  <p className="text-[8px] text-slate-500 mt-0.5">정교한 정산 분석</p>
+                </div>
+                <div className="bg-white/60 backdrop-blur-sm p-4 rounded-2xl border border-white shadow-sm flex flex-col items-center text-center">
+                  <span className="material-symbols-outlined text-green-600 mb-2">shopping_cart</span>
+                  <p className="text-[11px] font-black text-slate-800">프로 샵</p>
+                  <p className="text-[8px] text-slate-500 mt-0.5">전문 장비 최저가</p>
+                </div>
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleAuth}>
@@ -1475,7 +1504,7 @@ function App() {
             </div>
           </form>
 
-          <div className="mt-8 text-center pt-6 border-t border-slate-100">
+          <div className="mt-8 text-center pt-6 border-t border-slate-100 flex flex-col gap-4">
             <button
               onClick={() => setIsLoginMode(!isLoginMode)}
               type="button"
@@ -1483,6 +1512,28 @@ function App() {
             >
               {isLoginMode ? '처음이신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
             </button>
+
+            {/* 초대 코드 문의 버튼 */}
+            <button
+              onClick={() => {
+                const msg = encodeURIComponent('[클린브로 가입 문의] 안녕하세요! 클린브로 파트너 가입을 원합니다. 가입 절차와 초대 코드를 안내받을 수 있을까요?');
+                window.location.href = `sms:01053155184?body=${msg}`; // 대표님 번호로 연동
+              }}
+              className="py-3 px-4 bg-slate-100/50 rounded-xl text-[12px] font-bold text-slate-400 hover:bg-slate-200 transition-all flex items-center justify-center gap-2 border border-slate-100"
+            >
+              <span className="material-symbols-outlined text-[16px]">help</span>
+              가입 및 초대 코드 문의하기
+            </button>
+          </div>
+
+          {/* 아이폰 홈화면 추가 가이드 (iOS에서만 노출 유도 문구) */}
+          <div className="mt-10 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
+            <p className="text-[11px] text-blue-600 font-bold flex items-center gap-1 justify-center">
+              <span className="material-symbols-outlined text-[14px]">smartphone</span> 아이폰 사용자 설치 가이드
+            </p>
+            <p className="text-[10px] text-slate-500 mt-1 text-center leading-relaxed">
+              하단 <b>공유 버튼(↑)</b> 클릭 후 <b>'홈 화면에 추가'</b>를 누르시면<br />매번 주소를 칠 필요 없이 앱처럼 편하게 접속됩니다.
+            </p>
           </div>
         </div>
       </div>
