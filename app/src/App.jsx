@@ -134,6 +134,16 @@ function App() {
       setShowInAppBrowserWarning(true);
     }
 
+    // URL 경로 및 파라미터 감지 (초대용)
+    const path = window.location.pathname;
+    const searchParams = new URLSearchParams(window.location.search);
+    const codeFromUrl = searchParams.get('code');
+
+    if (path.includes('signup') || searchParams.has('signup')) {
+      setIsLoginMode(false);
+      if (codeFromUrl) setInviteCode(codeFromUrl);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
@@ -2193,7 +2203,8 @@ function App() {
               <button
                 onClick={(e) => {
                   e.preventDefault();
-                  const inviteMsg = `[클린브로] 최찬용 대표님이 파트너로 초대하셨습니다.\n아래 링크로 접속하여 가입 시 초대 코드를 입력해 주세요!\n\n1. 앱 주소: https://cleanbro-app.vercel.app/signup\n2. 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요!`;
+                  const inviteLink = `https://cleanbro-app.vercel.app/?signup&code=${myBusinessId}`;
+                  const inviteMsg = `[클린브로] 최찬용 대표님이 파트너로 초대하셨습니다.\n아래 접속하여 가입 시 초대 코드를 입력해 주세요!\n\n1. 가입 링크: ${inviteLink}\n2. 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요!`;
 
                   // Copy to clipboard first
                   navigator.clipboard.writeText(inviteMsg).then(() => {
@@ -2202,7 +2213,7 @@ function App() {
                       navigator.share({
                         title: '클린브로 파트너 초대',
                         text: inviteMsg,
-                        url: 'https://cleanbro-app.vercel.app/signup'
+                        url: inviteLink
                       }).catch(() => {
                         alert('메시지가 복사되었습니다. 카카오톡을 열어 붙여넣어 주세요!');
                       });
@@ -2222,7 +2233,8 @@ function App() {
               <button
                 onClick={(e) => {
                   e.preventDefault();
-                  const inviteMsg = `[클린브로] 최찬용 대표님이 파트너로 초대하셨습니다.\n아래 링크로 접속하여 가입 시 초대 코드를 입력해 주세요!\n\n1. 앱 주소: https://cleanbro-app.vercel.app/signup\n2. 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요!`;
+                  const inviteLink = `https://cleanbro-app.vercel.app/?signup&code=${myBusinessId}`;
+                  const inviteMsg = `[클린브로] 최찬용 대표님이 파트너로 초대하셨습니다.\n아래 접속하여 가입 시 초대 코드를 입력해 주세요!\n\n1. 가입 링크: ${inviteLink}\n2. 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요!`;
                   window.location.href = `sms:?body=${encodeURIComponent(inviteMsg)}`;
                   navigator.clipboard.writeText(inviteMsg);
                 }}
