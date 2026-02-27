@@ -2734,8 +2734,16 @@ function App() {
                   <div className="relative aspect-square rounded-xl bg-slate-50 overflow-hidden mb-3">
                     <img src={p.image_url || 'https://via.placeholder.com/300?text=No+Image'} alt={p.title} className="w-full h-full object-cover" />
                     <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
-                      {p.platform === '쿠팡' && <span className="bg-[#C82A1D] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm tracking-wide">COUPANG</span>}
-                      {p.platform === '알리' && <span className="bg-[#FF4747] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm tracking-wide">AliExpress</span>}
+                      {p.platform === '쿠팡' && (
+                        <div className="bg-[#0055ff] text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5">
+                          <span className="text-[10px]">C</span>OUPANG
+                        </div>
+                      )}
+                      {p.platform === '알리' && (
+                        <div className="bg-[#ff4747] text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-sm flex items-center gap-0.5">
+                          <span className="material-symbols-outlined text-[10px]">shopping_bag</span> Ali
+                        </div>
+                      )}
                       {p.stock <= 5 && p.stock > 0 && <span className="bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm">품절임박</span>}
                       {p.stock <= 0 && <span className="bg-slate-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm">품절</span>}
                     </div>
