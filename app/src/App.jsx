@@ -346,7 +346,7 @@ function App() {
         .subscribe();
 
       // 알림 권한 요청
-      if (Notification.permission !== "denied") {
+      if (typeof Notification !== 'undefined' && Notification.permission !== "denied") {
         Notification.requestPermission();
       }
 
