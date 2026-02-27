@@ -2204,7 +2204,7 @@ function App() {
                 onClick={(e) => {
                   e.preventDefault();
                   const inviteLink = `https://cleanbro-app.vercel.app/?signup&code=${myBusinessId}`;
-                  const inviteMsg = `[클린브로] 최찬용 대표님이 파트너로 초대하셨습니다.\n아래 접속하여 가입 시 초대 코드를 입력해 주세요!\n\n1. 가입 링크: ${inviteLink}\n2. 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요!`;
+                  const inviteMsg = `[클린브로 파트너 초대장] ✉️\n\n안녕하세요! 함께하실 소중한 파트너님을 초대합니다.\n최찬용 대표님과 함께 더 스마트하고 편리한 청소 서비스를 만들어가요.\n\n✨ 파트너 전용 혜택:\n- 실시간 예약 & 스케줄 관리\n- 고객 작업 보고서 자동 발송\n- 정교한 매출 통계 및 정산 관리\n\n👇 아래 링크를 눌러 지금 바로 시작하세요!\n🔗 가입 링크: ${inviteLink}\n🔑 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요! 감사합니다.`;
 
                   // Copy to clipboard first
                   navigator.clipboard.writeText(inviteMsg).then(() => {
@@ -2215,10 +2215,10 @@ function App() {
                         text: inviteMsg,
                         url: inviteLink
                       }).catch(() => {
-                        alert('메시지가 복사되었습니다. 카카오톡을 열어 붙여넣어 주세요!');
+                        alert('초대장이 복사되었습니다. 카카오톡을 열어 붙여넣어 주세요!');
                       });
                     } else {
-                      alert('초대 메시지와 링크가 복사되었습니다!\n카카오톡 친구를 선택해 붙여넣으세요.');
+                      alert('초대장과 링크가 복사되었습니다!\n카카오톡 친구를 선택해 붙여넣으세요.');
                     }
                   });
                 }}
@@ -2234,7 +2234,8 @@ function App() {
                 onClick={(e) => {
                   e.preventDefault();
                   const inviteLink = `https://cleanbro-app.vercel.app/?signup&code=${myBusinessId}`;
-                  const inviteMsg = `[클린브로] 최찬용 대표님이 파트너로 초대하셨습니다.\n아래 접속하여 가입 시 초대 코드를 입력해 주세요!\n\n1. 가입 링크: ${inviteLink}\n2. 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요!`;
+                  const inviteMsg = `[클린브로 파트너 초대장] ✉️\n\n안녕하세요! 함께하실 소중한 파트너님을 초대합니다.\n최찬용 대표님과 함께 더 스마트하고 편리한 청소 서비스를 만들어가요.\n\n✨ 파트너 전용 혜택:\n- 실시간 예약 & 스케줄 관리\n- 고객 작업 보고서 자동 발송\n- 정교한 매출 통계 및 정산 관리\n\n👇 아래 링크를 눌러 지금 바로 시작하세요!\n🔗 가입 링크: ${inviteLink}\n🔑 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요! 감사합니다.`;
+
                   window.location.href = `sms:?body=${encodeURIComponent(inviteMsg)}`;
                   navigator.clipboard.writeText(inviteMsg);
                 }}
