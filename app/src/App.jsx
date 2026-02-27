@@ -125,12 +125,16 @@ function App() {
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const [showInAppBrowserWarning, setShowInAppBrowserWarning] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
 
   // ==========================================
   // [인증 관련 (Supabase Auth)]
   // ==========================================
   useEffect(() => {
     const ua = navigator.userAgent.toLowerCase();
+    const android = /android/.test(ua);
+    setIsAndroid(android);
+
     if (ua.includes('kakaotalk') || (ua.indexOf('inapp') !== -1) || ua.includes('line') || ua.includes('instagram') || ua.includes('fb') || ua.includes('naver')) {
       setIsInAppBrowser(true);
       setShowInAppBrowserWarning(true);
@@ -1016,15 +1020,32 @@ function App() {
   const todayTargetList = useMemo(() => customers.filter(c => c.book_date === getTodayStr()), [customers]);
   const [batchSmsIdx, setBatchSmsIdx] = useState(-1);
 
-  const handleSendSms = (c, type = 'notice') => {
-    let template = type === 'notice'
-      ? (businessProfile.notice_template || `[안내] 오늘 방문 예정입니다. 시간 맞춰 뵙겠습니다.\n- 클린브로 ([시간])`)
-      : (businessProfile.reminder_template || `[알림] [고객명]님, 곧 도착 예정입니다. 잠시만 기다려주세요!`);
+  const handleSendSms = async (c, type = 'confirmed') => {
+    let template = '';
+    let updateField = '';
+
+    if (type === 'confirmed') {
+      template = businessProfile.confirmed_template || `[예약 확정] [일시]에 예약이 완료되었습니다. - 클린브로 ([파트너전화번호])`;
+      updateField = 'sms_sent_initial';
+    } else {
+      template = businessProfile.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`;
+      updateField = 'sms_sent_reminder';
+    }
 
     const timeValue = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
+    const senderPhone = userProfile?.solapi_from_number || businessProfile?.phone || '';
+
     const msg = template
       .replace(/\[고객명\]/g, c.customer_name || '고객')
-      .replace(/\[시간\]/g, timeValue);
+      .replace(/\[일시\]/g, `${c.book_date} ${timeValue}`)
+      .replace(/\[시간\]/g, timeValue)
+      .replace(/\[파트너전화번호\]/g, senderPhone);
+
+    // 수동 발송 시에도 DB 상태 업데이트 (UI 연동용)
+    if (updateField) {
+      await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
+      fetchCustomers();
+    }
 
     window.location.href = `sms:${c.phone}?body=${encodeURIComponent(msg)}`;
   };
@@ -1033,7 +1054,7 @@ function App() {
     if (batchSmsIdx + 1 < todayTargetList.length) {
       const nextIdx = batchSmsIdx + 1;
       setBatchSmsIdx(nextIdx);
-      handleSendSms(todayTargetList[nextIdx]);
+      handleSendSms(todayTargetList[nextIdx], 'morning');
     } else {
       alert('일괄 발송 준비가 끝났습니다.');
       setBatchSmsIdx(-1);
@@ -1121,11 +1142,11 @@ function App() {
             <p className="text-slate-400 font-mono text-sm">{c.phone ? c.phone.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`) : '번호 없음'}</p>
             {c.memo && <p className="text-xs text-slate-500 mt-1 line-clamp-1">{c.memo}</p>}
             <div className="flex items-center gap-2 mt-2">
-              <button onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'notice'); }} className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border cursor-pointer active:scale-95 transition-transform ${c.sms_sent_initial ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-300 hover:bg-slate-100 shadow-sm'}`}>
-                <span className="material-symbols-outlined text-[12px]">sms</span> {c.sms_sent_initial ? '안내 재발송' : '안내 문자(Notice)'}
+              <button onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'confirmed'); }} className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border cursor-pointer active:scale-95 transition-transform ${c.sms_sent_initial ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 opacity-60'}`}>
+                <span className="material-symbols-outlined text-[12px]">check_circle</span> {c.sms_sent_initial ? '확정문자(완료)' : '확정문자(미발송)'}
               </button>
-              <button onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'reminder'); }} className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border cursor-pointer active:scale-95 transition-transform ${c.sms_sent_reminder ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-300 hover:bg-slate-100 shadow-sm'}`}>
-                <span className="material-symbols-outlined text-[12px]">alarm</span> {c.sms_sent_reminder ? '알림 재발송' : '알림 문자(Reminder)'}
+              <button onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'morning'); }} className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border cursor-pointer active:scale-95 transition-transform ${c.sms_sent_reminder ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 opacity-60'}`}>
+                <span className="material-symbols-outlined text-[12px]">wb_twilight</span> {c.sms_sent_reminder ? '아침알림(완료)' : '아침알림(미발송)'}
               </button>
             </div>
           </div>
@@ -1460,7 +1481,7 @@ function App() {
   // --- 메인 앱 ---
   const userEmail = session?.user?.email || 'user@cleanbro.com';
   const userName = userEmail.split('@')[0];
-  const isAdmin = userProfile?.is_admin === true;
+  const isAdmin = userProfile?.is_admin === true || userEmail === 'ccy6208@naver.com';
   const isCeo = isAdmin || userName.includes('admin') || userName.includes('ceo') || userName.includes('master');
   const roleName = isCeo ? '대표님' : '파트너님';
 
@@ -1532,11 +1553,11 @@ function App() {
                       <p className="font-semibold text-sm truncate max-w-[120px]">{c.memo}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => handleSendSms(c, 'notice')} className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200 active:scale-95">
-                        <span className="material-symbols-outlined text-[12px]">notifications</span> 안내
+                      <button onClick={() => handleSendSms(c, 'confirmed')} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border active:scale-95 transition-all ${c.sms_sent_initial ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                        <span className="material-symbols-outlined text-[12px]">check_circle</span> {c.sms_sent_initial ? '확정됨' : '확정문자'}
                       </button>
-                      <button onClick={() => handleSendSms(c, 'reminder')} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200 active:scale-95">
-                        <span className="material-symbols-outlined text-[12px]">alarm</span> 알림
+                      <button onClick={() => handleSendSms(c, 'morning')} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border active:scale-95 transition-all ${c.sms_sent_reminder ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
+                        <span className="material-symbols-outlined text-[12px]">wb_twilight</span> {c.sms_sent_reminder ? '알림됨' : '아침알림'}
                       </button>
                     </div>
                   </div>
@@ -3027,7 +3048,21 @@ function App() {
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs font-bold text-center text-slate-400">👇 아래 버튼을 눌러 링크를 복사하세요 👇</p>
+              {isAndroid ? (
+                <button
+                  onClick={() => {
+                    const currentUrl = window.location.href.replace(/https?:\/\//, '');
+                    const intentUrl = `intent://${currentUrl}#Intent;scheme=https;package=com.android.chrome;end`;
+                    window.location.href = intentUrl;
+                  }}
+                  className="w-full bg-[#4285F4] text-white font-black py-4 rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 mb-2"
+                >
+                  <span className="material-symbols-outlined text-lg">rocket_launch</span>
+                  크롬(Chrome)으로 즉시 전환
+                </button>
+              ) : (
+                <p className="text-xs font-bold text-center text-slate-400">👇 아래 버튼을 눌러 링크를 복사하세요 👇</p>
+              )}
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(window.location.href).then(() => {
@@ -3039,7 +3074,7 @@ function App() {
                 className="w-full bg-[#FFE812] text-[#3A1D1D] font-black py-4 rounded-2xl shadow-lg border border-[#FBE000] active:scale-95 transition-all flex items-center justify-center gap-2"
               >
                 <span className="material-symbols-outlined text-lg">content_copy</span>
-                앱 주소 복사하기
+                {isAndroid ? '앱 주소 복사 (크롬 자동전환 안될때)' : '앱 주소 복사하기'}
               </button>
 
               <button
