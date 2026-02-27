@@ -120,10 +120,20 @@ function App() {
   const [swRegistration, setSwRegistration] = useState(null);
   const APP_VERSION = "v1.1.0"; // 현재 버전
 
+  // 인앱 브라우저 감지 (카카오톡 등)
+  const [isInAppBrowser, setIsInAppBrowser] = useState(false);
+  const [showInAppBrowserWarning, setShowInAppBrowserWarning] = useState(false);
+
   // ==========================================
   // [인증 관련 (Supabase Auth)]
   // ==========================================
   useEffect(() => {
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.includes('kakaotalk') || (ua.indexOf('inapp') !== -1) || ua.includes('line') || ua.includes('instagram') || ua.includes('fb') || ua.includes('naver')) {
+      setIsInAppBrowser(true);
+      setShowInAppBrowserWarning(true);
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
     });
@@ -2086,13 +2096,26 @@ function App() {
               </div>
 
               {solapiBalance !== null && solapiBalance < 2000 && (
-                <div className="mb-4 flex gap-2">
-                  <a href="https://solapi.com/cash/recharge" target="_blank" rel="noopener noreferrer" className={`flex-1 flex items-center justify-center gap-1 bg-[#2563EB] text-white font-bold py-2.5 rounded-xl shadow-lg shadow-blue-500/30 border border-blue-600 active:scale-95 transition-all text-xs ${solapiBalance < 2000 ? 'animate-pulse' : ''}`}>
-                    <span className="material-symbols-outlined text-[16px]">payments</span> 즉시 충전하기
-                  </a>
-                  <a href="https://solapi.com/support" target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center justify-center gap-1 bg-yellow-400 text-yellow-900 font-bold px-3 py-2.5 rounded-xl shadow-sm border border-yellow-500 active:scale-95 transition-all text-xs">
-                    <span className="material-symbols-outlined text-[16px]">sms</span> 문의
-                  </a>
+                <div className="mb-4">
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => window.open('https://solapi.com/cash/recharge', '_blank', 'noopener,noreferrer')} className={`flex-1 flex items-center justify-center gap-1 bg-[#2563EB] text-white font-bold py-2.5 rounded-xl shadow-lg shadow-blue-500/30 border border-blue-600 active:scale-95 transition-all text-xs ${solapiBalance < 2000 ? 'animate-pulse' : ''}`}>
+                      <span className="material-symbols-outlined text-[16px]">payments</span> 즉시 충전하기
+                    </button>
+                    <button type="button" onClick={() => window.open('https://solapi.com/support', '_blank', 'noopener,noreferrer')} className="shrink-0 flex items-center justify-center gap-1 bg-yellow-400 text-yellow-900 font-bold px-3 py-2.5 rounded-xl shadow-sm border border-yellow-500 active:scale-95 transition-all text-xs">
+                      <span className="material-symbols-outlined text-[16px]">sms</span> 문의
+                    </button>
+                  </div>
+                  <div className="mt-3 bg-blue-50/80 border border-blue-100 p-3 rounded-xl flex items-start gap-2 shadow-sm">
+                    <span className="material-symbols-outlined text-[16px] text-blue-600 mt-0.5">tips_and_updates</span>
+                    <div>
+                      <p className="text-[11px] text-blue-900 leading-relaxed font-medium tracking-tight">
+                        <span className="font-bold text-blue-700">Tip:</span> 솔라피 홈페이지에서 '<span className="font-bold text-blue-700">자동 충전</span>(잔액이 일정 금액 이하로 떨어지면 자동 결제)'을 설정해두시면, 작업 중 잔액 부족으로 문자가 발송되지 않는 상황을 방지할 수 있습니다.
+                      </p>
+                      <button type="button" onClick={() => window.open('https://solapi.com/cash/auto-recharge', '_blank', 'noopener,noreferrer')} className="mt-1.5 text-[10px] text-blue-600 font-bold underline hover:text-blue-800 transition-colors inline-flex items-center gap-0.5">
+                        [설정 방법 보기] <span className="material-symbols-outlined text-[10px]">open_in_new</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
               <p className="text-[10px] text-slate-500 mb-4 font-medium leading-relaxed">작업 완료 시 메시지 앱을 열지 않고 백그라운드 서버를 통해 즉시 문자를 전송합니다. <a href="#" onClick={(e) => { e.preventDefault(); setShowSolapiGuide(true); }} className="text-blue-500 underline font-bold">문자 연동 안내 보기</a></p>
@@ -2832,7 +2855,56 @@ function App() {
         </div>
       )}
 
-      {/* 3. 업데이트 토스트 (PWA Update) */}
+      {/* 3. 인앱 브라우저 경고 모달 (카카오톡 등) */}
+      {showInAppBrowserWarning && (
+        <div className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-[2rem] p-6 w-full max-w-sm shadow-2xl relative overflow-hidden animate-slide-up">
+            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-yellow-400 to-yellow-500"></div>
+
+            <div className="flex flex-col items-center text-center mt-2 mb-6">
+              <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4 shadow-inner">
+                <span className="material-symbols-outlined text-4xl text-yellow-600">open_in_browser</span>
+              </div>
+              <h2 className="text-xl font-black text-slate-900 mb-2">외부 브라우저(크롬)로 열어주세요!</h2>
+              <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                현재 접속하신 환경(카카오톡 등)에서는<br />결제나 이미지 업로드 등 일부 기능이<br /><span className="text-red-500 font-bold">정상적으로 작동하지 않을 수 있습니다.</span>
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-bold text-center text-slate-400">👇 아래 버튼을 눌러 링크를 복사하세요 👇</p>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(window.location.href).then(() => {
+                    alert('✅ 주소가 복사되었습니다!\n크롬(Chrome)이나 사파리 앱을 열고 붙여넣기 해주세요.');
+                  }).catch(() => {
+                    alert('주소 복사에 실패했습니다. 우측 상단 메뉴에서 "다른 브라우저로 열기"를 선택해주세요.');
+                  });
+                }}
+                className="w-full bg-[#FFE812] text-[#3A1D1D] font-black py-4 rounded-2xl shadow-lg border border-[#FBE000] active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <span className="material-symbols-outlined text-lg">content_copy</span>
+                앱 주소 복사하기
+              </button>
+
+              <button
+                onClick={() => setShowInAppBrowserWarning(false)}
+                className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl transition-all"
+              >
+                닫기 (이대로 무시하고 사용)
+              </button>
+            </div>
+
+            <div className="mt-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <p className="text-[10px] text-slate-500 font-medium text-center">
+                <span className="font-bold text-slate-700">추가 팁:</span> 화면 우측 상단(또는 우측 하단)의 [ ⋮ ] 버튼을 누른 후, <span className="font-bold">"다른 브라우저로 열기"</span>를 선택하셔도 됩니다.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. 업데이트 토스트 (PWA Update) */}
       {showUpdateToast && (
         <div className="fixed bottom-24 left-4 right-4 z-[100] animate-slide-up font-display">
           <div className="bg-slate-800 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between border border-slate-700 backdrop-blur-md bg-slate-800/95">
