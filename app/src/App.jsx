@@ -1537,7 +1537,7 @@ function App() {
               </p>
             ) : (
               <p className="text-[10px] text-slate-500 mt-1 text-center leading-relaxed">
-                하단 <b>공유 버튼(↑)</b> 클릭 후 <b>'홈 화면에 추가'</b>를 누르시면<br />매번 주소를 칠 필요 없이 앱처럼 편하게 접속됩니다.
+                사파리앱 접속 ➔ 하단 <b>공유 버튼(↑)</b> 클릭 후 <b>'홈 화면에 추가'</b>를 누르시면<br />매번 주소를 칠 필요 없이 앱처럼 편하게 접속됩니다.
               </p>
             )}
           </div>
