@@ -589,19 +589,27 @@ function App() {
     const activeApiKey = userProfile?.solapi_api_key || businessProfile?.solapi_api_key;
     const activeApiSecret = userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret;
     const activeFromNumber = userProfile?.solapi_from_number || businessProfile?.solapi_from_number;
-    if (!activeApiKey || !activeApiSecret || !activeFromNumber) throw new Error("솔라피 연동 설정이 필요합니다.");
-    const date = new Date().toISOString();
-    const salt = genUUID().replace(/-/g, '');
-    const encoder = new TextEncoder();
-    const key = await window.crypto.subtle.importKey('raw', encoder.encode(activeApiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    const signatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
-    const signature = Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-    const res = await fetch('https://api.solapi.com/messages/v4/send', {
-      method: 'POST',
-      headers: { 'Authorization': `HMAC-SHA256 apiKey=${activeApiKey}, date=${date}, salt=${salt}, signature=${signature}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: [{ to: to.replace(/[^0-9]/g, ''), from: activeFromNumber.replace(/[^0-9]/g, ''), text: text }] })
+
+    if (!activeApiKey || !activeApiSecret || !activeFromNumber) {
+      throw new Error("솔라피 연동 설정(API 키, 시크릿, 발신번호)을 확인해주세요.");
+    }
+
+    const { data, error } = await supabase.functions.invoke('send-sms', {
+      body: {
+        action: 'send_custom_sms',
+        apiKey: activeApiKey,
+        apiSecret: activeApiSecret,
+        fromNumber: activeFromNumber,
+        to: to.replace(/[^0-9]/g, ''),
+        text
+      }
     });
-    if (!res.ok) throw new Error("문자 발송 에러: " + res.statusText);
+
+    if (error) throw new Error("Edge Function 호출 에러: " + error.message);
+    if (data?.error) throw new Error("문자 발송 실패: " + data.error);
+
+    // Solapi의 응답 구조에 따라 성공 여부 판단 (보통 statusCode 2000이나 null)
+    return data;
   };
 
   const handleSaveBooking = async () => {

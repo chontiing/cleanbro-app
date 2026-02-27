@@ -1,6 +1,11 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+export const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
 async function getSolapiSignature(apiSecret: string, date: string, salt: string) {
     const encoder = new TextEncoder()
     const key = await crypto.subtle.importKey(
@@ -33,11 +38,11 @@ async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            message: {
+            messages: [{
                 to: to.replace(/[^0-9]/g, ''),
                 from: fromNumber.replace(/[^0-9]/g, ''),
                 text
-            }
+            }]
         })
     })
 
@@ -45,6 +50,11 @@ async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to
 }
 
 serve(async (req: any) => {
+    // Handle CORS pre-flight requests
+    if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders })
+    }
+
     try {
         const payload = await req.json()
         console.log('Received payload:', payload)
@@ -149,9 +159,31 @@ serve(async (req: any) => {
             return new Response(JSON.stringify({ message: `Sent ${sentCount} reminders for ${todayStr}` }), { status: 200 })
         }
 
-        return new Response(JSON.stringify({ message: 'No valid action performed' }), { status: 200 })
+        // 3. 직접 발송 모드: 프론트엔드에서 수동 호출 (CORS 우회 용도)
+        if (payload.action === 'send_custom_sms') {
+            const { apiKey, apiSecret, fromNumber, to, text } = payload;
+
+            if (!apiKey || !apiSecret || !fromNumber || !to || !text) {
+                return new Response(JSON.stringify({ error: 'Missing required parameters for send_custom_sms' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+            }
+
+            console.log('Sending custom SMS to', to);
+            const result = await sendSms(apiKey, apiSecret, fromNumber, to, text);
+            return new Response(JSON.stringify(result), {
+                status: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            });
+        }
+
+        return new Response(JSON.stringify({ message: 'No valid action performed' }), {
+            status: 200,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
     } catch (error) {
         console.error(error)
-        return new Response(JSON.stringify({ error: error.message }), { status: 500 })
+        return new Response(JSON.stringify({ error: error.message }), {
+            status: 500,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
     }
 })
