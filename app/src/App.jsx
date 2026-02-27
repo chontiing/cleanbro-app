@@ -1287,17 +1287,44 @@ function App() {
     return (
       <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-indigo-900 via-blue-900 to-purple-900">
         <div className="relative z-10 bg-white w-full max-w-sm px-8 pt-8 pb-10 rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] border border-white/20 backdrop-blur-sm">
-          <div className="text-center mb-8">
-            <div className="w-full h-48 bg-white rounded-[1.5rem] mb-6 overflow-hidden relative group shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-blue-50">
-              <img src="/login_poster.png" alt="Cleaning Service All-in-One App Logo" className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-1000 ease-out" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
-              <div className="absolute bottom-3 left-4 text-left">
-                <p className="text-blue-200 text-[10px] font-black tracking-widest uppercase mb-0.5 drop-shadow-sm">All-in-One App</p>
-                <p className="text-white font-black text-sm tracking-wide drop-shadow-md">Cleaning Service</p>
+          <div className="text-center mb-8 pt-4">
+            {/* 3D Water Drop Icon */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 relative">
+                <svg viewBox="0 0 24 24" className="w-full h-full drop-shadow-[0_8px_16px_rgba(37,99,235,0.4)]">
+                  <defs>
+                    <linearGradient id="dropGradient" x1="10%" y1="0%" x2="90%" y2="100%">
+                      <stop offset="0%" stopColor="#93C5FD" />
+                      <stop offset="40%" stopColor="#3B82F6" />
+                      <stop offset="100%" stopColor="#1E40AF" />
+                    </linearGradient>
+                    <linearGradient id="highlight" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.8" />
+                      <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  {/* Main drop base */}
+                  <path
+                    d="M12 21.5C7.30558 21.5 3.5 17.6944 3.5 13C3.5 10.3204 5.37894 6.84518 11.2335 2.37865C11.666 2.0487 12.334 2.0487 12.7665 2.37865C18.6211 6.84518 20.5 10.3204 20.5 13C20.5 17.6944 16.6944 21.5 12 21.5Z"
+                    fill="url(#dropGradient)"
+                  />
+                  {/* Highlight inner glow */}
+                  <path
+                    d="M11.5 4C9 7 7 10 6 12.5C5.8 13.5 6 14.5 6.5 15.5C5.5 14.5 5 13 5.5 11.5C6.5 8.5 8.5 6 11.5 4Z"
+                    fill="url(#highlight)"
+                  />
+                  {/* Reflection dot */}
+                  <ellipse cx="14.5" cy="16.5" rx="1.5" ry="1" fill="#FFFFFF" opacity="0.4" transform="rotate(-30, 14.5, 16.5)" />
+                </svg>
               </div>
             </div>
 
-            <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight drop-shadow-sm">
+            {/* Logo Text aligned with the card */}
+            <h2 className="text-[13px] font-black text-blue-900 tracking-[0.1em] uppercase mb-8">
+              Cleaning Service All-in-One App
+            </h2>
+
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight drop-shadow-sm">
               {isLoginMode ? '로그인' : '회원가입'}
             </h1>
             <p className="text-sm font-medium text-slate-500 mt-2">
