@@ -101,6 +101,20 @@ function App() {
   const [afterFiles, setAfterFiles] = useState([]);
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
 
+  // 파트너(개별) 프로필 추가 정보 및 솔라피
+  const [userProfile, setUserProfile] = useState({});
+  const [solapiBalance, setSolapiBalance] = useState(null);
+  const [showSolapiGuide, setShowSolapiGuide] = useState(false);
+  const [editSolapiApiKey, setEditSolapiApiKey] = useState('');
+  const [editSolapiApiSecret, setEditSolapiApiSecret] = useState('');
+  const [editSolapiFromNumber, setEditSolapiFromNumber] = useState('');
+
+  // 프로 샵(Pro Shop) 상태
+  const [recommendedProducts, setRecommendedProducts] = useState([]);
+  const [productCategory, setProductCategory] = useState('전체');
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState({ title: '', description: '', image_url: '', link_url: '', category: '에어컨', platform: '쿠팡', tag: '' });
+
   // PWA 업데이트 감지용
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
@@ -192,10 +206,42 @@ function App() {
     const { data: bData } = await supabase.from('businesses').select('*').eq('id', myBusinessId).single();
     if (bData) setBusinessProfile(bData);
 
-    // 내 닉네임 프로필 정보
+    // 내 프로필 정보
     const { data: pData } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-    if (pData?.nickname) setMyNickname(pData.nickname);
+    if (pData) {
+      if (pData.nickname) setMyNickname(pData.nickname);
+      setUserProfile(pData);
+    }
   };
+
+  const fetchSolapiBalance = async () => {
+    const activeApiKey = userProfile?.solapi_api_key || businessProfile?.solapi_api_key;
+    const activeApiSecret = userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret;
+    if (!activeApiKey || !activeApiSecret) { setSolapiBalance(null); return; }
+    try {
+      const date = new Date().toISOString();
+      const salt = window.crypto.randomUUID().replace(/-/g, '');
+      const encoder = new TextEncoder();
+      const key = await window.crypto.subtle.importKey('raw', encoder.encode(activeApiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      const signatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
+      const signature = Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+      const authHeader = `HMAC-SHA256 apiKey=${activeApiKey}, date=${date}, salt=${salt}, signature=${signature}`;
+      const res = await fetch('https://api.solapi.com/cash/v1/balance', { headers: { 'Authorization': authHeader } });
+      if (res.ok) {
+        const bJson = await res.json();
+        setSolapiBalance(bJson.balance || 0);
+      }
+    } catch (e) { }
+  };
+
+  const fetchProducts = async () => {
+    const { data, error } = await supabase.from('recommended_products').select('*').order('created_at', { ascending: false });
+    if (!error && data) setRecommendedProducts(data);
+  };
+
+  useEffect(() => {
+    if (currentTab === 'settings') fetchSolapiBalance();
+  }, [currentTab, userProfile, businessProfile]);
 
   const fetchTeamMembers = async () => {
     if (!myBusinessId) return;
@@ -245,6 +291,7 @@ function App() {
       fetchTeamMembers();
       fetchExpenses();
       fetchCustomers();
+      fetchProducts();
 
       // 실시간 데이터 동기화 구독 추가
       const bookingSubscription = supabase
@@ -545,8 +592,11 @@ function App() {
       setEditDefaultMessage(businessProfile.default_completion_message || `[클린브로] 청소 작업 완료 안내\n안녕하세요, 고객님! {customer_name}님 {memo} 작업이 완료되었습니다.\n\n📸 작업 사진 확인하기:\n{after_url}\n\n만족하셨다면 리뷰 부탁드립니다!\n[리뷰링크]`);
       setEditNoticeTemplate(businessProfile.notice_template || `[안내] 오늘 방문 예정입니다. 시간 맞춰 뵙겠습니다.\n- 클린브로 ([시간])`);
       setEditReminderTemplate(businessProfile.reminder_template || `[알림] [고객명]님, 곧 도착 예정입니다. 잠시만 기다려주세요!`);
+      setEditSolapiApiKey(userProfile?.solapi_api_key || businessProfile?.solapi_api_key || '');
+      setEditSolapiApiSecret(userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret || '');
+      setEditSolapiFromNumber(userProfile?.solapi_from_number || businessProfile?.solapi_from_number || '');
     }
-  }, [currentTab, businessProfile, myNickname]);
+  }, [currentTab, businessProfile, myNickname, userProfile]);
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
@@ -612,7 +662,10 @@ function App() {
     const { error: pError } = await supabase.from('profiles').upsert([{
       id: session.user.id,
       business_id: myBusinessId,
-      nickname: editNickname
+      nickname: editNickname,
+      solapi_api_key: editSolapiApiKey,
+      solapi_api_secret: editSolapiApiSecret,
+      solapi_from_number: editSolapiFromNumber
     }]);
 
     if (bError || pError) {
@@ -620,8 +673,10 @@ function App() {
     } else {
       setBusinessProfile(upsertData);
       setMyNickname(editNickname);
+      setUserProfile(prev => ({ ...prev, nickname: editNickname, solapi_api_key: editSolapiApiKey, solapi_api_secret: editSolapiApiSecret, solapi_from_number: editSolapiFromNumber }));
       alert('업체 정보 및 내 닉네임이 성공적으로 업데이트되었습니다.');
       fetchTeamMembers(); // 업데이트 후 팀원 목록 즉시 갱신
+      fetchSolapiBalance(); // 설정 저장 직후 솔라피 잔액 재조회
     }
     setIsSavingSettings(false);
   };
@@ -1059,8 +1114,8 @@ function App() {
 
   // --- 이미지 워터마크 & 압축 로직 ---
   const processImage = async (file) => {
-    // 1. 이미지 압축 (최대 1MB, 1280px)
-    const options = { maxSizeMB: 1, maxWidthOrHeight: 1280, useWebWorker: true };
+    // 1. 이미지 압축 (최대 500KB, 가로세로 1024px)
+    const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1024, useWebWorker: true };
     const compressedFile = await imageCompression(file, options);
 
     // 2. 워터마크 합성
@@ -1144,10 +1199,35 @@ function App() {
         mmsText += `\n\n🧺 세탁기 사후관리 가이드:\n${businessProfile.washer_guide_url}`;
       }
 
-      const smsUrl = `sms:${completionTarget.phone}?body=${encodeURIComponent(mmsText)}`;
-      window.open(smsUrl);
+      const sendSolapiMmsLocally = async (to, text) => {
+        const activeApiKey = userProfile?.solapi_api_key || businessProfile?.solapi_api_key;
+        const activeApiSecret = userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret;
+        const activeFromNumber = userProfile?.solapi_from_number || businessProfile?.solapi_from_number;
+        if (!activeApiKey || !activeApiSecret || !activeFromNumber) throw new Error("솔라피 연동 설정이 필요합니다.");
+        const date = new Date().toISOString();
+        const salt = window.crypto.randomUUID().replace(/-/g, '');
+        const encoder = new TextEncoder();
+        const key = await window.crypto.subtle.importKey('raw', encoder.encode(activeApiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+        const signatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
+        const signature = Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const res = await fetch('https://api.solapi.com/messages/v4/send', {
+          method: 'POST',
+          headers: { 'Authorization': `HMAC-SHA256 apiKey=${activeApiKey}, date=${date}, salt=${salt}, signature=${signature}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: [{ to: to.replace(/[^0-9]/g, ''), from: activeFromNumber.replace(/[^0-9]/g, ''), text: text }] })
+        });
+        if (!res.ok) throw new Error("문자 발송 에러: " + res.statusText);
+      };
 
-      alert('작업이 완료 처리되었으며 사진이 저장되었습니다.');
+      try {
+        await sendSolapiMmsLocally(completionTarget.phone, mmsText);
+        alert('작업이 완벽하게 완료되었으며 고객님께 알림 문자가 바로 발송되었습니다.');
+      } catch (err) {
+        console.error(err);
+        alert('작업완료/사진저장은 성공! 하지만 자동 문자가 실패했습니다.\n사유: ' + err.message + '\n메시지 앱을 대신 엽니다.');
+        const smsUrl = `sms:${completionTarget.phone}?body=${encodeURIComponent(mmsText)}`;
+        window.open(smsUrl);
+      }
+
       setShowCompletionModal(false);
       setBeforeFiles([]); setAfterFiles([]);
       fetchCustomers();
@@ -1158,22 +1238,37 @@ function App() {
     }
   };
 
+  const handleSaveProduct = async (e) => {
+    e.preventDefault();
+    if (editingProduct.id) {
+      await supabase.from('recommended_products').update(editingProduct).eq('id', editingProduct.id);
+    } else {
+      await supabase.from('recommended_products').insert([editingProduct]);
+    }
+    setShowProductModal(false);
+    fetchProducts();
+  };
+
+  const handleDeleteProduct = async (id) => {
+    if (window.confirm('정말 삭제하시겠습니까?')) {
+      await supabase.from('recommended_products').delete().eq('id', id);
+      fetchProducts();
+    }
+  };
+
   // --- 로그인 처리 안되었을 시 화면 출력 ---
   if (!session) {
     return (
       <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-indigo-900 via-blue-900 to-purple-900">
         <div className="relative z-10 bg-white w-full max-w-sm px-8 pt-12 pb-10 rounded-[2rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] border border-white/20 backdrop-blur-sm">
           <div className="text-center mb-10">
-            {/* 상단 장식 이모티콘 추가 */}
-            <div className="flex justify-center items-center gap-3 mb-4 select-none animate-fade-in relative">
-              <div className="w-14 h-14 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl flex items-center justify-center text-2xl shadow-sm border border-blue-200/50 transform -rotate-6">
-                ✨
+            {/* 상단 장식 아이콘 */}
+            <div className="flex justify-center items-center gap-4 mb-5 select-none animate-fade-in relative px-4">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-50 to-blue-100 rounded-[1.25rem] flex items-center justify-center shadow-md border border-blue-200 transform hover:-rotate-3 transition-transform duration-300">
+                <span className="material-symbols-outlined text-4xl text-blue-500">ac_unit</span>
               </div>
-              <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-3xl flex items-center justify-center text-3xl shadow-lg shadow-indigo-500/30 transform scale-110 z-10">
-                🌬️
-              </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-blue-50 to-indigo-100 rounded-2xl flex items-center justify-center text-2xl shadow-sm border border-blue-200/50 transform rotate-6">
-                🫧
+              <div className="w-16 h-16 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-[1.25rem] flex items-center justify-center shadow-md border border-indigo-200 transform hover:rotate-3 transition-transform duration-300">
+                <span className="material-symbols-outlined text-4xl text-indigo-500">local_laundry_service</span>
               </div>
             </div>
 
@@ -1261,6 +1356,14 @@ function App() {
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 text-slate-900 dark:text-slate-100 font-display">
+
+      {/* 솔라피 잔액 부족 경고 배너 */}
+      {solapiBalance !== null && solapiBalance < 2000 && (
+        <div className="bg-red-500 text-white px-4 py-2 text-xs font-bold flex items-center justify-center gap-2 shadow-sm animate-pulse z-40 relative">
+          <span className="material-symbols-outlined text-[16px]">warning</span>
+          ⚠️ 솔라피 잔액이 부족합니다. 문자가 발송되지 않을 수 있으니 충전해 주세요!
+        </div>
+      )}
 
       {/* 헤더 */}
       <header className="sticky top-0 z-30 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-md px-5 py-4 flex justify-between items-center">
@@ -1869,10 +1972,10 @@ function App() {
             </div>
           </div>
 
-          {/* 문자 메시지 템플릿 관리 섹션 */}
+          {/* 솔라피 & 문자 메시지 템플릿 관리 섹션 */}
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-6">
             <h3 className="text-lg font-black flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary">sms</span> 문자 메시지 템플릿 관리
+              <span className="material-symbols-outlined text-primary">sms</span> 템플릿 & 발송 설정
             </h3>
 
             <div className="space-y-4">
@@ -1899,9 +2002,75 @@ function App() {
               </p>
             </div>
 
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
+              <div className="flex items-end justify-between mb-3">
+                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-primary">send_to_mobile</span>
+                  나의 문자 발송 (솔라피)
+                </h4>
+                {solapiBalance !== null && (
+                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                    잔액: <span className={solapiBalance < 2000 ? "text-red-500" : "text-blue-500"}>{fmtNum(solapiBalance)}원</span>
+                  </span>
+                )}
+              </div>
+
+              {solapiBalance !== null && solapiBalance < 2000 && (
+                <div className="mb-4 flex gap-2">
+                  <a href="https://solapi.com/cash/charge" target="_blank" rel="noopener noreferrer" className={`flex-1 flex items-center justify-center gap-1 bg-[#2563EB] text-white font-bold py-2.5 rounded-xl shadow-lg shadow-blue-500/30 border border-blue-600 active:scale-95 transition-all text-xs ${solapiBalance < 2000 ? 'animate-pulse' : ''}`}>
+                    <span className="material-symbols-outlined text-[16px]">payments</span> 즉시 충전하기
+                  </a>
+                  <a href="https://solapi.com/support" target="_blank" rel="noopener noreferrer" className="shrink-0 flex items-center justify-center gap-1 bg-yellow-400 text-yellow-900 font-bold px-3 py-2.5 rounded-xl shadow-sm border border-yellow-500 active:scale-95 transition-all text-xs">
+                    <span className="material-symbols-outlined text-[16px]">sms</span> 문의
+                  </a>
+                </div>
+              )}
+              <p className="text-[10px] text-slate-500 mb-4 font-medium leading-relaxed">작업 완료 시 메시지 앱을 열지 않고 백그라운드 서버를 통해 즉시 문자를 전송합니다. <a href="#" onClick={(e) => { e.preventDefault(); setShowSolapiGuide(true); }} className="text-blue-500 underline font-bold">문자 연동 안내 보기</a></p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">API Key</label>
+                  <input type="password" value={editSolapiApiKey} onChange={e => setEditSolapiApiKey(e.target.value)} className="w-full text-sm p-3 rounded-xl border bg-slate-50 text-slate-700 placeholder:text-xs" placeholder="NCS..." />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">API Secret</label>
+                  <input type="password" value={editSolapiApiSecret} onChange={e => setEditSolapiApiSecret(e.target.value)} className="w-full text-sm p-3 rounded-xl border bg-slate-50 text-slate-700 placeholder:text-xs" placeholder="Secret Key..." />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">발신번호 (- 제외)</label>
+                  <input type="text" value={editSolapiFromNumber} onChange={e => setEditSolapiFromNumber(e.target.value)} className="w-full text-sm p-3 rounded-xl border bg-slate-50 text-slate-700 placeholder:text-xs" placeholder="01012345678" />
+                </div>
+              </div>
+            </div>
+
             <button onClick={handleSaveProfile} disabled={isSavingSettings} className="w-full py-4 bg-slate-800 text-white font-bold rounded-[1.2rem] shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2">
               <span className="material-symbols-outlined">save</span>
-              {isSavingSettings ? '저장 중...' : '템플릿 설정 저장'}
+              {isSavingSettings ? '저장 중...' : '템플릿 및 발송 설정 저장'}
+            </button>
+            <button
+              onClick={async (e) => {
+                e.preventDefault();
+                try {
+                  if (!editSolapiApiKey || !editSolapiFromNumber) return alert('화면 위쪽 설정에 키와 번호를 모두 입력해주세요.');
+                  const date = new Date().toISOString();
+                  const salt = window.crypto.randomUUID().replace(/-/g, '');
+                  const encoder = new TextEncoder();
+                  const key = await window.crypto.subtle.importKey('raw', encoder.encode(editSolapiApiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+                  const signatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
+                  const signature = Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+                  const res = await fetch('https://api.solapi.com/messages/v4/send', {
+                    method: 'POST',
+                    headers: { 'Authorization': `HMAC-SHA256 apiKey=${editSolapiApiKey}, date=${date}, salt=${salt}, signature=${signature}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: [{ to: editSolapiFromNumber.replace(/[^0-9]/g, ''), from: editSolapiFromNumber.replace(/[^0-9]/g, ''), text: '[클린브로] 솔라피 자동 발송 테스트 성공!' }] })
+                  });
+                  if (res.ok) alert('성공! 대표님 폰으로 테스트 문자가 발송되었습니다.');
+                  else alert('발송 실패: ' + res.statusText);
+                } catch (e) { alert('오류: ' + e.message); }
+              }}
+              className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-[1.2rem] shadow-sm active:scale-95 transition-all flex justify-center items-center gap-2 border"
+            >
+              <span className="material-symbols-outlined text-[18px]">cell_tower</span>
+              나에게 테스트 문자 보내기
             </button>
           </div>
 
@@ -2286,6 +2455,11 @@ function App() {
             <p className={`text-[9px] ${currentTab === 'tax' ? 'font-bold' : 'font-medium'}`}>세무</p>
           </button>
 
+          <button onClick={() => setCurrentTab('proshop')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'proshop' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
+            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'proshop' ? 'font-fill' : ''}`}>local_mall</span>
+            <p className={`text-[9px] ${currentTab === 'proshop' ? 'font-bold' : 'font-medium'}`}>프로샵</p>
+          </button>
+
           <button onClick={() => setCurrentTab('settings')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'settings' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
             <span className={`material-symbols-outlined text-[24px] ${currentTab === 'settings' ? 'font-fill' : ''}`}>manage_accounts</span>
             <p className={`text-[9px] ${currentTab === 'settings' ? 'font-bold' : 'font-medium'}`}>설정</p>
@@ -2293,7 +2467,169 @@ function App() {
         </div>
       </nav>
 
-      {/* ======================= [탭 7: 모달들] ======================= */}
+      {/* ======================= [탭 7: 프로 샵] ======================= */}
+      {currentTab === 'proshop' && (
+        <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-5 animate-slide-up pb-32">
+          <div className="flex justify-between items-end mb-2">
+            <h2 className="text-2xl font-black flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">local_mall</span> 프로 샵
+            </h2>
+            {isCeo && (
+              <button onClick={() => { setEditingProduct({ title: '', description: '', image_url: '', link_url: '', category: '에어컨', platform: '쿠팡', tag: '' }); setShowProductModal(true); }} className="text-xs font-bold bg-slate-800 text-white px-3 py-1.5 rounded-xl active:scale-95 shadow-sm">
+                + 상품 추가
+              </button>
+            )}
+          </div>
+
+          <div className="flex gap-2 pb-2 overflow-x-auto scrollbar-hide">
+            {['전체', '에어컨', '세탁기'].map(cat => (
+              <button
+                key={cat}
+                onClick={() => setProductCategory(cat)}
+                className={`px-4 py-2 rounded-full text-xs font-bold transition-all whitespace-nowrap border line-clamp-1 ${productCategory === cat ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {recommendedProducts
+              .filter(p => productCategory === '전체' || p.category === productCategory)
+              .map(p => (
+                <div key={p.id} className="bg-white dark:bg-slate-800 rounded-2xl p-3 shadow-sm border border-slate-100 dark:border-slate-700 flex flex-col cursor-pointer active:scale-95 transition-transform" onClick={() => window.open(p.link_url, '_blank')}>
+                  <div className="relative aspect-square rounded-xl bg-slate-50 overflow-hidden mb-3">
+                    <img src={p.image_url} alt={p.title} className="w-full h-full object-cover" />
+                    <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
+                      {p.platform === '쿠팡' && <span className="bg-[#C82A1D] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm tracking-wide">COUPANG</span>}
+                      {p.platform === '알리' && <span className="bg-[#FF4747] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm tracking-wide">AliExpress</span>}
+                      <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm">🔥 10년 경력자 Pick</span>
+                    </div>
+                  </div>
+                  {p.tag && <span className="self-start text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded mb-1">{p.tag}</span>}
+                  <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100 line-clamp-2 leading-tight mb-1">{p.title}</h4>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2 flex-1">{p.description}</p>
+                  {p.platform === '알리' && (
+                    <p className="text-[9px] text-orange-500 font-bold mt-1.5 leading-tight flex items-start gap-0.5 bg-orange-50 p-1.5 rounded-lg border border-orange-100 shrink-0">
+                      <span className="material-symbols-outlined text-[10px]">flight_takeoff</span>
+                      해외 직구 상품으로 배송에 7~14일이 소요될 수 있습니다.
+                    </p>
+                  )}
+                  {isCeo && (
+                    <div className="mt-2 flex gap-1 justify-end border-t border-slate-50 pt-2" onClick={e => e.stopPropagation()}>
+                      <button onClick={() => { setEditingProduct(p); setShowProductModal(true); }} className="text-[10px] text-blue-500 font-bold px-2 py-1 bg-blue-50 rounded">수정</button>
+                      <button onClick={() => handleDeleteProduct(p.id)} className="text-[10px] text-red-500 font-bold px-2 py-1 bg-red-50 rounded">삭제</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            {recommendedProducts.filter(p => productCategory === '전체' || p.category === productCategory).length === 0 && (
+              <div className="col-span-2 text-center text-xs text-slate-400 py-10 bg-white/50 rounded-2xl">등록된 상품이 없습니다.</div>
+            )}
+          </div>
+
+          <div className="mt-8 pt-4 border-t border-slate-200/50">
+            <p className="text-[10px] text-slate-400 text-center font-medium">이 포스팅은 쿠팡 파트너스 활동의 일환으로 수수료를 제공받습니다.</p>
+          </div>
+        </main>
+      )}
+
+      {/* 상품 추가/수정 모달 */}
+      {showProductModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fade-in font-display">
+          <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl overflow-hidden animate-slide-up">
+            <h3 className="text-lg font-black mb-4 flex items-center gap-1.5"><span className="material-symbols-outlined text-primary">edit_square</span> 상품 등록 / 수정</h3>
+            <form onSubmit={handleSaveProduct} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">카테고리</label>
+                <select value={editingProduct.category} onChange={e => setEditingProduct({ ...editingProduct, category: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm">
+                  <option>에어컨</option>
+                  <option>세탁기</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">플랫폼 연동 배지</label>
+                  <select value={editingProduct.platform || '쿠팡'} onChange={e => setEditingProduct({ ...editingProduct, platform: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm">
+                    <option value="쿠팡">쿠팡 (Coupang)</option>
+                    <option value="알리">알리 (AliExpress)</option>
+                    <option value="없음">사용 안함</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">강조 태그</label>
+                  <select value={editingProduct.tag || ''} onChange={e => setEditingProduct({ ...editingProduct, tag: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm">
+                    <option value="">선택 안함</option>
+                    <option value="🚀 빠른배송">🚀 빠른배송</option>
+                    <option value="💰 가성비최고">💰 가성비최고</option>
+                    <option value="👍 경력자추천">👍 경력자추천</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">상품명</label>
+                <input type="text" required value={editingProduct.title} onChange={e => setEditingProduct({ ...editingProduct, title: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">한줄 설명</label>
+                <input type="text" value={editingProduct.description} onChange={e => setEditingProduct({ ...editingProduct, description: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">이미지 URL</label>
+                <input type="url" required value={editingProduct.image_url} onChange={e => setEditingProduct({ ...editingProduct, image_url: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm placeholder:text-xs" placeholder="https://..." />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">상품 외부 링크 URL</label>
+                <input type="url" required value={editingProduct.link_url} onChange={e => setEditingProduct({ ...editingProduct, link_url: e.target.value })} className="w-full p-2.5 rounded-xl border bg-slate-50 text-sm placeholder:text-xs" placeholder="https://..." />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setShowProductModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl active:scale-95 text-sm">취소</button>
+                <button type="submit" className="flex-1 py-3 bg-primary text-white font-bold rounded-xl active:scale-95 text-sm">저장하기</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 솔라피 연동 가이드 모달 */}
+      {showSolapiGuide && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in font-display" onClick={() => setShowSolapiGuide(false)}>
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm h-[80vh] rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900 shrink-0">
+              <h3 className="font-black text-lg text-slate-800 dark:text-white flex items-center gap-1">
+                <span className="material-symbols-outlined text-primary">menu_book</span> 🛠️ 파트너 문자 연동 안내
+              </h3>
+              <button onClick={() => setShowSolapiGuide(false)} className="text-slate-400 hover:text-slate-600 bg-white rounded-full p-1 shadow-sm border">
+                <span className="material-symbols-outlined block text-[20px]">close</span>
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto flex-1 space-y-6">
+              <div className="space-y-2">
+                <h4 className="font-bold text-sm text-blue-600">1. 솔라피(Solapi) 가입하기</h4>
+                <p className="text-xs text-slate-600 leading-relaxed">회원가입 후 이메일 인증을 진행해 주세요. (가입 시 포인트 지급 혜택)</p>
+                <a href="https://solapi.com" target="_blank" rel="noreferrer" className="text-blue-500 text-xs font-bold underline inline-block mt-1">솔라피 바로가기</a>
+              </div>
+              <div className="space-y-2">
+                <h4 className="font-bold text-sm text-blue-600">2. 발신번호 등록하기</h4>
+                <p className="text-xs text-slate-600 leading-relaxed">[발신번호 관리] 메뉴에서 대표님 명의의 휴대폰 번호를 문자인증하여 등록합니다. 이 번호가 고객에게 노출됩니다.</p>
+              </div>
+              <div className="space-y-2">
+                <h4 className="font-bold text-sm text-blue-600">3. API 키 발급 및 복사</h4>
+                <p className="text-xs text-slate-600 leading-relaxed">[개발자 센터] - [API Key 관리]에서 새 키를 생성한 후, 'API Key'와 'API Secret' 두 가지를 모두 복사합니다.</p>
+              </div>
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 mt-4">
+                <p className="text-xs font-bold text-blue-800 mb-1">💡 복사한 키를 어떻게 하나요?</p>
+                <p className="text-[11px] text-blue-600/80">방금 열어두셨던 [나의 문자 발송 설정 (개별)] 창의 API Key와 API Secret 칸에 붙여넣고 하단의 '설정 저장' 버튼을 누르시면 됩니다.</p>
+              </div>
+            </div>
+            <div className="p-4 shrink-0 border-t border-slate-100 bg-white dark:bg-slate-900">
+              <button onClick={() => setShowSolapiGuide(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-2xl active:scale-95 transition-transform text-sm">확인했습니다</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================= [탭 8: 모달들] ======================= */}
 
       {/* 1. 목표 매출 수정 모달 */}
       {showTargetEdit && (
