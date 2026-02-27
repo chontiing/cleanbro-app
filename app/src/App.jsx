@@ -1612,7 +1612,7 @@ function App() {
             </div>
           </form>
 
-          <div className="mt-8 text-center pt-5 border-t border-slate-100 flex flex-col gap-4">
+          <div className="mt-6 text-center pt-3 border-t border-slate-100 flex flex-col gap-3">
             <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-[1.5rem] border border-slate-100 shadow-inner">
               <p className="text-[11px] font-bold text-slate-400 mb-2">
                 {isResetMode || isRecoveryMode ? '다시 로그인 화면으로 돌아가시겠습니까?' : isLoginMode ? '클린브로가 처음이신가요?' : '이미 계정이 있으신가요?'}
@@ -1644,7 +1644,7 @@ function App() {
                   onClick={() => setActiveInstallGuide(activeInstallGuide === 'iphone' ? null : 'iphone')}
                   className="w-full p-4 flex items-center justify-between font-bold text-slate-700"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-sm">
                     <span className="material-symbols-outlined text-blue-500">app_shortcut</span>
                     🍎 아이폰 사용자 설치 가이드
                   </div>
