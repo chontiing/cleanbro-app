@@ -137,6 +137,7 @@ function App() {
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const [showInAppBrowserWarning, setShowInAppBrowserWarning] = useState(false);
   const [isAndroid, setIsAndroid] = useState(false);
+  const [settingsActiveMenu, setSettingsActiveMenu] = useState('main'); // main, profile, message, sms, invite, bulk
 
   // ==========================================
   // [인증 관련 (Supabase Auth)]
@@ -2047,374 +2048,267 @@ function App() {
 
       {/* ======================= [탭 4: 프로필 설정] ======================= */}
       {currentTab === 'settings' && (
-        <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-5 animate-slide-up">
-          <h2 className="text-2xl font-black mb-2 flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">storefront</span> 업체 프로필 설정
-          </h2>
-
-          <form onSubmit={handleSaveProfile} className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-5">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">업체명</label>
-              <input type="text" required value={editCompanyName} onChange={e => setEditCompanyName(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="업체명 입력" />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">내 닉네임 (작업 담당자 노출용)</label>
-              <input type="text" required value={editNickname} onChange={e => setEditNickname(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="예: 구로구점 김길동, 마스터" />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">과세자 유형</label>
-              <select value={editTaxpayerType} onChange={e => setEditTaxpayerType(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary">
-                <option value="간이과세자">간이과세자</option>
-                <option value="일반과세자">일반과세자</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">대표 연락처</label>
-              <input type="tel" value={editBusinessPhone} onChange={e => setEditBusinessPhone(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="예: 1588-0000" />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">업체 자체 로고 업로드 (이미지 파일)</label>
-              {businessProfile.logo_url && (
-                <div className="mb-3">
-                  <p className="text-[10px] text-slate-400 mb-1">현재 적용된 로고:</p>
-                  <img src={businessProfile.logo_url} alt="Current Logo" className="w-20 h-20 object-contain rounded-lg border bg-slate-50" />
-                </div>
-              )}
-              <input type="file" accept="image/*" onChange={e => setEditLogoFile(e.target.files[0])} className="w-full p-2 text-sm border rounded-xl" />
-              <p className="text-[10px] text-slate-400 mt-1">선택하면 로고가 덮어씌어 저장됩니다.</p>
-            </div>
-
-            <button disabled={isSavingSettings} type="submit" className="w-full py-4 bg-primary text-white text-lg font-black rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-transform flex justify-center items-center gap-2">
-              <span className="material-symbols-outlined">{isSavingSettings ? 'sync' : 'save'}</span>
-              {isSavingSettings ? '업데이트 중...' : '프로필 정보 업데이트'}
-            </button>
-
-            {/* PWA 버전 정보 및 업데이트 체크 */}
-            <div className="pt-4 border-t border-slate-100 flex flex-col items-center gap-2">
-              <p className="text-[10px] text-slate-400 font-bold">App Version: {APP_VERSION}</p>
+        <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-5 animate-slide-up pb-32">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-2xl font-black flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">settings</span> 설정
+            </h2>
+            {settingsActiveMenu !== 'main' && (
               <button
-                type="button"
-                onClick={() => {
-                  if (swRegistration) {
-                    swRegistration.update().then(() => alert('업데이트 확인을 완료했습니다.'));
-                  } else {
-                    alert('서비스 워커가 활성화되지 않았습니다.');
-                  }
-                }}
-                className="text-[11px] text-slate-500 hover:text-primary underline font-bold"
+                onClick={() => setSettingsActiveMenu('main')}
+                className="flex items-center gap-1 text-sm font-bold text-slate-500 bg-white px-3 py-1.5 rounded-xl border shadow-sm active:scale-95"
               >
-                새로운 업데이트 확인하기
+                <span className="material-symbols-outlined text-sm">arrow_back</span> 메뉴로
               </button>
-            </div>
-          </form>
-
-          {/* 작업 완료 자동 메시지 관리 섹션 */}
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-6">
-            <h3 className="text-lg font-black flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary">chat</span> 작업 완료 자동 메시지 관리
-            </h3>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">고객 전송 메시지 템플릿</label>
-              <textarea
-                value={editDefaultMessage}
-                onChange={e => setEditDefaultMessage(e.target.value)}
-                className="w-full h-40 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none"
-                placeholder="메시지 내용을 입력하세요. {customer_name}, {memo}, {after_url} 변수를 사용할 수 있습니다."
-              />
-              <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
-                * 사용 가능 치환자 : <span className="font-bold text-primary">{`{customer_name}`}</span>(고객 이름), <span className="font-bold text-primary">{`{memo}`}</span>(작업 내용), <span className="font-bold text-primary">{`{after_url}`}</span>(작업 사진 링크)
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1.5">❄️ 에어컨 관리 가이드</label>
-                {businessProfile.ac_guide_url && <img src={businessProfile.ac_guide_url} className="w-full h-20 object-cover rounded-lg mb-2 border" />}
-                <input type="file" accept="image/*" onChange={e => setEditAcGuideFile(e.target.files[0])} className="w-full text-[9px]" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1.5">🧺 세탁기 관리 가이드</label>
-                {businessProfile.washer_guide_url && <img src={businessProfile.washer_guide_url} className="w-full h-20 object-cover rounded-lg mb-2 border" />}
-                <input type="file" accept="image/*" onChange={e => setEditWasherGuideFile(e.target.files[0])} className="w-full text-[9px]" />
-              </div>
-            </div>
-
-            <button onClick={handleSaveProfile} disabled={isSavingSettings} className="w-full py-4 bg-slate-800 text-white font-bold rounded-[1.2rem] shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2">
-              <span className="material-symbols-outlined">save</span>
-              {isSavingSettings ? '저장 중...' : '메시지 및 가이드 설정 저장'}
-            </button>
-
-            {/* 문자 미리보기 */}
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
-              <p className="text-xs font-bold text-slate-400 mb-3 flex items-center gap-1">
-                <span className="material-symbols-outlined text-sm">preview</span> 고객 수신 문자 미리보기
-              </p>
-              <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-[2rem] border border-slate-200 dark:border-slate-700 max-w-[280px] mx-auto shadow-inner relative">
-                <div className="absolute top-1.5 left-1/2 -translate-x-1/2 w-10 h-1 bg-slate-300 rounded-full"></div>
-                <div className="mt-4 break-words whitespace-pre-wrap text-[11px] leading-relaxed text-slate-700 dark:text-slate-300 font-display">
-                  {editDefaultMessage
-                    .replace(/{customer_name}/g, '홍길동')
-                    .replace(/{memo}/g, '삼성 무풍 벽걸이 에어컨')
-                    .replace(/{after_url}/g, 'https://supabase-url.com/after_photo.jpg')
-                  }
-                </div>
-                <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 text-[9px] text-blue-500 font-bold flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[12px]">info</span>
-                  가이드 이미지는 하단에 링크형태로 자동 첨부됩니다.
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* 솔라피 & 문자 메시지 템플릿 관리 섹션 */}
-          <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-6">
-            <h3 className="text-lg font-black flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary">sms</span> 템플릿 & 발송 설정
-            </h3>
+          {/* --- 설정 메인 메뉴 --- */}
+          {settingsActiveMenu === 'main' && (
+            <div className="grid grid-cols-1 gap-3">
+              <button
+                onClick={() => setSettingsActiveMenu('profile')}
+                className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
+              >
+                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                  <span className="material-symbols-outlined">storefront</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100">업체 프로필 설정</h4>
+                  <p className="text-xs text-slate-400">업체명, 로고, 대표번호 관리</p>
+                </div>
+                <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+              </button>
 
-            <div className="space-y-4">
+              <button
+                onClick={() => setSettingsActiveMenu('message')}
+                className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
+              >
+                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                  <span className="material-symbols-outlined">chat</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100">작업 완료 메시지 관리</h4>
+                  <p className="text-xs text-slate-400">알림 피드백 템플릿 및 가이드 설정</p>
+                </div>
+                <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+              </button>
 
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
-                <label className="block text-xs font-bold text-slate-500 mb-1 text-primary">예약 확정 자동 문자 (등록 시 바로 발송)</label>
-                <textarea
-                  value={editConfirmedTemplate}
-                  onChange={e => setEditConfirmedTemplate(e.target.value)}
-                  className="w-full h-20 p-4 text-sm bg-blue-50/50 dark:bg-slate-900 border border-blue-200/50 rounded-xl focus:ring-2 focus:ring-primary outline-none"
-                  placeholder="예: [예약 확정] [일시]에 예약이 완료되었습니다. - 클린브로 ([파트너전화번호])"
-                />
+              <button
+                onClick={() => setSettingsActiveMenu('sms')}
+                className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
+              >
+                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                  <span className="material-symbols-outlined">sms</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100">템플릿 & 발송 설정</h4>
+                  <p className="text-xs text-slate-400">자동 문자 내용 및 솔라피 연동</p>
+                </div>
+                <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+              </button>
+
+              <button
+                onClick={() => setSettingsActiveMenu('invite')}
+                className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
+              >
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                  <span className="material-symbols-outlined">group_add</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100">파트너 초대 관리</h4>
+                  <p className="text-xs text-slate-400">초대 코드 및 링크 발송</p>
+                </div>
+                <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+              </button>
+
+              {isCeo && (
+                <button
+                  onClick={() => setSettingsActiveMenu('bulk')}
+                  className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
+                >
+                  <div className="w-12 h-12 bg-red-50 text-red-600 rounded-xl flex items-center justify-center group-hover:bg-red-600 group-hover:text-white transition-colors">
+                    <span className="material-symbols-outlined">rule_folder</span>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-slate-800 dark:text-slate-100">데이터 일괄 변경 (관리자)</h4>
+                    <p className="text-xs text-slate-400">과세 유형 일괄 업데이트</p>
+                  </div>
+                  <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+                </button>
+              )}
+
+              <div className="pt-6">
+                <button
+                  onClick={handleLogout}
+                  className="w-full py-4 bg-red-50 text-red-600 font-bold rounded-2xl active:scale-95 transition-all flex justify-center items-center gap-2 border border-red-100 shadow-sm"
+                >
+                  <span className="material-symbols-outlined">logout</span> 로그아웃
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* --- 상세 메뉴 1: 업체 프로필 설정 --- */}
+          {settingsActiveMenu === 'profile' && (
+            <form onSubmit={handleSaveProfile} className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-5 animate-slide-up">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">업체명</label>
+                <input type="text" required value={editCompanyName} onChange={e => setEditCompanyName(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="업체명 입력" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1 text-primary">당일 아침 8시 자동 알림 (솔라피 연동 필요)</label>
-                <textarea
-                  value={editMorningReminderTemplate}
-                  onChange={e => setEditMorningReminderTemplate(e.target.value)}
-                  className="w-full h-20 p-4 text-sm bg-blue-50/50 dark:bg-slate-900 border border-blue-200/50 rounded-xl focus:ring-2 focus:ring-primary outline-none"
-                  placeholder="예: [알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])"
-                />
+                <label className="block text-xs font-bold text-slate-500 mb-1">내 닉네임 (작업 담당자 노출용)</label>
+                <input type="text" required value={editNickname} onChange={e => setEditNickname(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="예: 구로구점 김길동, 마스터" />
               </div>
-              <p className="text-[10px] text-slate-400 leading-relaxed bg-slate-50 p-2 rounded-lg">
-                * 사용 가능 치환자 : <span className="font-bold text-primary">[고객명]</span>, <span className="font-bold text-primary">[일시]</span>, <span className="font-bold text-primary">[시간]</span>, <span className="font-bold text-primary">[파트너전화번호]</span>
-              </p>
-            </div>
-
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
-              <div className="flex items-end justify-between mb-3">
-                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px] text-primary">send_to_mobile</span>
-                  나의 문자 발송 (솔라피)
-                </h4>
-                {solapiBalance !== null && (
-                  <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
-                    잔액: <span className={solapiBalance < 2000 ? "text-red-500" : "text-blue-500"}>{fmtNum(solapiBalance)}원</span>
-                  </span>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">과세자 유형</label>
+                <select value={editTaxpayerType} onChange={e => setEditTaxpayerType(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary">
+                  <option value="간이과세자">간이과세자</option>
+                  <option value="일반과세자">일반과세자</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">대표 연락처</label>
+                <input type="tel" value={editBusinessPhone} onChange={e => setEditBusinessPhone(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="예: 010-0000-0000" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">업체 자체 로고 업로드</label>
+                {businessProfile.logo_url && (
+                  <div className="mb-3">
+                    <img src={businessProfile.logo_url} alt="Logo" className="w-20 h-20 object-contain rounded-lg border bg-slate-50" />
+                  </div>
                 )}
+                <input type="file" accept="image/*" onChange={e => setEditLogoFile(e.target.files[0])} className="w-full p-2 text-sm border rounded-xl" />
               </div>
-
-              {solapiBalance !== null && solapiBalance < 2000 && (
-                <div className="mb-4">
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => window.open('https://solapi.com/cash/recharge', '_blank', 'noopener,noreferrer')} className={`flex-1 flex items-center justify-center gap-1 bg-[#2563EB] text-white font-bold py-2.5 rounded-xl shadow-lg shadow-blue-500/30 border border-blue-600 active:scale-95 transition-all text-xs ${solapiBalance < 2000 ? 'animate-pulse' : ''}`}>
-                      <span className="material-symbols-outlined text-[16px]">payments</span> 즉시 충전하기
-                    </button>
-                    <button type="button" onClick={() => window.open('https://solapi.com/support', '_blank', 'noopener,noreferrer')} className="shrink-0 flex items-center justify-center gap-1 bg-yellow-400 text-yellow-900 font-bold px-3 py-2.5 rounded-xl shadow-sm border border-yellow-500 active:scale-95 transition-all text-xs">
-                      <span className="material-symbols-outlined text-[16px]">sms</span> 문의
-                    </button>
-                  </div>
-                  <div className="mt-3 bg-blue-50/80 border border-blue-100 p-3 rounded-xl flex items-start gap-2 shadow-sm">
-                    <span className="material-symbols-outlined text-[16px] text-blue-600 mt-0.5">tips_and_updates</span>
-                    <div>
-                      <p className="text-[11px] text-blue-900 leading-relaxed font-medium tracking-tight">
-                        <span className="font-bold text-blue-700">Tip:</span> 솔라피 홈페이지에서 '<span className="font-bold text-blue-700">자동 충전</span>(잔액이 일정 금액 이하로 떨어지면 자동 결제)'을 설정해두시면, 작업 중 잔액 부족으로 문자가 발송되지 않는 상황을 방지할 수 있습니다.
-                      </p>
-                      <button type="button" onClick={() => window.open('https://solapi.com/cash/auto-recharge', '_blank', 'noopener,noreferrer')} className="mt-1.5 text-[10px] text-blue-600 font-bold underline hover:text-blue-800 transition-colors inline-flex items-center gap-0.5">
-                        [설정 방법 보기] <span className="material-symbols-outlined text-[10px]">open_in_new</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <p className="text-[10px] text-slate-500 mb-4 font-medium leading-relaxed">작업 완료 시 메시지 앱을 열지 않고 백그라운드 서버를 통해 즉시 문자를 전송합니다. <a href="#" onClick={(e) => { e.preventDefault(); setShowSolapiGuide(true); }} className="text-blue-500 underline font-bold">문자 연동 안내 보기</a></p>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">API Key</label>
-                  <input type="password" value={editSolapiApiKey} onChange={e => setEditSolapiApiKey(e.target.value)} className="w-full text-sm p-3 rounded-xl border bg-slate-50 text-slate-700 placeholder:text-xs" placeholder="NCS..." />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">API Secret</label>
-                  <input type="password" value={editSolapiApiSecret} onChange={e => setEditSolapiApiSecret(e.target.value)} className="w-full text-sm p-3 rounded-xl border bg-slate-50 text-slate-700 placeholder:text-xs" placeholder="Secret Key..." />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">발신번호 (- 제외)</label>
-                  <input type="text" value={editSolapiFromNumber} onChange={e => setEditSolapiFromNumber(e.target.value)} className="w-full text-sm p-3 rounded-xl border bg-slate-50 text-slate-700 placeholder:text-xs" placeholder="01012345678" />
-                </div>
-              </div>
-            </div>
-
-            <button onClick={handleSaveProfile} disabled={isSavingSettings} className="w-full py-4 bg-slate-800 text-white font-bold rounded-[1.2rem] shadow-lg active:scale-95 transition-all flex justify-center items-center gap-2">
-              <span className="material-symbols-outlined">save</span>
-              {isSavingSettings ? '저장 중...' : '템플릿 및 발송 설정 저장'}
-            </button>
-            <button
-              onClick={async (e) => {
-                e.preventDefault();
-                try {
-                  if (!editSolapiApiKey || !editSolapiApiSecret || !editSolapiFromNumber) {
-                    return alert('API Key, API Secret, 발신번호를 모두 입력해주세요.');
-                  }
-                  const date = new Date().toISOString();
-                  const salt = genUUID().replace(/-/g, '');
-                  const encoder = new TextEncoder();
-                  const key = await window.crypto.subtle.importKey('raw', encoder.encode(editSolapiApiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-                  const signatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
-                  const signature = Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-
-                  const cleanNumber = editSolapiFromNumber.replace(/[^0-9]/g, '');
-                  const res = await fetch('https://api.solapi.com/messages/v4/send', {
-                    method: 'POST',
-                    headers: {
-                      'Authorization': `HMAC-SHA256 apiKey=${editSolapiApiKey}, date=${date}, salt=${salt}, signature=${signature}`,
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                      message: {
-                        to: cleanNumber,
-                        from: cleanNumber,
-                        text: '[클린브로] 솔라피 설정 성공! 테스트 문자가 정상 통신되었습니다.'
-                      }
-                    })
-                  });
-
-                  const resData = await res.json();
-                  if (res.ok) {
-                    alert('성공! 대표님 폰으로 테스트 문자가 발송되었습니다.');
-                  } else {
-                    alert(`발송 실패: ${resData.errorMessage || resData.errorCode || res.statusText}`);
-                  }
-                } catch (e) { alert('테스트 발송 중 오류: ' + e.message); }
-              }}
-              className="w-full py-3 bg-slate-100 text-slate-600 font-bold rounded-[1.2rem] shadow-sm active:scale-95 transition-all flex justify-center items-center gap-2 border"
-            >
-              <span className="material-symbols-outlined text-[18px]">cell_tower</span>
-              나에게 테스트 문자 보내기
-            </button>
-          </div>
-
-          <div className="text-center space-y-4">
-            <p className="text-[11px] text-slate-500 font-bold mb-1">우리 업체 식별 코드 (파트너 초대 시 필요)</p>
-
-            {/* 코드 복사 영역 */}
-            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200/60 shadow-inner">
-              <div className="flex-1 px-4 py-2 bg-white rounded-xl border border-slate-100 overflow-hidden">
-                <p className="text-[10px] text-slate-400 font-mono truncate text-left">{myBusinessId}</p>
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(myBusinessId).then(() => {
-                    alert('업체 코드가 복사되었습니다! 파트너 가입 시 입력해 주세요.');
-                  });
-                }}
-                className="shrink-0 w-11 h-11 bg-slate-800 text-white rounded-xl flex items-center justify-center active:scale-95 transition-all shadow-lg group relative"
-              >
-                <span className="material-symbols-outlined text-[18px]">content_copy</span>
+              <button disabled={isSavingSettings} type="submit" className="w-full py-4 bg-primary text-white text-lg font-black rounded-xl shadow-lg active:scale-95 transition-transform">
+                {isSavingSettings ? '업데이트 중...' : '프로필 정보 업데이트'}
               </button>
-            </div>
+            </form>
+          )}
 
-            {/* 초대 버튼 그리드 */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  const inviteLink = `https://cleanbro-app.vercel.app/?signup&code=${myBusinessId}`;
-                  const inviteMsg = `[클린브로 파트너 초대장] ✉️\n\n안녕하세요! 함께하실 소중한 파트너님을 초대합니다.\n최찬용 대표님과 함께 더 스마트하게 일하고 수익을 관리해 보세요.\n\n👇 지금 바로 가입하기\n🔗 링크: ${inviteLink}\n🔑 초대코드: ${myBusinessId}\n\n📱 [아이폰 사용자 필독!]\n1. 링크 접속 후 하단 '공유(↑)' 버튼 클릭\n2. '홈 화면에 추가'를 누르면 앱다운로드 없이 바로 사용 가능합니다!\n\n함께 깨끗한 세상을 만들어가요! 감사합니다.`;
-
-                  // Copy to clipboard first
-                  navigator.clipboard.writeText(inviteMsg).then(() => {
-                    // Try Share API (includes KakaoTalk on mobile)
-                    if (navigator.share) {
-                      navigator.share({
-                        title: '클린브로 파트너 초대',
-                        text: inviteMsg,
-                        url: inviteLink
-                      }).catch(() => {
-                        alert('초대장이 복사되었습니다. 카카오톡을 열어 붙여넣어 주세요!');
-                      });
-                    } else {
-                      alert('초대장과 링크가 복사되었습니다!\n카카오톡 친구를 선택해 붙여넣으세요.');
-                    }
-                  });
-                }}
-                className="py-4 bg-[#F7E600] text-[#3A1D1D] font-black rounded-2xl shadow-lg active:scale-95 transition-all flex flex-col items-center justify-center gap-1 border border-[#E1D100]"
-              >
-                <div className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[18px]">chat</span>
-                  <span className="text-[11px]">카톡 초대</span>
-                </div>
-              </button>
-
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  const inviteLink = `https://cleanbro-app.vercel.app/?signup&code=${myBusinessId}`;
-                  const inviteMsg = `[클린브로 파트너 초대장] ✉️\n\n안녕하세요! 함께하실 소중한 파트너님을 초대합니다.\n최찬용 대표님과 함께 더 스마트하게 일하고 수익을 관리해 보세요.\n\n👇 지금 바로 가입하기\n🔗 링크: ${inviteLink}\n🔑 초대코드: ${myBusinessId}\n\n📱 [아이폰 사용자 필독!]\n1. 링크 접속 후 하단 '공유(↑)' 버튼 클릭\n2. '홈 화면에 추가'를 누르면 앱다운로드 없이 바로 사용 가능합니다!\n\n함께 깨끗한 세상을 만들어가요! 감사합니다.`;
-
-                  window.location.href = `sms:?body=${encodeURIComponent(inviteMsg)}`;
-                  navigator.clipboard.writeText(inviteMsg);
-                }}
-                className="py-4 bg-blue-50 text-blue-600 font-black rounded-2xl shadow-sm active:scale-95 transition-all flex flex-col items-center justify-center gap-1 border border-blue-100"
-              >
-                <div className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[18px]">sms</span>
-                  <span className="text-[11px]">문자 초대</span>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-red-50 p-5 rounded-2xl border border-red-100">
-            <h3 className="font-bold text-sm text-red-600 mb-3 flex items-center gap-1">
-              <span className="material-symbols-outlined text-[18px]">rule_folder</span> 과세 유형 일괄 변경
-            </h3>
-            <p className="text-[10px] text-red-500/80 font-medium mb-4 leading-tight">
-              특정 기간 동안 저장된 매출(예약)과 지출 내역의 과세 기준을 일괄 업데이트합니다.
-            </p>
-            <div className="grid grid-cols-2 gap-2 mb-3">
+          {/* --- 상세 메뉴 2: 작업 완료 메시지 --- */}
+          {settingsActiveMenu === 'message' && (
+            <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-6 animate-slide-up">
               <div>
-                <label className="block text-[10px] font-bold text-red-400 mb-1">시작 날짜</label>
-                <input type="date" value={bulkStartDate} onChange={e => setBulkStartDate(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white outline-none focus:ring-1 focus:ring-red-400 text-slate-700" />
+                <label className="block text-xs font-bold text-slate-500 mb-1">고객 전송 메시지 템플릿</label>
+                <textarea value={editDefaultMessage} onChange={e => setEditDefaultMessage(e.target.value)} className="w-full h-40 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none" />
+                <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                  * 사용 가능 치환자 : <b>{"{customer_name}"}</b>, <b>{"{memo}"}</b>, <b>{"{after_url}"}</b>
+                </p>
               </div>
-              <div>
-                <label className="block text-[10px] font-bold text-red-400 mb-1">종료 날짜</label>
-                <input type="date" value={bulkEndDate} onChange={e => setBulkEndDate(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white outline-none focus:ring-1 focus:ring-red-400 text-slate-700" />
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-bold text-slate-500">❄️ 에어컨 관리 가이드</label>
+                  {businessProfile.ac_guide_url && <img src={businessProfile.ac_guide_url} className="w-full h-24 object-cover rounded-lg border" />}
+                  <input type="file" accept="image/*" onChange={e => setEditAcGuideFile(e.target.files[0])} className="w-full text-[9px]" />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-bold text-slate-500">🧺 세탁기 관리 가이드</label>
+                  {businessProfile.washer_guide_url && <img src={businessProfile.washer_guide_url} className="w-full h-24 object-cover rounded-lg border" />}
+                  <input type="file" accept="image/*" onChange={e => setEditWasherGuideFile(e.target.files[0])} className="w-full text-[9px]" />
+                </div>
+              </div>
+              <button onClick={handleSaveProfile} disabled={isSavingSettings} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all">
+                {isSavingSettings ? '저장 중...' : '메시지 및 가이드 설정 저장'}
+              </button>
+            </div>
+          )}
+
+          {/* --- 상세 메뉴 3: SMS 템플릿 & 솔라피 --- */}
+          {settingsActiveMenu === 'sms' && (
+            <div className="space-y-5 animate-slide-up">
+              <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
+                <h3 className="text-sm font-bold text-primary">발송 템플릿 설정</h3>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">예약 확정 자동 문자</label>
+                  <textarea value={editConfirmedTemplate} onChange={e => setEditConfirmedTemplate(e.target.value)} className="w-full h-20 p-3 text-xs bg-slate-50 border rounded-xl" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">당일 아침 8시 자동 알림</label>
+                  <textarea value={editMorningReminderTemplate} onChange={e => setEditMorningReminderTemplate(e.target.value)} className="w-full h-20 p-3 text-xs bg-slate-50 border rounded-xl" />
+                </div>
+                <p className="text-[9px] text-slate-400 font-medium">* 사용 가능 치환자 : [고객명], [일시], [시간], [파트너전화번호]</p>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-slate-700 dark:text-slate-100">솔라피 연동 (API)</h3>
+                  {solapiBalance !== null && <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded-full">잔액: {fmtNum(solapiBalance)}원</span>}
+                </div>
+                <div className="space-y-3">
+                  <input type="password" value={editSolapiApiKey} onChange={e => setEditSolapiApiKey(e.target.value)} className="w-full p-3 text-xs border rounded-xl bg-slate-50" placeholder="API Key" />
+                  <input type="password" value={editSolapiApiSecret} onChange={e => setEditSolapiApiSecret(e.target.value)} className="w-full p-3 text-xs border rounded-xl bg-slate-50" placeholder="API Secret" />
+                  <input type="text" value={editSolapiFromNumber} onChange={e => setEditSolapiFromNumber(e.target.value)} className="w-full p-3 text-xs border rounded-xl bg-slate-50" placeholder="발신번호 (010...)" />
+                </div>
+                <button onClick={handleSaveProfile} className="w-full py-3 bg-slate-800 text-white font-bold rounded-xl active:scale-95 transition-all text-xs shadow-md">설정 저장</button>
               </div>
             </div>
-            <div className="mb-4">
-              <label className="block text-[10px] font-bold text-red-400 mb-1">변경할 과세 유형</label>
-              <select value={bulkTaxType} onChange={e => setBulkTaxType(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white outline-none focus:ring-1 focus:ring-red-400 text-slate-700">
+          )}
+
+          {/* --- 상세 메뉴 4: 초대 관리 --- */}
+          {settingsActiveMenu === 'invite' && (
+            <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] text-center space-y-6 animate-slide-up">
+              <div>
+                <p className="text-xs font-bold text-slate-500 mb-3">우리 업체 초대 코드</p>
+                <div className="bg-slate-50 p-3 rounded-xl border-dashed border-2 border-slate-200 text-sm font-mono font-bold text-primary select-all">
+                  {myBusinessId}
+                </div>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(myBusinessId).then(() => alert('코드가 복사되었습니다!')); }}
+                  className="mt-3 text-[11px] font-bold text-blue-600 underline"
+                >
+                  코드 직접 복사 ➔
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => {
+                    const inviteLink = `https://cleanbro-app.vercel.app/?signup&code=${myBusinessId}`;
+                    const inviteMsg = `[클린브로 파트너 초대장] ✉️\n🔗 가입링크: ${inviteLink}\n🔑 초대코드: ${myBusinessId}\n\n📱 사파리앱 접속 ➔ 하단 [공유] ➔ [홈 화면에 추가] 클릭 시 앱처럼 사용 가능합니다!`;
+                    navigator.clipboard.writeText(inviteMsg).then(() => {
+                      if (navigator.share) navigator.share({ title: '파트너 초대', text: inviteMsg, url: inviteLink }).catch(() => alert('초대장이 복사되었습니다!'));
+                      else alert('초대장이 복사되었습니다. 카톡에 붙여넣어주세요!');
+                    });
+                  }}
+                  className="p-4 bg-[#F7E600] text-[#3A1D1D] font-black rounded-2xl shadow-sm active:scale-95 transition-transform text-xs border border-[#E1D100]"
+                >
+                  카카오톡 초대하기
+                </button>
+                <button
+                  onClick={() => {
+                    const inviteMsg = `[클린브로 파트너 초대장]\n🔗 링크: https://cleanbro-app.vercel.app/?signup&code=${myBusinessId}\n🔑 코드: ${myBusinessId}`;
+                    window.location.href = `sms:?body=${encodeURIComponent(inviteMsg)}`;
+                  }}
+                  className="p-4 bg-blue-50 text-blue-600 font-black rounded-2xl shadow-sm active:scale-95 transition-transform text-xs border border-blue-100"
+                >
+                  문자 발송하기
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* --- 상세 메뉴 5: 일괄 변경 (CEO 전용) --- */}
+          {settingsActiveMenu === 'bulk' && isCeo && (
+            <div className="bg-red-50 dark:bg-red-900/10 p-6 rounded-[1.5rem] border border-red-100 dark:border-red-900/30 space-y-5 animate-slide-up">
+              <h4 className="font-bold text-red-600 flex items-center gap-1">
+                <span className="material-symbols-outlined text-sm">warning</span> 데이터 일괄 변경
+              </h4>
+              <p className="text-[10px] text-red-400 leading-tight">선택한 기간 내의 모든 매출/지출 데이터의 과세 유형을 일괄 업데이트합니다. 이 작업은 되돌릴 수 없습니다.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <input type="date" value={bulkStartDate} onChange={e => setBulkStartDate(e.target.value)} className="w-full text-xs p-2.5 rounded-xl border bg-white" />
+                <input type="date" value={bulkEndDate} onChange={e => setBulkEndDate(e.target.value)} className="w-full text-xs p-2.5 rounded-xl border bg-white" />
+              </div>
+              <select value={bulkTaxType} onChange={e => setBulkTaxType(e.target.value)} className="w-full text-xs p-3 rounded-xl border bg-white font-bold">
                 <option value="간이과세자">간이과세자</option>
                 <option value="일반과세자">일반과세자</option>
               </select>
+              <button disabled={isBulking} onClick={handleBulkTaxUpdate} className="w-full py-4 bg-red-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all">
+                {isBulking ? '적용 중...' : '데이터 일괄 적용하기'}
+              </button>
             </div>
-            <button disabled={isBulking} onClick={handleBulkTaxUpdate} className="w-full py-2.5 bg-red-600 text-white text-xs font-bold rounded-lg shadow-sm active:scale-95 transition-transform flex justify-center items-center gap-1.5">
-              <span className="material-symbols-outlined text-[14px]">{isBulking ? 'sync' : 'auto_fix_high'}</span>
-              {isBulking ? '일괄 업데이트 중...' : '데이터 일괄 적용하기'}
-            </button>
-          </div>
+          )}
 
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-            <button
-              onClick={handleLogout}
-              className="w-full py-3.5 bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-500/10 dark:text-red-400 text-sm font-bold rounded-xl active:scale-95 transition-all flex justify-center items-center gap-2 border border-red-100 dark:border-red-900/30"
-            >
-              <span className="material-symbols-outlined text-[18px]">logout</span>
-              로그아웃
-            </button>
-          </div>
         </main>
       )}
 
