@@ -1573,7 +1573,16 @@ function App() {
               )}
 
               {isLoginMode && !isResetMode && !isRecoveryMode && (
-                <div className="flex justify-end px-1">
+                <div className="flex justify-between items-center px-1">
+                  <a
+                    href="https://open.kakao.com/o/g5rleHii"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold text-primary flex items-center gap-1 hover:underline"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">chat</span>
+                    클린브로 커뮤니티(채팅방)
+                  </a>
                   <button
                     type="button"
                     onClick={() => setIsResetMode(true)}
@@ -2304,6 +2313,22 @@ function App() {
                 </div>
                 <span className="material-symbols-outlined text-slate-300">chevron_right</span>
               </button>
+
+              <a
+                href="https://open.kakao.com/o/g5rleHii"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
+              >
+                <div className="w-12 h-12 bg-yellow-50 text-yellow-600 rounded-xl flex items-center justify-center group-hover:bg-yellow-400 group-hover:text-white transition-colors">
+                  <span className="material-symbols-outlined">forum</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100">클린브로 커뮤니티(오픈채팅)</h4>
+                  <p className="text-xs text-slate-400">대표님들과 소통하고 정보를 나누세요</p>
+                </div>
+                <span className="material-symbols-outlined text-slate-300">open_in_new</span>
+              </a>
 
               {isCeo && (
                 <button
