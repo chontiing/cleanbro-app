@@ -214,12 +214,21 @@ function App() {
         else sessionStorage.removeItem('no_remember');
       }
     } else {
-      const newBusinessId = inviteCode.trim() || genUUID();
+      let finalBusinessId = inviteCode.trim();
+
+      // 커스텀 초대 코드 대조 로직 (입력값이 UUID가 아닌 경우 DB 조회)
+      if (finalBusinessId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(finalBusinessId)) {
+        const { data: bData } = await supabase.from('businesses').select('id').eq('custom_invite_code', finalBusinessId).single();
+        if (bData) finalBusinessId = bData.id;
+      }
+
+      const newBusinessId = finalBusinessId || genUUID();
       const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: { business_id: newBusinessId }
+          data: { business_id: newBusinessId },
+          emailRedirectTo: window.location.origin
         }
       });
       error = signUpError;
@@ -227,7 +236,18 @@ function App() {
     }
     setAuthLoading(false);
 
-    if (error) alert(error.message);
+    const getKoreanError = (err) => {
+      const msg = err.message || '';
+      if (msg.includes('Invalid login credentials')) return '이메일 또는 비밀번호가 틀렸습니다. 다시 확인해주세요.';
+      if (msg.includes('Email not confirmed')) return '이메일 인증이 아직 완료되지 않았습니다. 메일함에서 인증 버튼을 눌러주세요!';
+      if (msg.includes('User already registered')) return '이미 가입된 이메일 주소입니다.';
+      if (msg.includes('Password should be at least 6 characters')) return '비밀번호는 최소 6자 이상이어야 합니다.';
+      if (msg.includes('Invalid email')) return '올바른 이메일 형식을 입력해주세요.';
+      if (msg.includes('rate limit')) return '너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.';
+      return `오류가 발생했습니다: ${msg}`;
+    };
+
+    if (error) alert(getKoreanError(error));
   };
 
   const handleLogout = async () => {
@@ -651,6 +671,7 @@ function App() {
   const [editMorningReminderTemplate, setEditMorningReminderTemplate] = useState('');
   const [editAutoConfirmSms, setEditAutoConfirmSms] = useState(false);
   const [editAutoMorningReminders, setEditAutoMorningReminders] = useState(false);
+  const [editCustomInviteCode, setEditCustomInviteCode] = useState('');
   const [editAcGuideFile, setEditAcGuideFile] = useState(null);
   const [editWasherGuideFile, setEditWasherGuideFile] = useState(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -675,6 +696,7 @@ function App() {
       setEditMorningReminderTemplate(businessProfile.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`);
       setEditAutoConfirmSms(businessProfile.auto_confirm_sms || false);
       setEditAutoMorningReminders(businessProfile.auto_morning_reminders || false);
+      setEditCustomInviteCode(businessProfile.custom_invite_code || '');
       setEditSolapiApiKey(userProfile?.solapi_api_key || businessProfile?.solapi_api_key || '');
       setEditSolapiApiSecret(userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret || '');
       setEditSolapiFromNumber(userProfile?.solapi_from_number || businessProfile?.solapi_from_number || '');
@@ -714,7 +736,8 @@ function App() {
       confirmed_template: editConfirmedTemplate,
       morning_reminder_template: editMorningReminderTemplate,
       auto_confirm_sms: editAutoConfirmSms,
-      auto_morning_reminders: editAutoMorningReminders
+      auto_morning_reminders: editAutoMorningReminders,
+      custom_invite_code: editCustomInviteCode
     };
 
     // 가이드 이미지 업로드 (에어컨)
@@ -2308,43 +2331,115 @@ function App() {
 
           {/* --- 상세 메뉴 4: 초대 관리 --- */}
           {settingsActiveMenu === 'invite' && (
-            <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] text-center space-y-6 animate-slide-up">
-              <div>
-                <p className="text-xs font-bold text-slate-500 mb-3">우리 업체 초대 코드</p>
-                <div className="bg-slate-50 p-3 rounded-xl border-dashed border-2 border-slate-200 text-sm font-mono font-bold text-primary select-all">
-                  {myBusinessId}
+            <div className="space-y-6 animate-slide-up">
+              {/* 커스텀 초대코드 설정 및 조회 */}
+              <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-7 border-0 shadow-[0_10px_30px_-10px_rgba(0,0,0,0.08)] space-y-5">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center">
+                    <span className="material-symbols-outlined">badge</span>
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-800 dark:text-white">나만의 브랜드 초대코드</h3>
+                    <p className="text-[10px] font-bold text-slate-400">UUID 대신 기억하기 쉬운 코드를 만드세요</p>
+                  </div>
                 </div>
-                <button
-                  onClick={() => { navigator.clipboard.writeText(myBusinessId).then(() => alert('코드가 복사되었습니다!')); }}
-                  className="mt-3 text-[11px] font-bold text-blue-600 underline"
-                >
-                  코드 직접 복사 ➔
-                </button>
+
+                <div className="space-y-3">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={editCustomInviteCode}
+                      onChange={e => setEditCustomInviteCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                      placeholder="예: CLEAN123"
+                      className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-xl text-primary tracking-widest outline-none focus:border-primary transition-all pr-24"
+                    />
+                    <button
+                      onClick={handleSaveProfile}
+                      className="absolute right-2 top-2 bottom-2 px-4 bg-slate-800 text-white text-[11px] font-bold rounded-xl active:scale-95 transition-all"
+                    >
+                      변경/저장
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-slate-400 px-1">* 영문 대문자와 숫자만 사용 가능합니다.</p>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => {
-                    const inviteLink = `https://cleanbro-app.vercel.app/?signup&code=${myBusinessId}`;
-                    const inviteMsg = `[클린브로 파트너 초대장] ✉️\n🔗 가입링크: ${inviteLink}\n🔑 초대코드: ${myBusinessId}\n\n📱 사파리앱 접속 ➔ 하단 [공유] ➔ [홈 화면에 추가] 클릭 시 앱처럼 사용 가능합니다!`;
-                    navigator.clipboard.writeText(inviteMsg).then(() => {
-                      if (navigator.share) navigator.share({ title: '파트너 초대', text: inviteMsg, url: inviteLink }).catch(() => alert('초대장이 복사되었습니다!'));
-                      else alert('초대장이 복사되었습니다. 카톡에 붙여넣어주세요!');
-                    });
-                  }}
-                  className="p-4 bg-[#F7E600] text-[#3A1D1D] font-black rounded-2xl shadow-sm active:scale-95 transition-transform text-xs border border-[#E1D100]"
-                >
-                  카카오톡 초대하기
-                </button>
-                <button
-                  onClick={() => {
-                    const inviteMsg = `[클린브로 파트너 초대장]\n🔗 링크: https://cleanbro-app.vercel.app/?signup&code=${myBusinessId}\n🔑 코드: ${myBusinessId}`;
-                    window.location.href = `sms:?body=${encodeURIComponent(inviteMsg)}`;
-                  }}
-                  className="p-4 bg-blue-50 text-blue-600 font-black rounded-2xl shadow-sm active:scale-95 transition-transform text-xs border border-blue-100"
-                >
-                  문자 발송하기
-                </button>
+              {/* 초대 유형 선택 카드 */}
+              <div className="grid grid-cols-1 gap-4">
+                {/* 1. 파트너 전용 (내 업체로 합류) */}
+                <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] p-6 text-white shadow-xl shadow-blue-500/20 relative overflow-hidden group">
+                  <span className="material-symbols-outlined absolute -right-4 -bottom-4 text-[100px] opacity-10 group-hover:scale-110 transition-transform">group_add</span>
+                  <div className="relative z-10">
+                    <span className="inline-block px-2 py-0.5 bg-white/20 rounded-full text-[9px] font-bold mb-2">FOR PARTNERS</span>
+                    <h4 className="text-lg font-black mb-1">우리 업체 팀원 초대하기</h4>
+                    <p className="text-[11px] text-white/70 font-medium mb-5">직원이나 파트너 사장님이 내 예약 리스트를 함께<br />보고 관리할 수 있게 초대합니다.</p>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          const code = editCustomInviteCode || myBusinessId;
+                          const inviteLink = `https://cleanbro-app.vercel.app/?signup&code=${code}`;
+                          const msg = `[클린브로 파트너 초대] 🤝\n${businessProfile.company_name}에서 함께 일할 파트너님을 모십니다!\n\n🔗 가입링크: ${inviteLink}\n🔑 초대코드: ${code}\n\n지금 바로 접속하여 일정을 공유받으세요!`;
+                          navigator.clipboard.writeText(msg).then(() => alert('파트너 초대장이 복사되었습니다!'));
+                        }}
+                        className="flex-1 py-3 bg-white text-blue-600 font-bold rounded-xl text-xs active:scale-95 transition-all shadow-sm"
+                      >
+                        초대 메시지 복사
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. 신규 사장님 추천 (앱 홍보용) */}
+                <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-6 border border-slate-100 dark:border-slate-700 shadow-lg group relative overflow-hidden">
+                  <span className="material-symbols-outlined absolute -right-4 -bottom-4 text-[100px] text-slate-50 dark:text-slate-800 group-hover:scale-110 transition-transform">rocket_launch</span>
+                  <div className="relative z-10">
+                    <span className="inline-block px-2 py-0.5 bg-primary/10 text-primary rounded-full text-[9px] font-bold mb-2">FOR NEW OWNERS</span>
+                    <h4 className="text-lg font-black text-slate-800 dark:text-white mb-1">다른 사장님께 클린브로 추천하기</h4>
+                    <p className="text-[11px] text-slate-400 font-medium mb-5">독립적인 비즈니스를 운영하는 주변 사장님들께<br />최고의 일정 관리 앱을 홍보해 보세요!</p>
+
+                    <button
+                      onClick={() => {
+                        const msg = `[클린브로 추천] 🌟\n청소 업체 사장님들을 위한 최고의 파트너 앱!\n스마트한 일정 관리, 사진 한 장으로 끝나는 작업 보고서까지.\n\n지금 클린브로를 시작하고 비즈니스를 업그레이드 하세요!\n\n🔗 앱 구경하기: https://cleanbro-app.vercel.app\n(추천인: ${businessProfile.company_name})`;
+                        if (navigator.share) navigator.share({ title: '클린브로 앱 추천', text: msg, url: 'https://cleanbro-app.vercel.app' });
+                        else {
+                          navigator.clipboard.writeText(msg).then(() => alert('추천 메시지가 복사되었습니다! 카톡에 공유해 보세요.'));
+                        }
+                      }}
+                      className="w-full py-3.5 bg-slate-800 text-white font-bold rounded-xl text-sm active:scale-95 transition-all flex items-center justify-center gap-2"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">share</span> 앱 홍보하기 (카톡/공유)
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* 팀 멤버 관리 리스트 */}
+              <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-6 border-0 shadow-sm space-y-4">
+                <div className="flex justify-between items-center px-1">
+                  <h4 className="text-sm font-black text-slate-700 dark:text-white flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[18px]">groups</span> 현재 합류한 팀원 ({teamMembers.length})
+                  </h4>
+                </div>
+                <div className="divide-y divide-slate-50 dark:divide-slate-700">
+                  {teamMembers.map(member => (
+                    <div key={member.id} className="py-3 flex justify-between items-center">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-bold text-xs">
+                          {(member.nickname || member.email).substring(0, 1).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-800 dark:text-white">{member.nickname || '파트너'}</p>
+                          <p className="text-[9px] text-slate-400">{member.email}</p>
+                        </div>
+                      </div>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${member.is_admin ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {member.is_admin ? '대표' : '파트너'}
+                      </span>
+                    </div>
+                  ))}
+                  {teamMembers.length === 0 && <p className="text-center text-[10px] text-slate-400 py-4 italic">아직 합류한 팀원이 없습니다.</p>}
+                </div>
               </div>
             </div>
           )}
