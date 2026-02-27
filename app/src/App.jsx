@@ -488,6 +488,25 @@ function App() {
     }
   }, [revenueStats.achieveRate, showConfettiOnce]);
 
+  const sendSolapiMmsLocally = async (to, text) => {
+    const activeApiKey = userProfile?.solapi_api_key || businessProfile?.solapi_api_key;
+    const activeApiSecret = userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret;
+    const activeFromNumber = userProfile?.solapi_from_number || businessProfile?.solapi_from_number;
+    if (!activeApiKey || !activeApiSecret || !activeFromNumber) throw new Error("솔라피 연동 설정이 필요합니다.");
+    const date = new Date().toISOString();
+    const salt = window.crypto.randomUUID().replace(/-/g, '');
+    const encoder = new TextEncoder();
+    const key = await window.crypto.subtle.importKey('raw', encoder.encode(activeApiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const signatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
+    const signature = Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const res = await fetch('https://api.solapi.com/messages/v4/send', {
+      method: 'POST',
+      headers: { 'Authorization': `HMAC-SHA256 apiKey=${activeApiKey}, date=${date}, salt=${salt}, signature=${signature}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ to: to.replace(/[^0-9]/g, ''), from: activeFromNumber.replace(/[^0-9]/g, ''), text: text }] })
+    });
+    if (!res.ok) throw new Error("문자 발송 에러: " + res.statusText);
+  };
+
   const handleSaveBooking = async () => {
     if (!customerName.trim() || !newPhone.trim() || !address.trim()) {
       alert('성함, 전화번호, 기본 주소를 모두 입력해주세요.');
@@ -534,12 +553,32 @@ function App() {
 
     let error;
     if (editingId) {
-      const { error: updErr } = await supabase.from('bookings').update(entry).eq('id', editingId);
+      const { error: updErr, data } = await supabase.from('bookings').update(entry).eq('id', editingId).select();
       error = updErr;
       if (!error) alert('예약이 수정되었습니다.');
     } else {
-      const { error: insErr } = await supabase.from('bookings').insert([entry]);
+      const { error: insErr, data } = await supabase.from('bookings').insert([entry]).select();
       error = insErr;
+      if (!error && data && data[0]) {
+        try {
+          const confirmedTpl = businessProfile.confirmed_template || `[예약 확정] [일시]에 방문 예정입니다. - 클린브로 ([파트너전화번호])`;
+          const timeVal = entry.book_time_type === '직접입력' ? entry.book_time_custom : entry.book_time_type;
+          const dateTimeStr = `${entry.book_date} ${timeVal}`;
+          const senderPhone = userProfile?.solapi_from_number || userProfile?.sender_number || businessProfile?.solapi_from_number || businessProfile?.phone || '';
+
+          if (senderPhone && (userProfile?.solapi_api_key || businessProfile?.solapi_api_key) && entry.phone) {
+            const msg = confirmedTpl
+              .replace(/\[고객명\]/g, entry.customer_name || '고객')
+              .replace(/\[일시\]/g, dateTimeStr)
+              .replace(/\[시간\]/g, timeVal || '')
+              .replace(/\[파트너전화번호\]/g, senderPhone);
+            await sendSolapiMmsLocally(entry.phone, msg);
+            await supabase.from('bookings').update({ sms_sent_initial: true }).eq('id', data[0].id);
+          }
+        } catch (err) {
+          console.error('예약 확정 자동 문자 발송 실패:', err);
+        }
+      }
     }
 
     if (error) {
@@ -572,6 +611,8 @@ function App() {
   const [editDefaultMessage, setEditDefaultMessage] = useState('');
   const [editNoticeTemplate, setEditNoticeTemplate] = useState('');
   const [editReminderTemplate, setEditReminderTemplate] = useState('');
+  const [editConfirmedTemplate, setEditConfirmedTemplate] = useState('');
+  const [editMorningReminderTemplate, setEditMorningReminderTemplate] = useState('');
   const [editAcGuideFile, setEditAcGuideFile] = useState(null);
   const [editWasherGuideFile, setEditWasherGuideFile] = useState(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -592,6 +633,8 @@ function App() {
       setEditDefaultMessage(businessProfile.default_completion_message || `[클린브로] 청소 작업 완료 안내\n안녕하세요, 고객님! {customer_name}님 {memo} 작업이 완료되었습니다.\n\n📸 작업 사진 확인하기:\n{after_url}\n\n만족하셨다면 리뷰 부탁드립니다!\n[리뷰링크]`);
       setEditNoticeTemplate(businessProfile.notice_template || `[안내] 오늘 방문 예정입니다. 시간 맞춰 뵙겠습니다.\n- 클린브로 ([시간])`);
       setEditReminderTemplate(businessProfile.reminder_template || `[알림] [고객명]님, 곧 도착 예정입니다. 잠시만 기다려주세요!`);
+      setEditConfirmedTemplate(businessProfile.confirmed_template || `[예약 확정] [일시]에 예약이 완료되었습니다. - 클린브로 ([파트너전화번호])`);
+      setEditMorningReminderTemplate(businessProfile.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`);
       setEditSolapiApiKey(userProfile?.solapi_api_key || businessProfile?.solapi_api_key || '');
       setEditSolapiApiSecret(userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret || '');
       setEditSolapiFromNumber(userProfile?.solapi_from_number || businessProfile?.solapi_from_number || '');
@@ -628,6 +671,8 @@ function App() {
       default_completion_message: editDefaultMessage,
       notice_template: editNoticeTemplate,
       reminder_template: editReminderTemplate,
+      confirmed_template: editConfirmedTemplate,
+      morning_reminder_template: editMorningReminderTemplate,
     };
 
     // 가이드 이미지 업로드 (에어컨)
@@ -1058,12 +1103,12 @@ function App() {
             <p className="text-slate-400 font-mono text-sm">{c.phone ? c.phone.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`) : '번호 없음'}</p>
             {c.memo && <p className="text-xs text-slate-500 mt-1 line-clamp-1">{c.memo}</p>}
             <div className="flex items-center gap-2 mt-2">
-              <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${c.sms_sent_initial ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
-                <span className="material-symbols-outlined text-[12px]">sms</span> 안내 문자
-              </span>
-              <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${c.sms_sent_reminder ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
-                <span className="material-symbols-outlined text-[12px]">alarm</span> 알림 문자
-              </span>
+              <button onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'notice'); }} className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border cursor-pointer active:scale-95 transition-transform ${c.sms_sent_initial ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-300 hover:bg-slate-100 shadow-sm'}`}>
+                <span className="material-symbols-outlined text-[12px]">sms</span> {c.sms_sent_initial ? '안내 재발송' : '안내 문자(Notice)'}
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'reminder'); }} className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border cursor-pointer active:scale-95 transition-transform ${c.sms_sent_reminder ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-500 border-slate-300 hover:bg-slate-100 shadow-sm'}`}>
+                <span className="material-symbols-outlined text-[12px]">alarm</span> {c.sms_sent_reminder ? '알림 재발송' : '알림 문자(Reminder)'}
+              </button>
             </div>
           </div>
           <div className="text-right pt-6">
@@ -1199,25 +1244,6 @@ function App() {
         mmsText += `\n\n🧺 세탁기 사후관리 가이드:\n${businessProfile.washer_guide_url}`;
       }
 
-      const sendSolapiMmsLocally = async (to, text) => {
-        const activeApiKey = userProfile?.solapi_api_key || businessProfile?.solapi_api_key;
-        const activeApiSecret = userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret;
-        const activeFromNumber = userProfile?.solapi_from_number || businessProfile?.solapi_from_number;
-        if (!activeApiKey || !activeApiSecret || !activeFromNumber) throw new Error("솔라피 연동 설정이 필요합니다.");
-        const date = new Date().toISOString();
-        const salt = window.crypto.randomUUID().replace(/-/g, '');
-        const encoder = new TextEncoder();
-        const key = await window.crypto.subtle.importKey('raw', encoder.encode(activeApiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-        const signatureBuffer = await window.crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
-        const signature = Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-        const res = await fetch('https://api.solapi.com/messages/v4/send', {
-          method: 'POST',
-          headers: { 'Authorization': `HMAC-SHA256 apiKey=${activeApiKey}, date=${date}, salt=${salt}, signature=${signature}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: [{ to: to.replace(/[^0-9]/g, ''), from: activeFromNumber.replace(/[^0-9]/g, ''), text: text }] })
-        });
-        if (!res.ok) throw new Error("문자 발송 에러: " + res.statusText);
-      };
-
       try {
         await sendSolapiMmsLocally(completionTarget.phone, mmsText);
         alert('작업이 완벽하게 완료되었으며 고객님께 알림 문자가 바로 발송되었습니다.');
@@ -1262,13 +1288,12 @@ function App() {
       <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-indigo-900 via-blue-900 to-purple-900">
         <div className="relative z-10 bg-white w-full max-w-sm px-8 pt-8 pb-10 rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] border border-white/20 backdrop-blur-sm">
           <div className="text-center mb-8">
-            {/* 메인 일러스트레이션 포스터 */}
-            <div className="w-full h-48 bg-indigo-50 rounded-[1.5rem] mb-6 overflow-hidden relative group shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-blue-50">
-              <img src="/login_poster.png" alt="Neo-Classic A/C & Washer Poster" className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-1000 ease-out" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent"></div>
+            <div className="w-full h-48 bg-white rounded-[1.5rem] mb-6 overflow-hidden relative group shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-blue-50">
+              <img src="/login_poster.png" alt="Cleaning Service All-in-One App Logo" className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-1000 ease-out" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
               <div className="absolute bottom-3 left-4 text-left">
-                <p className="text-blue-200 text-[9px] font-black tracking-widest uppercase mb-0.5 drop-shadow-sm">Premium Service</p>
-                <p className="text-white font-black text-sm tracking-wide drop-shadow-md">A/C & Washer Master</p>
+                <p className="text-blue-200 text-[10px] font-black tracking-widest uppercase mb-0.5 drop-shadow-sm">All-in-One App</p>
+                <p className="text-white font-black text-sm tracking-wide drop-shadow-md">Cleaning Service</p>
               </div>
             </div>
 
@@ -1984,7 +2009,7 @@ function App() {
                 <textarea
                   value={editNoticeTemplate}
                   onChange={e => setEditNoticeTemplate(e.target.value)}
-                  className="w-full h-24 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none"
+                  className="w-full h-20 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none"
                   placeholder="예: [안내] 오늘 방문 예정입니다. 시간 맞춰 뵙겠습니다. - 클린브로 ([시간])"
                 />
               </div>
@@ -1993,12 +2018,30 @@ function App() {
                 <textarea
                   value={editReminderTemplate}
                   onChange={e => setEditReminderTemplate(e.target.value)}
-                  className="w-full h-24 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none"
+                  className="w-full h-20 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none"
                   placeholder="예: [알림] [고객명]님, 곧 도착 예정입니다. 잠시만 기다려주세요!"
                 />
               </div>
-              <p className="text-[10px] text-slate-400 leading-relaxed">
-                * 사용 가능 치환자 : <span className="font-bold text-primary">[고객명]</span>, <span className="font-bold text-primary">[시간]</span>
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
+                <label className="block text-xs font-bold text-slate-500 mb-1 text-primary">예약 확정 자동 문자 (등록 시 바로 발송)</label>
+                <textarea
+                  value={editConfirmedTemplate}
+                  onChange={e => setEditConfirmedTemplate(e.target.value)}
+                  className="w-full h-20 p-4 text-sm bg-blue-50/50 dark:bg-slate-900 border border-blue-200/50 rounded-xl focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="예: [예약 확정] [일시]에 예약이 완료되었습니다. - 클린브로 ([파트너전화번호])"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1 text-primary">당일 아침 8시 자동 알림 (솔라피 연동 필요)</label>
+                <textarea
+                  value={editMorningReminderTemplate}
+                  onChange={e => setEditMorningReminderTemplate(e.target.value)}
+                  className="w-full h-20 p-4 text-sm bg-blue-50/50 dark:bg-slate-900 border border-blue-200/50 rounded-xl focus:ring-2 focus:ring-primary outline-none"
+                  placeholder="예: [알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])"
+                />
+              </div>
+              <p className="text-[10px] text-slate-400 leading-relaxed bg-slate-50 p-2 rounded-lg">
+                * 사용 가능 치환자 : <span className="font-bold text-primary">[고객명]</span>, <span className="font-bold text-primary">[일시]</span>, <span className="font-bold text-primary">[시간]</span>, <span className="font-bold text-primary">[파트너전화번호]</span>
               </p>
             </div>
 

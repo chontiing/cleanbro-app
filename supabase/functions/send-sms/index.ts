@@ -19,11 +19,7 @@ async function getSolapiSignature(apiSecret: string, date: string, salt: string)
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-async function sendSms(to: string, text: string) {
-    const apiKey = Deno.env.get('SOLAPI_API_KEY')!
-    const apiSecret = Deno.env.get('SOLAPI_API_SECRET')!
-    const fromNumber = Deno.env.get('SOLAPI_FROM_NUMBER')!
-
+async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to: string, text: string) {
     const date = new Date().toISOString()
     const salt = crypto.randomUUID().replace(/-/g, '')
     const signature = await getSolapiSignature(apiSecret, date, salt)
@@ -38,8 +34,8 @@ async function sendSms(to: string, text: string) {
         },
         body: JSON.stringify({
             message: {
-                to,
-                from: fromNumber,
+                to: to.replace(/[^0-9]/g, ''),
+                from: fromNumber.replace(/[^0-9]/g, ''),
                 text
             }
         })
@@ -48,7 +44,7 @@ async function sendSms(to: string, text: string) {
     return response.json()
 }
 
-serve(async (req) => {
+serve(async (req: any) => {
     try {
         const payload = await req.json()
         console.log('Received payload:', payload)
@@ -59,34 +55,48 @@ serve(async (req) => {
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
         )
 
-        // 1. Webhook (insert) 모드: 예약 즉시 안내 문자 발송
+        // 1. Webhook (insert) 모드: 예약 즉시 안내 문자 발송 (프론트엔드에서도 처리할 수 있지만 백업/웹훅용으로 유지)
         if (payload.type === 'INSERT' && payload.table === 'bookings' && payload.record) {
-            const { id, customer_name, book_date, book_time_type, assignee, phone } = payload.record
+            const { id, customer_name, book_date, book_time_type, book_time_custom, assignee, phone, business_id, user_id } = payload.record
 
             if (!phone || phone.length < 10) {
                 return new Response(JSON.stringify({ error: 'No valid phone number' }), { status: 400 })
             }
 
-            const text = `[예약 안내]\n${customer_name}님 예약이 완료되었습니다.\n\n날짜: ${book_date}\n시간: ${book_time_type}\n담당자: ${assignee}`
+            // DB에서 업체 정보 및 템플릿 가져오기
+            const { data: business } = await supabase.from('businesses').select('*').eq('id', business_id).single()
+            const { data: profile } = await supabase.from('profiles').select('*').eq('id', user_id).single()
 
-            console.log('Sending initial DB text to', phone)
-            await sendSms(phone, text)
+            const confirmedTpl = business?.confirmed_template || `[예약 확정] [일시]에 방문 예정입니다. - 클린브로 ([파트너전화번호])`
+            const timeVal = book_time_type === '직접입력' ? book_time_custom : book_time_type
+            const dateTimeStr = `${book_date} ${timeVal}`
 
-            // DB 업데이트 (sms_sent_initial = true)
-            await supabase.from('bookings').update({ sms_sent_initial: true }).eq('id', id)
+            const senderPhone = profile?.solapi_from_number || profile?.sender_number || business?.solapi_from_number || business?.phone || ''
+            const apiKey = profile?.solapi_api_key || business?.solapi_api_key || Deno.env.get('SOLAPI_API_KEY')
+            const apiSecret = profile?.solapi_api_secret || business?.solapi_api_secret || Deno.env.get('SOLAPI_API_SECRET')
 
-            return new Response(JSON.stringify({ message: 'Initial SMS sent successfully' }), { status: 200 })
+            const text = confirmedTpl
+                .replace(/\[고객명\]/g, customer_name || '고객')
+                .replace(/\[일시\]/g, dateTimeStr)
+                .replace(/\[시간\]/g, timeVal || '')
+                .replace(/\[파트너전화번호\]/g, senderPhone)
+
+            if (apiKey && apiSecret && senderPhone) {
+                console.log('Sending initial confirmed text to', phone)
+                await sendSms(apiKey, apiSecret, senderPhone, phone, text)
+                await supabase.from('bookings').update({ sms_sent_initial: true }).eq('id', id)
+            }
+
+            return new Response(JSON.stringify({ message: 'Initial SMS processed' }), { status: 200 })
         }
 
         // 2. Cron (스케줄러) 모드: 오늘 예약자 아침 8시 알림
-        if (payload.action === 'send_morning_reminders') {
+        if (payload.action === 'send_morning_reminders' || (!payload.type && !payload.action)) {
             const today = new Date()
-            // KST (UTC+9) Date string
             const offset = today.getTimezoneOffset() * 60000
             const localISOTime = (new Date(today.getTime() - offset)).toISOString()
             const todayStr = localISOTime.split('T')[0]
 
-            // 오늘 날짜이면서 sms_sent_reminder 가 false이거나 없는 예약들 가져오기
             const { data: bookings, error } = await supabase
                 .from('bookings')
                 .select('*')
@@ -99,17 +109,35 @@ serve(async (req) => {
             for (const b of bookings) {
                 if (!b.phone || b.phone.length < 10) continue
 
-                const text = `[방문 알림]\n오늘 방문 예정입니다.\n\n시간: ${b.book_time_type}\n담당자: ${b.assignee}`
-                await sendSms(b.phone, text)
+                // 해당 업체의 템플릿 및 파트너(담당자) 정보 획득
+                const { data: business } = await supabase.from('businesses').select('*').eq('id', b.business_id).single()
+                const { data: profile } = await supabase.from('profiles').select('*').eq('id', b.user_id).single()
 
-                await supabase.from('bookings').update({ sms_sent_reminder: true }).eq('id', b.id)
-                sentCount++
+                const reminderTpl = business?.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`
+                const timeVal = b.book_time_type === '직접입력' ? b.book_time_custom : b.book_time_type
+                const dateTimeStr = `${b.book_date} ${timeVal}`
+
+                const senderPhone = profile?.solapi_from_number || profile?.sender_number || business?.solapi_from_number || business?.phone || ''
+                const apiKey = profile?.solapi_api_key || business?.solapi_api_key || Deno.env.get('SOLAPI_API_KEY')
+                const apiSecret = profile?.solapi_api_secret || business?.solapi_api_secret || Deno.env.get('SOLAPI_API_SECRET')
+
+                const text = reminderTpl
+                    .replace(/\[고객명\]/g, b.customer_name || '고객')
+                    .replace(/\[일시\]/g, dateTimeStr)
+                    .replace(/\[시간\]/g, timeVal || '')
+                    .replace(/\[파트너전화번호\]/g, senderPhone)
+
+                if (apiKey && apiSecret && senderPhone) {
+                    await sendSms(apiKey, apiSecret, senderPhone, b.phone, text)
+                    await supabase.from('bookings').update({ sms_sent_reminder: true }).eq('id', b.id)
+                    sentCount++
+                }
             }
 
             return new Response(JSON.stringify({ message: `Sent ${sentCount} reminders for ${todayStr}` }), { status: 200 })
         }
 
-        return new Response(JSON.stringify({ message: 'Unknown action' }), { status: 400 })
+        return new Response(JSON.stringify({ message: 'No valid action performed' }), { status: 200 })
     } catch (error) {
         console.error(error)
         return new Response(JSON.stringify({ error: error.message }), { status: 500 })
