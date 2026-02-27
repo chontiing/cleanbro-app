@@ -1260,15 +1260,15 @@ function App() {
   if (!session) {
     return (
       <div className="min-h-screen relative flex items-center justify-center p-4 overflow-hidden bg-gradient-to-br from-indigo-900 via-blue-900 to-purple-900">
-        <div className="relative z-10 bg-white w-full max-w-sm px-8 pt-12 pb-10 rounded-[2rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] border border-white/20 backdrop-blur-sm">
-          <div className="text-center mb-10">
-            {/* 상단 장식 아이콘 */}
-            <div className="flex justify-center items-center gap-4 mb-5 select-none animate-fade-in relative px-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-50 to-blue-100 rounded-[1.25rem] flex items-center justify-center shadow-md border border-blue-200 transform hover:-rotate-3 transition-transform duration-300">
-                <span className="material-symbols-outlined text-4xl text-blue-500">ac_unit</span>
-              </div>
-              <div className="w-16 h-16 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-[1.25rem] flex items-center justify-center shadow-md border border-indigo-200 transform hover:rotate-3 transition-transform duration-300">
-                <span className="material-symbols-outlined text-4xl text-indigo-500">local_laundry_service</span>
+        <div className="relative z-10 bg-white w-full max-w-sm px-8 pt-8 pb-10 rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.5)] border border-white/20 backdrop-blur-sm">
+          <div className="text-center mb-8">
+            {/* 메인 일러스트레이션 포스터 */}
+            <div className="w-full h-48 bg-indigo-50 rounded-[1.5rem] mb-6 overflow-hidden relative group shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-blue-50">
+              <img src="/login_poster.png" alt="Neo-Classic A/C & Washer Poster" className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-1000 ease-out" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent"></div>
+              <div className="absolute bottom-3 left-4 text-left">
+                <p className="text-blue-200 text-[9px] font-black tracking-widest uppercase mb-0.5 drop-shadow-sm">Premium Service</p>
+                <p className="text-white font-black text-sm tracking-wide drop-shadow-md">A/C & Washer Master</p>
               </div>
             </div>
 
