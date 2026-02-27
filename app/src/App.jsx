@@ -1157,9 +1157,29 @@ function App() {
             >
               {c.customer_name || (c.memo ? c.memo.split(' ')[0] : '고객')}
               {c.address && <span className="text-[13px] font-medium text-slate-500 ml-1.5">({c.address.split(' ').slice(0, 2).join(' ')})</span>}
-              <span className="material-symbols-outlined text-[16px] ml-1.5 text-blue-500 bg-blue-50 p-0.5 rounded-full border border-blue-200">location_on</span>
+              <div className="flex items-center gap-1 ml-1.5">
+                <span className="material-symbols-outlined text-[16px] text-blue-500 bg-blue-50 p-0.5 rounded-full border border-blue-200">location_on</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.address); alert('주소가 복사되었습니다!'); }}
+                  className="p-1 hover:bg-slate-100 rounded-md transition-colors text-slate-300 hover:text-primary active:scale-90"
+                  title="주소 복사"
+                >
+                  <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                </button>
+              </div>
             </h4>
-            <p className="text-slate-400 font-mono text-sm">{c.phone ? c.phone.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`) : '번호 없음'}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-slate-400 font-mono text-sm">{c.phone ? c.phone.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`) : '번호 없음'}</p>
+              {c.phone && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.phone); alert('전화번호가 복사되었습니다!'); }}
+                  className="p-1 hover:bg-slate-100 rounded-md transition-colors text-slate-300 hover:text-primary active:scale-90"
+                  title="번호 복사"
+                >
+                  <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                </button>
+              )}
+            </div>
             {c.memo && <p className="text-xs text-slate-500 mt-1 line-clamp-1">{c.memo}</p>}
             <div className="flex items-center gap-2 mt-2">
               <button onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'confirmed'); }} className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border cursor-pointer active:scale-95 transition-transform ${c.sms_sent_initial ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 opacity-60'}`}>
@@ -1588,6 +1608,9 @@ function App() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
+          <button onClick={() => setCurrentTab('notice')} className={`transition-colors ${currentTab === 'notice' ? 'text-primary' : 'text-slate-400 hover:text-blue-500'}`}>
+            <span className="material-symbols-outlined text-[26px]">campaign</span>
+          </button>
           <button className="text-slate-400 hover:text-blue-500 transition-colors">
             <span className="material-symbols-outlined text-[26px]">notifications</span>
           </button>
@@ -2126,6 +2149,20 @@ function App() {
                 <div className="flex-1">
                   <h4 className="font-bold text-slate-800 dark:text-slate-100">파트너 초대 관리</h4>
                   <p className="text-xs text-slate-400">초대 코드 및 링크 발송</p>
+                </div>
+                <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentTab('notice')}
+                className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
+              >
+                <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                  <span className="material-symbols-outlined">campaign</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100">공지사항 및 가이드</h4>
+                  <p className="text-xs text-slate-400">앱 사용 설명서 및 최신 업데이트 확인</p>
                 </div>
                 <span className="material-symbols-outlined text-slate-300">chevron_right</span>
               </button>
@@ -3114,6 +3151,57 @@ function App() {
             </button>
           </div>
         </div>
+      )}
+      {/* ======================= [탭 9: 공지사항 및 가이드] ======================= */}
+      {currentTab === 'notice' && (
+        <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-6 animate-slide-up pb-32">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-black flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary">campaign</span> 공지사항 & 가이드
+            </h2>
+            <button onClick={() => setCurrentTab('calendar')} className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors">닫기</button>
+          </div>
+
+          {/* 주요 공지사항 카드 */}
+          <div className="bg-gradient-to-br from-indigo-600 to-blue-700 p-6 rounded-[2rem] text-white shadow-xl relative overflow-hidden">
+            <span className="material-symbols-outlined absolute -right-6 -bottom-6 text-[120px] opacity-10">rocket</span>
+            <span className="inline-block px-2 py-0.5 bg-white/20 rounded-full text-[10px] font-bold mb-2">HOT UPDATE</span>
+            <h3 className="text-xl font-bold mb-2">클린브로 v1.1.0 정식 업데이트</h3>
+            <p className="text-xs text-white/80 leading-relaxed font-medium">
+              대표님들의 소중한 의견을 반영하여 솔라피 자동 문자 연동 기능과 프로샵, 정교한 세무 대시보드가 추가되었습니다! 지금 가이드를 확인해 보세요.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-slate-500 ml-1 flex items-center gap-1">
+              <span className="material-symbols-outlined text-[18px]">menu_book</span> 사용자 매뉴얼
+            </h3>
+            <div className="space-y-3">
+              {[
+                { icon: 'calendar_month', title: '📅 일정 및 예약 관리', text: '달력에서 날짜를 선택하여 당일 예약을 확인하거나, 하단 [예약] 탭에서 새 일정을 등록합니다. 항목을 길게 누르면 수정/삭제됩니다.' },
+                { icon: 'photo_camera', title: '📸 작업 보고서 및 발송', text: '항목의 [작업 완료 체크]를 눌러 전/후 사진을 등록하세요. 워터마크가 첨부된 사진과 완료 메시지가 고객에게 원클릭 전송됩니다.' },
+                { icon: 'sms', title: '💬 솔라피 자동 문자 연동', text: '설정에서 솔라피 API를 연동하면 예약 즉시 안내 문자 및 당일 아침 알림이 자동으로 발송되어 시간을 절약해 줍니다.' },
+                { icon: 'monitoring', title: '📊 매출 및 지출/세무 관리', text: '통계 탭에서 매출 추이를 확인하고, 세무 탭에서 예상 부가세 계산 및 엑셀 자료 다운로드가 가능합니다.' },
+                { icon: 'shopping_bag', title: '🛍️ 프로 샵 이용하기', text: '청소 전문가를 위한 고성능 장비를 엄선하여 최저가 링크를 제공합니다. 관리자 아이디는 상품 수정도 가능합니다.' },
+                { icon: 'install_mobile', title: '📱 앱 설치 (홈 화면 추가)', text: '아이폰(사파리 공유 > 홈 화면 추가), 안드로이드(크롬 메뉴 > 홈 화면 추가)를 통해 일반 앱처럼 사용하세요.' }
+              ].map((guide, idx) => (
+                <div key={idx} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2 mb-2">
+                    <span className="material-symbols-outlined text-primary text-[20px]">{guide.icon}</span>
+                    {guide.title}
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">{guide.text}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-slate-100 dark:bg-slate-800/50 p-6 rounded-2xl text-center space-y-2 mb-10">
+            <p className="text-xs font-bold text-slate-500">도움이 필요하신가요?</p>
+            <p className="text-[10px] text-slate-400">버그 신고나 기능 제안은 언제든 환영합니다!</p>
+            <button onClick={() => window.location.href = 'tel:01053155184'} className="mt-2 text-primary text-xs font-black underline">고객센터 연결</button>
+          </div>
+        </main>
       )}
     </div>
   );
