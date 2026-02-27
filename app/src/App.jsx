@@ -2168,39 +2168,72 @@ function App() {
             </button>
           </div>
 
-          <div className="text-center space-y-3">
-            <div>
-              <p className="text-xs text-slate-400 font-bold mb-1">우리 업체 식별 코드 (파트너 초대 시 필요)</p>
-              <p
+          <div className="text-center space-y-4">
+            <p className="text-[11px] text-slate-500 font-bold mb-1">우리 업체 식별 코드 (파트너 초대 시 필요)</p>
+
+            {/* 코드 복사 영역 */}
+            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-2xl border border-slate-200/60 shadow-inner">
+              <div className="flex-1 px-4 py-2 bg-white rounded-xl border border-slate-100 overflow-hidden">
+                <p className="text-[10px] text-slate-400 font-mono truncate text-left">{myBusinessId}</p>
+              </div>
+              <button
                 onClick={() => {
                   navigator.clipboard.writeText(myBusinessId).then(() => {
-                    alert('코드가 복사되었습니다. 주소와 함께 전달하세요!');
+                    alert('업체 코드가 복사되었습니다! 파트너 가입 시 입력해 주세요.');
                   });
                 }}
-                className="text-[10px] bg-slate-200 p-2 rounded text-slate-600 break-all cursor-pointer hover:bg-slate-300 transition-colors font-mono select-all"
+                className="shrink-0 w-11 h-11 bg-slate-800 text-white rounded-xl flex items-center justify-center active:scale-95 transition-all shadow-lg group relative"
               >
-                {myBusinessId}
-              </p>
+                <span className="material-symbols-outlined text-[18px]">content_copy</span>
+              </button>
             </div>
 
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                const inviteMsg = `[클린브로] 최찬용 대표님이 파트너로 초대하셨습니다.\n아래 링크로 접속하여 가입 시 초대 코드를 입력해 주세요!\n\n1. 앱 주소: https://cleanbro-app.vercel.app/signup\n2. 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요!`;
+            {/* 초대 버튼 그리드 */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  const inviteMsg = `[클린브로] 최찬용 대표님이 파트너로 초대하셨습니다.\n아래 링크로 접속하여 가입 시 초대 코드를 입력해 주세요!\n\n1. 앱 주소: https://cleanbro-app.vercel.app/signup\n2. 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요!`;
 
-                // Trigger native SMS app if mobile
-                window.location.href = `sms:?body=${encodeURIComponent(inviteMsg)}`;
+                  // Copy to clipboard first
+                  navigator.clipboard.writeText(inviteMsg).then(() => {
+                    // Try Share API (includes KakaoTalk on mobile)
+                    if (navigator.share) {
+                      navigator.share({
+                        title: '클린브로 파트너 초대',
+                        text: inviteMsg,
+                        url: 'https://cleanbro-app.vercel.app/signup'
+                      }).catch(() => {
+                        alert('메시지가 복사되었습니다. 카카오톡을 열어 붙여넣어 주세요!');
+                      });
+                    } else {
+                      alert('초대 메시지와 링크가 복사되었습니다!\n카카오톡 친구를 선택해 붙여넣으세요.');
+                    }
+                  });
+                }}
+                className="py-4 bg-[#F7E600] text-[#3A1D1D] font-black rounded-2xl shadow-lg active:scale-95 transition-all flex flex-col items-center justify-center gap-1 border border-[#E1D100]"
+              >
+                <div className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[18px]">chat</span>
+                  <span className="text-[11px]">카톡 초대</span>
+                </div>
+              </button>
 
-                // Copy to clipboard as well for easy pasting
-                navigator.clipboard.writeText(inviteMsg).then(() => {
-                  alert('초대 메시지가 복사되었습니다. SMS 앱이 열리지 않으면 직접 붙여넣어 전달하세요!');
-                });
-              }}
-              className="w-full py-3 bg-blue-50 text-blue-600 font-bold rounded-xl shadow-sm active:scale-95 transition-all flex justify-center items-center gap-2 border border-blue-100"
-            >
-              <span className="material-symbols-outlined text-[18px]">share</span>
-              초대 링크 및 코드 발송하기
-            </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  const inviteMsg = `[클린브로] 최찬용 대표님이 파트너로 초대하셨습니다.\n아래 링크로 접속하여 가입 시 초대 코드를 입력해 주세요!\n\n1. 앱 주소: https://cleanbro-app.vercel.app/signup\n2. 초대 코드: ${myBusinessId}\n\n함께 깨끗한 세상을 만들어가요!`;
+                  window.location.href = `sms:?body=${encodeURIComponent(inviteMsg)}`;
+                  navigator.clipboard.writeText(inviteMsg);
+                }}
+                className="py-4 bg-blue-50 text-blue-600 font-black rounded-2xl shadow-sm active:scale-95 transition-all flex flex-col items-center justify-center gap-1 border border-blue-100"
+              >
+                <div className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[18px]">sms</span>
+                  <span className="text-[11px]">문자 초대</span>
+                </div>
+              </button>
+            </div>
           </div>
 
           <div className="bg-red-50 p-5 rounded-2xl border border-red-100">
