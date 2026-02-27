@@ -89,7 +89,9 @@ function App() {
     ac_guide_url: '',
     washer_guide_url: '',
     notice_template: '',
-    reminder_template: ''
+    reminder_template: '',
+    auto_confirm_sms: false,
+    auto_morning_reminders: false
   });
 
   const [currentTab, setCurrentTab] = useState('calendar'); // calendar, add, list, stats, settings
@@ -600,7 +602,7 @@ function App() {
           const dateTimeStr = `${entry.book_date} ${timeVal}`;
           const senderPhone = userProfile?.solapi_from_number || userProfile?.sender_number || businessProfile?.solapi_from_number || businessProfile?.phone || '';
 
-          if (senderPhone && (userProfile?.solapi_api_key || businessProfile?.solapi_api_key) && entry.phone) {
+          if (businessProfile.auto_confirm_sms && senderPhone && (userProfile?.solapi_api_key || businessProfile?.solapi_api_key) && entry.phone) {
             const msg = confirmedTpl
               .replace(/\[고객명\]/g, entry.customer_name || '고객')
               .replace(/\[일시\]/g, dateTimeStr)
@@ -647,6 +649,8 @@ function App() {
   const [editReminderTemplate, setEditReminderTemplate] = useState('');
   const [editConfirmedTemplate, setEditConfirmedTemplate] = useState('');
   const [editMorningReminderTemplate, setEditMorningReminderTemplate] = useState('');
+  const [editAutoConfirmSms, setEditAutoConfirmSms] = useState(false);
+  const [editAutoMorningReminders, setEditAutoMorningReminders] = useState(false);
   const [editAcGuideFile, setEditAcGuideFile] = useState(null);
   const [editWasherGuideFile, setEditWasherGuideFile] = useState(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -669,6 +673,8 @@ function App() {
       setEditReminderTemplate(businessProfile.reminder_template || `[알림] [고객명]님, 곧 도착 예정입니다. 잠시만 기다려주세요!`);
       setEditConfirmedTemplate(businessProfile.confirmed_template || `[예약 확정] [일시]에 예약이 완료되었습니다. - 클린브로 ([파트너전화번호])`);
       setEditMorningReminderTemplate(businessProfile.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`);
+      setEditAutoConfirmSms(businessProfile.auto_confirm_sms || false);
+      setEditAutoMorningReminders(businessProfile.auto_morning_reminders || false);
       setEditSolapiApiKey(userProfile?.solapi_api_key || businessProfile?.solapi_api_key || '');
       setEditSolapiApiSecret(userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret || '');
       setEditSolapiFromNumber(userProfile?.solapi_from_number || businessProfile?.solapi_from_number || '');
@@ -707,6 +713,8 @@ function App() {
       reminder_template: editReminderTemplate,
       confirmed_template: editConfirmedTemplate,
       morning_reminder_template: editMorningReminderTemplate,
+      auto_confirm_sms: editAutoConfirmSms,
+      auto_morning_reminders: editAutoMorningReminders
     };
 
     // 가이드 이미지 업로드 (에어컨)
@@ -2227,7 +2235,23 @@ function App() {
                   <label className="block text-[10px] font-bold text-slate-500 mb-1">당일 아침 8시 자동 알림</label>
                   <textarea value={editMorningReminderTemplate} onChange={e => setEditMorningReminderTemplate(e.target.value)} className="w-full h-20 p-3 text-xs bg-slate-50 border rounded-xl" />
                 </div>
-                <p className="text-[9px] text-slate-400 font-medium">* 사용 가능 치환자 : [고객명], [일시], [시간], [파트너전화번호]</p>
+                <div className="flex flex-col gap-2 mt-4">
+                  <label className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
+                    <div>
+                      <span className="text-xs font-bold text-slate-700">예약 즉시 자동 확정 문자</span>
+                      <p className="text-[9px] text-slate-400">새로운 예약 등록 시 고객에게 바로 문자를 보냅니다.</p>
+                    </div>
+                    <input type="checkbox" checked={editAutoConfirmSms} onChange={e => setEditAutoConfirmSms(e.target.checked)} className="w-5 h-5 accent-primary rounded" />
+                  </label>
+                  <label className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
+                    <div>
+                      <span className="text-xs font-bold text-slate-700">당일 아침 8시 자동 알림 발송</span>
+                      <p className="text-[9px] text-slate-400">당일 작업 대상자에게 아침 8시에 알림을 보냅니다. (서버 연동 필요)</p>
+                    </div>
+                    <input type="checkbox" checked={editAutoMorningReminders} onChange={e => setEditAutoMorningReminders(e.target.checked)} className="w-5 h-5 accent-primary rounded" />
+                  </label>
+                </div>
+                <p className="text-[9px] text-slate-400 font-medium px-1">* 사용 가능 치환자 : [고객명], [일시], [시간], [파트너전화번호]</p>
               </div>
 
               <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">

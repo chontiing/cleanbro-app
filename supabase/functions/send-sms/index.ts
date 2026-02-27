@@ -67,6 +67,10 @@ serve(async (req: any) => {
             const { data: business } = await supabase.from('businesses').select('*').eq('id', business_id).single()
             const { data: profile } = await supabase.from('profiles').select('*').eq('id', user_id).single()
 
+            if (!business?.auto_confirm_sms) {
+                return new Response(JSON.stringify({ message: 'Auto confirm SMS is disabled for this business' }), { status: 200 })
+            }
+
             const confirmedTpl = business?.confirmed_template || `[예약 확정] [일시]에 방문 예정입니다. - 클린브로 ([파트너전화번호])`
             const timeVal = book_time_type === '직접입력' ? book_time_custom : book_time_type
             const dateTimeStr = `${book_date} ${timeVal}`
@@ -97,10 +101,18 @@ serve(async (req: any) => {
             const localISOTime = (new Date(today.getTime() - offset)).toISOString()
             const todayStr = localISOTime.split('T')[0]
 
+            // 먼저 자동 발송이 활성화된 업체 리스트 가져오기
+            const { data: activeBusinesses } = await supabase.from('businesses').select('id').eq('auto_morning_reminders', true)
+            if (!activeBusinesses || activeBusinesses.length === 0) {
+                return new Response(JSON.stringify({ message: 'No businesses with auto_morning_reminders enabled' }), { status: 200 })
+            }
+            const activeBusinessIds = activeBusinesses.map((b: any) => b.id)
+
             const { data: bookings, error } = await supabase
                 .from('bookings')
                 .select('*')
                 .eq('book_date', todayStr)
+                .in('business_id', activeBusinessIds)
                 .or('sms_sent_reminder.is.null,sms_sent_reminder.eq.false')
 
             if (error) throw error
