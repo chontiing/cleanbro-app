@@ -94,7 +94,8 @@ function App() {
     auto_morning_reminders: false
   });
 
-  const [currentTab, setCurrentTab] = useState('calendar'); // calendar, add, list, stats, settings
+  const [currentTab, setCurrentTab] = useState('calendar'); // calendar, add, list, stats, settings, tax_expense, proshop, notice
+  const [taxExpenseSubTab, setTaxExpenseSubTab] = useState('expense'); // expense, tax
   const [customers, setCustomers] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [mapPopupMemo, setMapPopupMemo] = useState(null);
@@ -604,8 +605,8 @@ function App() {
   };
 
   const handleSaveBooking = async () => {
-    if (!customerName.trim() || !newPhone.trim() || !address.trim()) {
-      alert('성함, 전화번호, 기본 주소를 모두 입력해주세요.');
+    if (!newPhone.trim() || !address.trim()) {
+      alert('전화번호와 주소를 모두 입력해주세요.');
       return;
     }
 
@@ -1808,32 +1809,32 @@ function App() {
           )}
 
           {/* 대시보드 */}
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-[0_10px_30px_-5px_rgba(0,0,0,0.05)] border-0">
-            <div className="grid grid-cols-[1fr,1px,1.2fr] items-center gap-4">
-              <div className="cursor-pointer transition-transform active:scale-95" onClick={() => setCurrentTab('stats')}>
-                <p className="text-[11px] font-bold text-slate-400 mb-1 leading-none">오늘의 합계 매출</p>
-                <div className="text-2xl font-black text-slate-800 dark:text-white flex items-baseline truncate">
-                  {fmtNum(revenueStats.todaySales)}<span className="text-[13px] text-slate-400 font-bold ml-0.5">원</span>
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-[2.2rem] shadow-[0_10px_30px_-5px_rgba(0,0,0,0.05)] border-0">
+            <div className="flex items-center justify-between px-1">
+              <div className="cursor-pointer transition-transform active:scale-95 flex-1" onClick={() => setCurrentTab('stats')}>
+                <p className="text-[10px] font-bold text-slate-400 mb-0.5 leading-none">오늘의 합계 매출</p>
+                <div className="text-xl font-black text-slate-800 dark:text-white flex items-baseline truncate">
+                  {fmtNum(revenueStats.todaySales)}<span className="text-[11px] text-slate-400 font-bold ml-0.5">원</span>
                 </div>
               </div>
 
-              <div className="h-10 w-[1px] bg-slate-100 dark:bg-slate-700"></div>
+              <div className="h-8 w-[1px] bg-slate-100 dark:bg-slate-700 mx-3"></div>
 
-              <div className="cursor-pointer transition-transform active:scale-95" onClick={() => setCurrentTab('stats')}>
-                <p className="text-[11px] font-bold text-slate-400 mb-1 leading-none">이번 달 총 매출</p>
-                <div className="flex flex-col">
-                  <div className="text-2xl font-black text-primary flex items-baseline truncate">
-                    {fmtNum(revenueStats.monthSales)}<span className="text-[13px] text-slate-400 font-bold ml-0.5">원</span>
+              <div className="cursor-pointer transition-transform active:scale-95 flex-1 text-right" onClick={() => setCurrentTab('stats')}>
+                <p className="text-[10px] font-bold text-slate-400 mb-0.5 leading-none">이번 달 총 매출</p>
+                <div className="flex flex-col items-end">
+                  <div className="text-xl font-black text-primary flex items-baseline truncate">
+                    {fmtNum(revenueStats.monthSales)}<span className="text-[11px] text-slate-400 font-bold ml-0.5">원</span>
                   </div>
-                  <div className={`text-[10px] font-bold mt-0.5 flex items-center gap-0.5 ${revenueStats.growth >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
-                    {revenueStats.growth >= 0 ? '▲' : '▼'} {Math.abs(revenueStats.growth)}% <span className="text-slate-400 font-medium">전월대비</span>
+                  <div className={`text-[9px] font-bold mt-0.5 flex items-center gap-0.5 ${revenueStats.growth >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                    {revenueStats.growth >= 0 ? '▲' : '▼'} {Math.abs(revenueStats.growth)}% <span className="text-slate-400 font-medium ml-0.5">전월대비</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* 목표 달성 게이지 */}
-            <div className="mt-6 pt-5 border-t border-slate-50 dark:border-slate-700">
+            <div className="mt-4 pt-4 border-t border-slate-50 dark:border-slate-700">
               <div className="flex justify-between items-center mb-2">
                 <p className="text-xs font-bold text-slate-500 flex items-center gap-1">
                   <span className="material-symbols-outlined text-[16px] text-amber-500">military_tech</span>
@@ -1945,10 +1946,6 @@ function App() {
 
             <div className="space-y-3">
               <h3 className="text-sm font-bold text-primary border-b border-primary/20 pb-1">1. 기본 정보</h3>
-              <div>
-                <label className="block text-xs font-semibold text-slate-500 mb-1">성함</label>
-                <input type="text" value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="고객님 성함" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
-              </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">전화번호</label>
                 <input type="tel" value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="010-0000-0000" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
@@ -2536,19 +2533,19 @@ function App() {
               <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-6 border-0 shadow-sm space-y-4">
                 <div className="flex justify-between items-center px-1">
                   <h4 className="text-sm font-black text-slate-700 dark:text-white flex items-center gap-1">
-                    <span className="material-symbols-outlined text-[18px]">groups</span> 현재 합류한 팀원 ({teamMembers.length})
+                    <span className="material-symbols-outlined text-[18px]">groups</span> 현재 합류한 팀원 ({(teamMembers || []).length})
                   </h4>
                 </div>
                 <div className="divide-y divide-slate-50 dark:divide-slate-700">
-                  {teamMembers.map(member => (
+                  {(teamMembers || []).map(member => (
                     <div key={member.id} className="py-3 flex justify-between items-center">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-bold text-xs">
-                          {(member.nickname || member.email).substring(0, 1).toUpperCase()}
+                        <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-bold text-xs text-uppercase">
+                          {(member.nickname || member.email || 'P').substring(0, 1).toUpperCase()}
                         </div>
                         <div>
                           <p className="text-xs font-bold text-slate-800 dark:text-white">{member.nickname || '파트너'}</p>
-                          <p className="text-[9px] text-slate-400">{member.email}</p>
+                          <p className="text-[9px] text-slate-400">{member.email || '-'}</p>
                         </div>
                       </div>
                       <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${member.is_admin ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
@@ -2556,7 +2553,7 @@ function App() {
                       </span>
                     </div>
                   ))}
-                  {teamMembers.length === 0 && <p className="text-center text-[10px] text-slate-400 py-4 italic">아직 합류한 팀원이 없습니다.</p>}
+                  {(!teamMembers || teamMembers.length === 0) && <p className="text-center text-[10px] text-slate-400 py-4 italic">아직 합류한 팀원이 없습니다.</p>}
                 </div>
               </div>
             </div>
@@ -2586,264 +2583,229 @@ function App() {
         </main>
       )}
 
-      {/* ======================= [탭 5: 지출 관리] ======================= */}
-      {currentTab === 'expenses' && (
-        <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-6 animate-slide-up">
-          <h2 className="text-2xl font-black mb-2 flex items-center gap-2">
-            <span className="material-symbols-outlined text-primary">receipt_long</span> 지출 관리
-          </h2>
-
-          <form onSubmit={handleSaveExpense} className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-5 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">지출 금액 (원)</label>
-              <input type="text" required value={exAmount} onChange={e => setExAmount(fmtNum(e.target.value.replace(/[^0-9]/g, '')))} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-right focus:ring-2" placeholder="0" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">카테고리</label>
-                <select value={exCategory} onChange={e => setExCategory(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2">
-                  <option value="자재/장비">자재/장비</option>
-                  <option value="유류비">유류비</option>
-                  <option value="차량유지비">차량유지비</option>
-                  <option value="광고비">광고비</option>
-                  <option value="식대">식대</option>
-                  <option value="기타">기타</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">영수증 캡쳐 (선택)</label>
-                <input type="file" accept="image/*" onChange={e => setExReceiptFile(e.target.files[0])} className="w-full text-[10px] p-2 border rounded-xl" />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-500 mb-1">메모 (어디서 뭘 샀는지)</label>
-              <input type="text" value={exMemo} onChange={e => setExMemo(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 outline-none focus:ring-2" placeholder="예: 철물점 마스킹 테이프" />
-            </div>
-
-            <div className="flex gap-2">
-              <button disabled={isSavingExpense} type="submit" className="flex-1 py-3.5 bg-primary text-white font-bold rounded-xl active:scale-95 transition-transform flex justify-center gap-2 items-center">
-                <span className="material-symbols-outlined">{isSavingExpense ? 'sync' : editingExpenseId ? 'save' : 'add_circle'}</span>
-                {isSavingExpense ? '저장 중...' : editingExpenseId ? '지출 내역 수정 완료' : '지출 내역 등록'}
-              </button>
-              {editingExpenseId && (
-                <button
-                  type="button"
-                  onClick={() => { setEditingExpenseId(null); setExAmount(''); setExMemo(''); setExReceiptFile(null); }}
-                  className="px-4 bg-slate-200 text-slate-600 font-bold rounded-xl active:scale-95 transition-all"
-                >
-                  취소
-                </button>
-              )}
-            </div>
-          </form>
-
-          <div>
-            <h3 className="font-bold text-sm text-slate-600 mb-2 px-1">최근 지출 내역 ({expenses.length}건)</h3>
-            <div className="space-y-2">
-              {expenses.map(e => (
-                <div key={e.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-[0_2px_15px_-5px_rgba(0,0,0,0.05)] text-sm border-0 flex justify-between items-center group">
-                  <div className="flex-1">
-                    <span className="font-bold flex items-center gap-1">
-                      {e.memo || e.category}
-                      {e.receipt_url && <a href={e.receipt_url} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded ml-1 font-bold">영수증 보기</a>}
-                    </span>
-                    <span className="text-xs text-slate-400 block mt-1">{e.date_created} · {e.category}</span>
-                    <div className="flex gap-2 mt-2">
-                      <button onClick={() => handleEditExpense(e)} className="text-[10px] font-bold text-slate-400 hover:text-primary flex items-center gap-0.5">
-                        <span className="material-symbols-outlined text-[12px]">edit</span> 수정
-                      </button>
-                      <button onClick={() => handleDeleteExpense(e.id)} className="text-[10px] font-bold text-slate-400 hover:text-red-500 flex items-center gap-0.5">
-                        <span className="material-symbols-outlined text-[12px]">delete</span> 삭제
-                      </button>
-                    </div>
-                  </div>
-                  <div className="font-black text-red-500 text-right">
-                    {fmtNum(e.amount)}원
-                  </div>
-                </div>
-              ))}
-              {expenses.length === 0 && <p className="text-center text-xs text-slate-400 py-4">등록된 지출 내역이 없습니다.</p>}
-            </div>
-          </div>
-        </main>
-      )}
-
-      {/* ======================= [탭 6: 세무 대시보드] ======================= */}
-      {currentTab === 'tax' && (() => {
-        const taxInfo = calcTax();
-        const aiAdvice = getAiTaxAdvice();
-        const currentYear = new Date().getFullYear();
-        const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
-        const isTaxMonth = [1, 5, 7, 11].includes(taxMonth);
-        const taxAlertText = taxMonth === 1 || taxMonth === 7 ? "부가가치세 확정 신고 달입니다!" : taxMonth === 5 ? "종합소득세 신고 달입니다!" : taxMonth === 11 ? "종합소득세 중간예납 달입니다!" : "";
-        const isCurrentlyGeneral = businessProfile?.taxpayer_type === '일반과세자';
-
-        return (
-          <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-5 animate-slide-up pb-24">
+      {/* ======================= [탭 5/6: 지출 및 세무 관리] ======================= */}
+      {currentTab === 'tax_expense' && (
+        <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-6 animate-slide-up pb-32">
+          <div className="flex items-center justify-between mb-2">
             <h2 className="text-2xl font-black flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary">account_balance</span> 세무 및 절세 대시보드
+              <span className="material-symbols-outlined text-primary">account_balance_wallet</span> 지출 및 세무
             </h2>
+          </div>
 
-            <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-xl border-2 border-slate-100 dark:border-slate-700 shadow-sm">
-              <select value={taxYear} onChange={e => setTaxYear(Number(e.target.value))} className="bg-transparent font-bold text-center px-2 py-2 outline-none w-1/2 border-r dark:border-slate-700">
-                {years.map(y => <option key={y} value={y}>{y}년</option>)}
-              </select>
-              <select value={taxMonth} onChange={e => setTaxMonth(Number(e.target.value))} className="bg-transparent font-bold text-center px-2 py-2 outline-none w-1/2">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => <option key={m} value={m}>{m}월</option>)}
-              </select>
-            </div>
-
-            {isTaxMonth && (
-              <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-3 rounded-xl border border-red-200 dark:border-red-800/50 flex font-bold items-center gap-2 animate-pulse">
-                <span className="material-symbols-outlined">notification_important</span>
-                이 달은 {taxAlertText}
-              </div>
-            )}
-
-            <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0">
-              <p className="text-xs font-bold text-slate-400 text-center mb-1">선택 기간 예상 부가가치세</p>
-              <p className="text-[10px] text-primary bg-primary/10 w-fit mx-auto px-2 py-0.5 rounded-full font-bold mb-5">
-                현재 [{businessProfile.taxpayer_type || '간이과세자'}] 과세자 기준
-              </p>
-
-              <div className="space-y-4 mb-6">
-                <div className="flex justify-between items-center pb-3 border-b border-dashed border-slate-200 dark:border-slate-700">
-                  <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➕ 기간 내 매출 세액</span>
-                  <span className="font-black text-red-500">{fmtNum(taxInfo.salesTax)}원</span>
-                  <p className="w-full text-[10px] text-slate-400 mt-1 col-span-2 text-right">과세매출 합계: {fmtNum(taxInfo.taxableSales)}원</p>
-                </div>
-
-                <div className="flex justify-between items-center pb-3 border-b border-dashed border-slate-200 dark:border-slate-700">
-                  <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➖ 매입(지출) 공제 세액</span>
-                  <span className="font-black text-green-600">-{fmtNum(taxInfo.purchaseTax)}원</span>
-                  <p className="w-full text-[10px] text-slate-400 mt-1 col-span-2 text-right">등록된 총 지출액 합계: {fmtNum(taxInfo.thisMonthExpenses)}원</p>
-                </div>
-
-                {taxInfo.creditCardDeduction > 0 && (
-                  <div className="flex justify-between items-center pb-3 border-b border-dashed border-slate-200 dark:border-slate-700">
-                    <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➖ 신용카드 등 발행공제</span>
-                    <span className="font-black text-green-600">-{fmtNum(taxInfo.creditCardDeduction)}원</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-900 rounded-xl p-4 text-center border overflow-hidden relative">
-                <p className="text-xs font-bold text-slate-500 mb-1">최종 예상 납부 세액</p>
-                <p className="text-3xl font-black text-primary">{fmtNum(taxInfo.finalTax)}원</p>
-              </div>
-            </div>
-
-            <button onClick={exportToCSV} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl active:scale-95 transition-transform flex justify-center items-center gap-2 shadow-md">
-              <span className="material-symbols-outlined">mail</span>
-              {taxYear}년치 자료 엑셀(CSV) 저장 & 세무사 메일 보내기
+          {/* 서브 탭 카테고리 버튼 */}
+          <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
+            <button
+              onClick={() => setTaxExpenseSubTab('expense')}
+              className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${taxExpenseSubTab === 'expense' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <span className="material-symbols-outlined text-sm">receipt_long</span> 지출 관리
             </button>
+            <button
+              onClick={() => setTaxExpenseSubTab('tax')}
+              className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${taxExpenseSubTab === 'tax' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <span className="material-symbols-outlined text-sm">analytics</span> 세무 대시보드
+            </button>
+          </div>
 
-            {/* 부가세 환급 대상 분석 */}
-            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800/50 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]">
-              <h4 className="font-extrabold text-indigo-800 dark:text-indigo-400 text-base mb-3 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[20px]">recommend</span> 부가세 환급 대상 분석 (선택 기간)
-              </h4>
-              <p className="text-[10px] text-indigo-500 font-bold mb-3">
-                * 자재/장비, 유류비, 차량유지비, 광고비 카테고리에 해당하는 지출만 필터링합니다.
-              </p>
+          {/* --- 서브 탭 1: 지출 관리 --- */}
+          {taxExpenseSubTab === 'expense' && (
+            <div className="space-y-6 animate-fade-in">
+              <form onSubmit={handleSaveExpense} className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-5 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">지출 금액 (원)</label>
+                  <input type="text" required value={exAmount} onChange={e => setExAmount(fmtNum(e.target.value.replace(/[^0-9]/g, '')))} className="w-full bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-700 rounded-xl p-3 text-sm font-bold text-right focus:ring-2" placeholder="0" />
+                </div>
 
-              <div className="space-y-2">
-                {expenses
-                  .filter(e => e.date_created?.startsWith(`${taxYear}-${String(taxMonth).padStart(2, '0')}`))
-                  .filter(e => ['자재/장비', '유류비', '차량유지비', '광고비'].includes(e.category))
-                  .map(e => (
-                    <div key={e.id} className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-indigo-100 flex justify-between items-center text-sm">
-                      <div className="flex-1 overflow-hidden">
-                        <span className="font-bold flex items-center gap-1 truncate text-slate-700 dark:text-slate-300">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">카테고리</label>
+                    <select value={exCategory} onChange={e => setExCategory(e.target.value)} className="w-full bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2">
+                      <option value="자재/장비">자재/장비</option>
+                      <option value="유류비">유류비</option>
+                      <option value="차량유지비">차량유지비</option>
+                      <option value="광고비">광고비</option>
+                      <option value="식대">식대</option>
+                      <option value="기타">기타</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">영수증 캡쳐 (선택)</label>
+                    <input type="file" accept="image/*" onChange={e => setExReceiptFile(e.target.files[0])} className="w-full text-[10px] p-2 border rounded-xl" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">메모 (어디서 뭘 샀는지)</label>
+                  <input type="text" value={exMemo} onChange={e => setExMemo(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 outline-none focus:ring-2" placeholder="예: 철물점 마스킹 테이프" />
+                </div>
+
+                <div className="flex gap-2">
+                  <button disabled={isSavingExpense} type="submit" className="flex-1 py-3.5 bg-primary text-white font-bold rounded-xl active:scale-95 transition-transform flex justify-center gap-2 items-center">
+                    <span className="material-symbols-outlined">{isSavingExpense ? 'sync' : editingExpenseId ? 'save' : 'add_circle'}</span>
+                    {isSavingExpense ? '저장 중...' : editingExpenseId ? '지출 내역 수정 완료' : '지출 내역 등록'}
+                  </button>
+                  {editingExpenseId && (
+                    <button
+                      type="button"
+                      onClick={() => { setEditingExpenseId(null); setExAmount(''); setExMemo(''); setExReceiptFile(null); }}
+                      className="px-4 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl active:scale-95 transition-all"
+                    >
+                      취소
+                    </button>
+                  )}
+                </div>
+              </form>
+
+              <div>
+                <h3 className="font-bold text-sm text-slate-600 dark:text-slate-400 mb-2 px-1">최근 지출 내역 ({expenses.length}건)</h3>
+                <div className="space-y-2">
+                  {expenses.map(e => (
+                    <div key={e.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-[0_2px_15px_-5px_rgba(0,0,0,0.05)] text-sm border-0 flex justify-between items-center group">
+                      <div className="flex-1">
+                        <span className="font-bold flex items-center gap-1 text-slate-800 dark:text-slate-200">
                           {e.memo || e.category}
+                          {e.receipt_url && <a href={e.receipt_url} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded ml-1 font-bold">영수증 보기</a>}
                         </span>
-                        <span className="text-[10px] text-slate-400 block mt-0.5">{e.date_created} · {e.category}</span>
+                        <span className="text-xs text-slate-400 block mt-1">{e.date_created} · {e.category}</span>
+                        <div className="flex gap-2 mt-2">
+                          <button onClick={() => handleEditExpense(e)} className="text-[10px] font-bold text-slate-400 hover:text-primary flex items-center gap-0.5">
+                            <span className="material-symbols-outlined text-[12px]">edit</span> 수정
+                          </button>
+                          <button onClick={() => handleDeleteExpense(e.id)} className="text-[10px] font-bold text-slate-400 hover:text-red-500 flex items-center gap-0.5">
+                            <span className="material-symbols-outlined text-[12px]">delete</span> 삭제
+                          </button>
+                        </div>
                       </div>
-                      <div className="text-right ml-2 flex-shrink-0">
-                        <div className="font-black text-slate-600">{fmtNum(e.amount)}원</div>
-                        {e.receipt_url ? (
-                          <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1 py-0.5 rounded">
-                            환급 예상: {fmtNum(Math.floor(e.amount * 0.1))}원 (10%)
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-red-500 font-bold bg-red-50 px-1 py-0.5 rounded">
-                            🚨 증빙 보완 필요
-                          </span>
-                        )}
+                      <div className="font-black text-red-500 text-right">
+                        {fmtNum(e.amount)}원
                       </div>
                     </div>
                   ))}
-                {expenses
-                  .filter(e => e.date_created?.startsWith(`${taxYear}-${String(taxMonth).padStart(2, '0')}`))
-                  .filter(e => ['자재/장비', '유류비', '차량유지비', '광고비'].includes(e.category)).length === 0 && (
-                    <p className="text-center text-xs text-slate-400 py-3 bg-white/50 rounded-xl">해당 기간 환급 가능 지출이 없습니다.</p>
-                  )}
-              </div>
-            </div>
-
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]">
-              <h4 className="font-extrabold text-blue-800 dark:text-blue-400 text-base mb-3 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[20px]">smart_toy</span> AI 세무 전략 어드바이저
-              </h4>
-              <div className="space-y-3">
-                {aiAdvice.yrSales >= 70000000 && aiAdvice.yrSales < 104000000 && !isCurrentlyGeneral && (
-                  <p className="text-sm bg-white dark:bg-slate-800 p-3 rounded-xl border border-blue-100 dark:border-blue-800/50 leading-relaxed font-medium text-slate-700 dark:text-slate-300">
-                    <span className="text-red-500 font-bold mr-1">⚠️ 주의:</span>
-                    올해 누적 매출이 8천만 원에 근접했습니다. 내년에 <span className="font-bold underline">일반과세자로 강제 전환</span>될 가능성이 매우 높습니다. 매입 세금계산서를 철저히 준비하세요!
-                  </p>
-                )}
-                {aiAdvice.totalMoExp > 0 && aiAdvice.receiptRatio < 0.5 && (
-                  <p className="text-sm bg-white dark:bg-slate-800 p-3 rounded-xl border border-blue-100 dark:border-blue-800/50 leading-relaxed font-medium text-slate-700 dark:text-slate-300">
-                    <span className="text-orange-500 font-bold mr-1">💡 조언:</span>
-                    이번 달 지출 대비 수취한 증빙(영수증) 내역이 {Math.round(aiAdvice.receiptRatio * 100)}% 로 현저히 부족합니다! 자재 구입 시 꼭 세금계산서나 현금영수증(지출증빙용)을 챙기세요.
-                  </p>
-                )}
-                <p className="text-sm bg-white dark:bg-slate-800 p-3 rounded-xl border border-blue-100 dark:border-blue-800/50 leading-relaxed font-medium text-slate-700 dark:text-slate-300">
-                  <span className="text-blue-500 font-bold mr-1">📊 시뮬레이터:</span>
-                  만약 이번 달부터 <span className="font-bold">일반과세자</span>였다면, {isCurrentlyGeneral ? "현재와 동일한" : `예상 세액은 약 [${fmtNum(aiAdvice.simulatedGenTax)}원] 입니다.`}
-                  {!isCurrentlyGeneral && aiAdvice.simulatedGenTax < taxInfo.finalTax && " (현행 간이과세 유지보다 일반과세 전환 시 매입 공제 환급 혜택이 더 클 수 있습니다!)"}
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700/50 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)]">
-              <h4 className="font-extrabold text-yellow-800 dark:text-yellow-500 text-base mb-3 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[20px]">lightbulb</span> [청소업 특화] 절세 가이드
-              </h4>
-              <ul className="text-sm text-yellow-800 dark:text-yellow-600/90 space-y-2.5 list-disc pl-4 font-medium break-keep">
-                <li><span className="font-bold">고가의 청소 장비(고압세척기, 산업용 청소기 등)</span> 구입 시 반드시 세금계산서를 발급받으세요. 부가세 10% 전액 공제가 가능합니다.</li>
-                <li>청소업종 특성 상 <span className="font-bold">차량 유지비와 유류비</span> 비중이 높습니다. 홈택스에 사업자 카드를 등록하여 매입세액 공제를 극대화하세요!</li>
-                <li>오픈마켓(숨고, 미소 등) 플랫폼 이용 수수료 역시 국세청 홈택스에서 전자세금계산서로 자동 수취 가능 여부를 세팅해 두시면 편합니다.</li>
-                <li className="text-[11px] text-yellow-600/70 mt-3 list-none -ml-4">* 위 세액은 단순 부가가치세(10%) 계산으로, 추가 공제 비율이나 사업소득 종합소득세는 세무사와 상담을 권장합니다.</li>
-              </ul>
-            </div>
-
-            {/* 과세 유형 일괄 변경 섹션 (새로 추가) */}
-            <div className="bg-slate-100 dark:bg-slate-800 p-5 rounded-[1.5rem] mt-6 border-2 border-dashed border-slate-300">
-              <h4 className="font-bold text-sm mb-3 text-slate-600">⚠️ 과세 유형 일괄 소급 적용</h4>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="date" value={bulkStartDate} onChange={e => setBulkStartDate(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white" />
-                  <input type="date" value={bulkEndDate} onChange={e => setBulkEndDate(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white" />
+                  {expenses.length === 0 && <p className="text-center text-xs text-slate-400 py-4 italic">등록된 지출 내역이 없습니다.</p>}
                 </div>
-                <select value={bulkTaxType} onChange={e => setBulkTaxType(e.target.value)} className="w-full text-xs p-2 rounded-lg border bg-white">
-                  <option value="간이과세자">간이과세자</option>
-                  <option value="일반과세자">일반과세자</option>
-                </select>
-                <button
-                  onClick={handleBulkTaxUpdate}
-                  disabled={isBulking}
-                  className="w-full py-2 bg-slate-600 text-white text-xs font-bold rounded-lg hover:bg-slate-700 active:scale-95 transition-all"
-                >
-                  {isBulking ? '적용 중...' : '[일괄 적용] 선택 기간 데이터 변경'}
+              </div>
+            </div>
+          )}
+
+          {/* --- 서브 탭 2: 세무 대시보드 --- */}
+          {taxExpenseSubTab === 'tax' && (() => {
+            const taxInfo = calcTax();
+            const aiAdvice = getAiTaxAdvice();
+            const currentYear = new Date().getFullYear();
+            const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+            const isTaxMonth = [1, 5, 7, 11].includes(taxMonth);
+            const taxAlertText = taxMonth === 1 || taxMonth === 7 ? "부가가치세 확정 신고 달입니다!" : taxMonth === 5 ? "종합소득세 신고 달입니다!" : taxMonth === 11 ? "종합소득세 중간예납 달입니다!" : "";
+            const isCurrentlyGeneral = businessProfile?.taxpayer_type === '일반과세자';
+
+            return (
+              <div className="space-y-5 animate-fade-in">
+                <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-2 rounded-xl border-2 border-slate-100 dark:border-slate-700 shadow-sm">
+                  <select value={taxYear} onChange={e => setTaxYear(Number(e.target.value))} className="bg-transparent dark:text-white font-bold text-center px-2 py-2 outline-none w-1/2 border-r dark:border-slate-700">
+                    {years.map(y => <option key={y} value={y}>{y}년</option>)}
+                  </select>
+                  <select value={taxMonth} onChange={e => setTaxMonth(Number(e.target.value))} className="bg-transparent dark:text-white font-bold text-center px-2 py-2 outline-none w-1/2">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => <option key={m} value={m}>{m}월</option>)}
+                  </select>
+                </div>
+
+                {isTaxMonth && (
+                  <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-xl border border-red-200 dark:border-red-800/50 flex font-bold items-center gap-2 animate-pulse">
+                    <span className="material-symbols-outlined">notification_important</span>
+                    {taxAlertText}
+                  </div>
+                )}
+
+                <div className="bg-white dark:bg-slate-800 rounded-[2.2rem] p-6 shadow-sm border border-slate-50 dark:border-slate-700/50">
+                  <p className="text-xs font-bold text-slate-400 text-center mb-1">선택 기간 예상 부가가치세</p>
+                  <p className="text-[10px] text-primary bg-primary/10 w-fit mx-auto px-2 py-0.5 rounded-full font-bold mb-5">
+                    현재 [{businessProfile.taxpayer_type || '간이과세자'}] 과세자 기준
+                  </p>
+
+                  <div className="space-y-4 mb-6">
+                    <div className="flex justify-between items-center pb-3 border-b border-dashed border-slate-200 dark:border-slate-700">
+                      <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➕ 매출 세액</span>
+                      <div className="text-right">
+                        <span className="font-black text-red-500">{fmtNum(taxInfo.salesTax)}원</span>
+                        <p className="text-[9px] text-slate-400">과세매출: {fmtNum(taxInfo.taxableSales)}원</p>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pb-3 border-b border-dashed border-slate-200 dark:border-slate-700">
+                      <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➖ 매입(지출) 공제 세액</span>
+                      <div className="text-right">
+                        <span className="font-black text-green-600">-{fmtNum(taxInfo.purchaseTax)}원</span>
+                        <p className="text-[9px] text-slate-400">총 지출: {fmtNum(taxInfo.thisMonthExpenses)}원</p>
+                      </div>
+                    </div>
+
+                    {taxInfo.creditCardDeduction > 0 && (
+                      <div className="flex justify-between items-center pb-3 border-b border-dashed border-slate-200 dark:border-slate-700">
+                        <span className="text-sm font-bold text-slate-600 dark:text-slate-300">➖ 신용카드 발행공제</span>
+                        <span className="font-black text-green-600">-{fmtNum(taxInfo.creditCardDeduction)}원</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl p-4 text-center border dark:border-slate-700 overflow-hidden relative">
+                    <p className="text-xs font-bold text-slate-500 mb-1">최종 예상 납부 세액</p>
+                    <p className="text-3xl font-black text-primary">{fmtNum(taxInfo.finalTax)}원</p>
+                  </div>
+                </div>
+
+                <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800/50 p-5 rounded-[1.5rem] shadow-sm">
+                  <h4 className="font-black text-indigo-800 dark:text-indigo-400 text-base mb-3 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[20px]">recommend</span> 부가세 환급 대상 분석
+                  </h4>
+                  <div className="space-y-2">
+                    {expenses
+                      .filter(e => e.date_created?.startsWith(`${taxYear}-${String(taxMonth).padStart(2, '0')}`))
+                      .filter(e => ['자재/장비', '유류비', '차량유지비', '광고비'].includes(e.category))
+                      .map(e => (
+                        <div key={e.id} className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-indigo-100 dark:border-indigo-800/30 flex justify-between items-center text-sm">
+                          <div className="flex-1 overflow-hidden">
+                            <span className="font-bold flex items-center gap-1 truncate text-slate-700 dark:text-slate-300">{e.memo || e.category}</span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">{e.date_created} · {e.category}</span>
+                          </div>
+                          <div className="text-right ml-2 flex-shrink-0">
+                            <div className="font-black text-slate-600 dark:text-slate-400">{fmtNum(e.amount)}원</div>
+                            {e.receipt_url ? (
+                              <span className="text-[9px] text-indigo-600 font-bold bg-indigo-50 dark:bg-indigo-900/50 px-1 py-0.5 rounded">환급: {fmtNum(Math.floor(e.amount * 0.1))}원</span>
+                            ) : (
+                              <span className="text-[9px] text-red-500 font-bold bg-red-50 dark:bg-red-900/50 px-1 py-0.5 rounded">🚨 증빙 보완</span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    {expenses.filter(e => e.date_created?.startsWith(`${taxYear}-${String(taxMonth).padStart(2, '0')}`) && ['자재/장비', '유류비', '차량유지비', '광고비'].includes(e.category)).length === 0 && (
+                      <p className="text-center text-xs text-slate-400 py-3 italic bg-white/50 rounded-xl">환급 가능 지출이 없습니다.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-slate-800 text-white p-6 rounded-[1.5rem] space-y-4 shadow-lg">
+                  <h4 className="font-black flex items-center gap-2"><span className="material-symbols-outlined text-blue-400">smart_toy</span> AI 세무 전략 어드바이저</h4>
+                  <div className="space-y-3">
+                    {aiAdvice.yrSales >= 70000000 && aiAdvice.yrSales < 104000000 && !isCurrentlyGeneral && (
+                      <div className="bg-white/10 p-3 rounded-xl text-xs leading-relaxed font-medium">
+                        <span className="text-red-400 font-bold mr-1">⚠️ 주의:</span> 올해 누적 매출이 8천만 원에 근접했습니다. 내년에 <span className="font-black underline">일반과세자 전환</span> 가능성이 높으니 매입 세금계산서를 철저히 준비하세요!
+                      </div>
+                    )}
+                    <div className="bg-white/10 p-3 rounded-xl text-xs leading-relaxed font-medium">
+                      <span className="text-blue-400 font-bold mr-1">📊 일반과세 시뮬레이션:</span>
+                      이 기간부터 일반과세자였다면 예상 세액은 <span className="font-black text-blue-300">{fmtNum(aiAdvice.simulatedGenTax)}원</span> 입니다.
+                    </div>
+                  </div>
+                </div>
+
+                <button onClick={exportToCSV} className="w-full py-4 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-2xl active:scale-95 transition-all flex justify-center items-center gap-2 border dark:border-slate-600">
+                  <span className="material-symbols-outlined">mail</span> {taxYear}년치 자료 엑셀(CSV) 저장
                 </button>
               </div>
-            </div>
-          </main>
-        );
-      })()}
+            );
+          })()}
+        </main>
+      )}
 
       {/* ==========================================
           [지도/네비게이션 팝업]
@@ -2910,14 +2872,9 @@ function App() {
             <p className={`text-[9px] ${currentTab === 'stats' ? 'font-bold' : 'font-medium'}`}>통계</p>
           </button>
 
-          <button onClick={() => setCurrentTab('expenses')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'expenses' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
-            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'expenses' ? 'font-fill' : ''}`}>receipt_long</span>
-            <p className={`text-[9px] ${currentTab === 'expenses' ? 'font-bold' : 'font-medium'}`}>지출</p>
-          </button>
-
-          <button onClick={() => setCurrentTab('tax')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'tax' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
-            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'tax' ? 'font-fill' : ''}`}>account_balance</span>
-            <p className={`text-[9px] ${currentTab === 'tax' ? 'font-bold' : 'font-medium'}`}>세무</p>
+          <button onClick={() => setCurrentTab('tax_expense')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'tax_expense' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
+            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'tax_expense' ? 'font-fill' : ''}`}>account_balance_wallet</span>
+            <p className={`text-[9px] ${currentTab === 'tax_expense' ? 'font-bold' : 'font-medium'}`}>지출/세무</p>
           </button>
 
           <button onClick={() => setCurrentTab('proshop')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'proshop' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
@@ -3395,7 +3352,7 @@ function App() {
                 { icon: 'photo_camera', title: '📸 작업 보고서 및 발송', text: '항목의 [작업 완료 체크]를 눌러 전/후 사진을 등록하세요. 워터마크가 첨부된 사진과 완료 메시지가 고객에게 원클릭 전송됩니다.' },
                 { icon: 'sms', title: '💬 솔라피 자동 문자 연동', text: '설정에서 솔라피 API를 연동하면 예약 즉시 안내 문자 및 당일 아침 알림이 자동으로 발송되어 시간을 절약해 줍니다.' },
                 { icon: 'monitoring', title: '📊 매출 및 지출/세무 관리', text: '통계 탭에서 매출 추이를 확인하고, 세무 탭에서 예상 부가세 계산 및 엑셀 자료 다운로드가 가능합니다.' },
-                { icon: 'shopping_bag', title: '🛍️ 프로 샵 이용하기', text: '청소 전문가를 위한 고성능 장비를 엄선하여 최저가 링크를 제공합니다. 관리자 아이디는 상품 수정도 가능합니다.' },
+                { icon: 'shopping_bag', title: '🛍️ 프로 샵 이용하기', text: '청소 전문가를 위한 고성능 장비를 엄선하여 최저가 링크를 제공합니다.' },
                 { icon: 'install_mobile', title: '📱 앱 설치 (홈 화면 추가)', text: '아이폰(사파리 공유 > 홈 화면 추가), 안드로이드(크롬 메뉴 > 홈 화면 추가)를 통해 일반 앱처럼 사용하세요.' }
               ].map((guide, idx) => (
                 <div key={idx} className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
