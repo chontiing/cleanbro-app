@@ -128,6 +128,10 @@ function App() {
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState({ title: '', description: '', image_url: '', link_url: '', category: '에어컨', platform: '쿠팡', tag: '', price: '', stock: '' });
   const [productImageFile, setProductImageFile] = useState(null);
+
+  // 설치 가이드 및 온보딩 상태
+  const [activeInstallGuide, setActiveInstallGuide] = useState(null); // 'iphone', 'android', or null
+  const [hideNoticeAuto, setHideNoticeAuto] = useState(() => localStorage.getItem('hide_notice_v1') === 'true');
   const [isSavingProduct, setIsSavingProduct] = useState(false);
 
   // PWA 업데이트 감지용
@@ -170,6 +174,10 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      // 로그인 시 공지사항 자동 이동 로직 (한 번도 안 봤을 경우)
+      if (session && localStorage.getItem('hide_notice_v1') !== 'true') {
+        setCurrentTab('notice');
+      }
     });
 
     // 서비스 워커 등록 및 업데이트 감지
@@ -1545,37 +1553,105 @@ function App() {
               <button
                 disabled={authLoading}
                 type="submit"
-                className="w-full py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold text-[17px] tracking-wide shadow-xl shadow-blue-500/30 hover:from-blue-700 hover:to-indigo-700 hover:shadow-blue-600/40 active:scale-[0.98] transition-all flex items-center justify-center transform"
+                className="w-full py-5 rounded-[2rem] bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-black text-lg tracking-wide shadow-2xl shadow-blue-500/40 hover:from-blue-700 hover:to-indigo-700 active:scale-[0.97] transition-all flex items-center justify-center transform"
               >
                 {authLoading ? (
-                  <span className="material-symbols-outlined animate-spin text-xl">progress_activity</span>
+                  <span className="material-symbols-outlined animate-spin text-2xl">progress_activity</span>
                 ) : (
-                  isLoginMode ? '로그인' : '회원가입'
+                  isLoginMode ? '로그인' : '3초만에 회원가입 완료'
                 )}
               </button>
             </div>
           </form>
 
-          <div className="mt-8 text-center pt-6 border-t border-slate-100 flex flex-col gap-4">
-            <button
-              onClick={() => setIsLoginMode(!isLoginMode)}
-              type="button"
-              className="text-[14px] font-bold text-slate-500 hover:text-blue-600 transition-colors"
-            >
-              {isLoginMode ? '처음이신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
-            </button>
+          <div className="mt-12 text-center pt-8 border-t border-slate-100 flex flex-col gap-6">
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-[2rem] border border-slate-100 shadow-inner">
+              <p className="text-sm font-bold text-slate-400 mb-4">{isLoginMode ? '클린브로가 처음이신가요?' : '이미 계정이 있으신가요?'}</p>
+              <button
+                onClick={() => setIsLoginMode(!isLoginMode)}
+                type="button"
+                className="w-full py-4 px-6 rounded-2xl bg-white border-2 border-primary/20 text-primary font-black text-base hover:bg-primary hover:text-white transition-all shadow-sm active:scale-95"
+              >
+                {isLoginMode ? '🚀 파트너로 회원가입' : '🔑 로그인 화면으로'}
+              </button>
+            </div>
 
-            {/* 초대 코드 문의 버튼 */}
-            <button
-              onClick={() => {
-                const msg = encodeURIComponent('[클린브로 가입 문의] 안녕하세요! 클린브로 파트너 가입을 원합니다. 가입 절차와 초대 코드를 안내받을 수 있을까요?');
-                window.location.href = `sms:01053155184?body=${msg}`; // 대표님 번호로 연동
-              }}
-              className="py-3 px-4 bg-slate-100/50 rounded-xl text-[12px] font-bold text-slate-400 hover:bg-slate-200 transition-all flex items-center justify-center gap-2 border border-slate-100"
-            >
-              <span className="material-symbols-outlined text-[16px]">help</span>
-              가입 및 초대 코드 문의하기
-            </button>
+            {/* 설치 가이드 섹션 */}
+            <div className="space-y-3 pt-4">
+              <p className="text-xs font-black text-slate-400 mb-2">👇 아래 가이드를 눌러 바탕화면에 앱을 만드세요!</p>
+
+              {/* iPhone 가이드 */}
+              <div className="overflow-hidden bg-white rounded-2xl border border-slate-100 shadow-sm transition-all">
+                <button
+                  onClick={() => setActiveInstallGuide(activeInstallGuide === 'iphone' ? null : 'iphone')}
+                  className="w-full p-4 flex items-center justify-between font-bold text-slate-700"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-blue-500">app_shortcut</span>
+                    🍎 아이폰 사용자 설치 가이드
+                  </div>
+                  <span className="material-symbols-outlined transition-transform" style={{ transform: activeInstallGuide === 'iphone' ? 'rotate(180deg)' : 'none' }}>expand_more</span>
+                </button>
+                {activeInstallGuide === 'iphone' && (
+                  <div className="px-4 pb-6 pt-2 text-left animate-slide-down space-y-4">
+                    <div className="bg-blue-50/50 p-4 rounded-xl space-y-3 border border-blue-100/50">
+                      <p className="text-xs font-medium text-slate-600 flex items-start gap-2">
+                        <span className="bg-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 border text-[10px] font-bold">1</span>
+                        사파리(Safari) 앱으로 접속하세요! 🌐
+                      </p>
+                      <p className="text-xs font-medium text-slate-600 flex items-start gap-2">
+                        <span className="bg-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 border text-[10px] font-bold">2</span>
+                        하단 중앙의 <b>공유 버튼</b> [ ↑ ] 클릭 ⬆️
+                      </p>
+                      <p className="text-xs font-medium text-slate-600 flex items-start gap-2">
+                        <span className="bg-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 border text-[10px] font-bold">3</span>
+                        리스트를 올려 <b>'홈 화면에 추가'</b> [ + ] 선택 ➕
+                      </p>
+                      <p className="text-xs font-medium text-slate-600 flex items-start gap-2">
+                        <span className="bg-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 border text-[10px] font-bold">4</span>
+                        우측 상단 <b>추가</b> 클릭! 바탕화면에 아이콘 생성 ✨
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Android 가이드 */}
+              <div className="overflow-hidden bg-white rounded-2xl border border-slate-100 shadow-sm transition-all">
+                <button
+                  onClick={() => setActiveInstallGuide(activeInstallGuide === 'android' ? null : 'android')}
+                  className="w-full p-4 flex items-center justify-between font-bold text-slate-700"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-green-500">robot</span>
+                    🤖 삼성/안드로이드 사용자 가이드
+                  </div>
+                  <span className="material-symbols-outlined transition-transform" style={{ transform: activeInstallGuide === 'android' ? 'rotate(180deg)' : 'none' }}>expand_more</span>
+                </button>
+                {activeInstallGuide === 'android' && (
+                  <div className="px-4 pb-6 pt-2 text-left animate-slide-down space-y-4">
+                    <div className="bg-green-50/50 p-4 rounded-xl space-y-3 border border-green-100/50">
+                      <p className="text-xs font-medium text-slate-600 flex items-start gap-2">
+                        <span className="bg-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 border text-[10px] font-bold">1</span>
+                        크롬(Chrome) 앱으로 접속하세요! 🌐
+                      </p>
+                      <p className="text-xs font-medium text-slate-600 flex items-start gap-2">
+                        <span className="bg-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 border text-[10px] font-bold">2</span>
+                        우측 상단 <b>메뉴 버튼</b> [ ⋮ ] 클릭 ⋮
+                      </p>
+                      <p className="text-xs font-medium text-slate-600 flex items-start gap-2">
+                        <span className="bg-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 border text-[10px] font-bold">3</span>
+                        <b>'홈 화면에 추가'</b> 또는 <b>'앱 설치'</b> 선택 📲
+                      </p>
+                      <p className="text-xs font-medium text-slate-600 flex items-start gap-2">
+                        <span className="bg-white w-5 h-5 rounded-full flex items-center justify-center shrink-0 border text-[10px] font-bold">4</span>
+                        문구 확인 후 <b>추가/설정</b> 클릭 시 완료! ✨
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* 기기별 홈화면 추가 가이드 */}
@@ -3291,10 +3367,24 @@ function App() {
             </div>
           </div>
 
-          <div className="bg-slate-100 dark:bg-slate-800/50 p-6 rounded-2xl text-center space-y-2 mb-10">
-            <p className="text-xs font-bold text-slate-500">도움이 필요하신가요?</p>
+          <div className="bg-slate-100 dark:bg-slate-800/50 p-6 rounded-2xl text-center space-y-4 mb-10">
+            <label className="flex items-center justify-center gap-2 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={hideNoticeAuto}
+                onChange={e => {
+                  const val = e.target.checked;
+                  setHideNoticeAuto(val);
+                  if (val) localStorage.setItem('hide_notice_v1', 'true');
+                  else localStorage.removeItem('hide_notice_v1');
+                }}
+                className="w-4 h-4 accent-primary rounded border-slate-300"
+              />
+              <span className="text-[11px] font-bold text-slate-500 group-hover:text-primary transition-colors italic">다음 로그인부터는 가이드 자동 표시 안 함</span>
+            </label>
+            <div className="h-[1px] bg-slate-200 dark:bg-slate-700 w-1/4 mx-auto"></div>
             <p className="text-[10px] text-slate-400">버그 신고나 기능 제안은 언제든 환영합니다!</p>
-            <button onClick={() => window.location.href = 'tel:01053155184'} className="mt-2 text-primary text-xs font-black underline">고객센터 연결</button>
+            <button onClick={() => window.location.href = 'tel:01053155184'} className="mt-1 text-primary text-xs font-black underline">고객센터 연결</button>
           </div>
         </main>
       )}
