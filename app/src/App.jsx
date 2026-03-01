@@ -1330,7 +1330,7 @@ function App() {
               onClick={(e) => { e.stopPropagation(); setMapPopupMemo(c.address || c.memo); }}
               className={`font-bold text-base cursor-pointer hover:text-primary flex items-center transition-colors ${c.is_completed ? 'text-slate-500 line-through decoration-2' : 'text-slate-800 dark:text-slate-100'}`}
             >
-              {c.customer_name || (c.memo ? c.memo.split(' ')[0] : '고객')}
+              {c.customer_name || `${c.category || '기타'} (${c.product || '상세'})`}
               {c.address && <span className="text-[13px] font-medium text-slate-500 ml-1.5">({c.address.split(' ').slice(0, 2).join(' ')})</span>}
               <div className="flex items-center gap-1 ml-1.5">
                 <span className="material-symbols-outlined text-[16px] text-blue-500 bg-blue-50 p-0.5 rounded-full border border-blue-200">location_on</span>
@@ -2089,7 +2089,7 @@ function App() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1 mb-0 sm:mb-0.5">
                           <p className={`text-[9px] sm:text-xs font-black truncate ${c.is_completed ? 'text-slate-400 line-through decoration-1' : 'text-slate-800 dark:text-slate-100'}`}>
-                            {c.customer_name || '익명'}
+                            {c.customer_name || `${c.category || '기타'} (${c.product || '상세'})`}
                           </p>
                           {c.is_completed && <span className="material-symbols-outlined text-green-500 text-[12px] sm:text-[14px]">check_circle</span>}
                         </div>
@@ -2157,6 +2157,28 @@ function App() {
 
             <div className="space-y-3">
               <h3 className="text-sm font-bold text-primary border-b border-primary/20 pb-1">1. 기본 정보</h3>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">고객명 / 품목 선택</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={e => setCustomerName(e.target.value)}
+                    placeholder="이름 입력 (또는 우측 ▼ 클릭하여 카테고리 선택)"
+                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl p-3 pr-10 text-sm focus:ring-2 focus:ring-primary outline-none"
+                    list="category-presets"
+                  />
+                  <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">arrow_drop_down</span>
+                  <datalist id="category-presets">
+                    {Object.entries(CATEGORIES).map(([cat, prods]) => (
+                      <optgroup key={cat} label={cat}>
+                        <option value={cat}>{cat}</option>
+                        {prods.map(p => <option key={`${cat}-${p}`} value={`${cat} (${p})`}>{cat} ({p})</option>)}
+                      </optgroup>
+                    ))}
+                  </datalist>
+                </div>
+              </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 mb-1">전화번호</label>
                 <input type="tel" value={newPhone} onChange={e => setNewPhone(e.target.value)} placeholder="010-0000-0000" className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
