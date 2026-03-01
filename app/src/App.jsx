@@ -2094,6 +2094,12 @@ function App() {
                               확정
                             </span>
                           )}
+                          {c.sms_sent_reminder && (
+                            <span className="flex-shrink-0 flex items-center gap-0.5 px-1 py-0.5 bg-orange-50 text-orange-600 rounded-sm text-[6px] sm:text-[8px] font-black border border-orange-100 ml-0.5">
+                              <span className="material-symbols-outlined text-[8px] sm:text-[10px]">wb_twilight</span>
+                              아침
+                            </span>
+                          )}
                         </div>
                       </div>
                       <span className="material-symbols-outlined text-slate-300 text-[12px] sm:text-sm group-hover:translate-x-0.5 transition-transform">chevron_right</span>
