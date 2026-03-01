@@ -589,7 +589,7 @@ function App() {
     }
   }, [revenueStats.achieveRate, showConfettiOnce]);
 
-  const sendSolapiMmsLocally = async (to, text) => {
+  const sendSolapiMmsLocally = async (to, text, imageUrls = []) => {
     const activeApiKey = userProfile?.solapi_api_key || businessProfile?.solapi_api_key;
     const activeApiSecret = userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret;
     const activeFromNumber = userProfile?.solapi_from_number || userProfile?.sender_number || businessProfile?.solapi_from_number || businessProfile?.phone;
@@ -607,7 +607,8 @@ function App() {
         apiSecret: activeApiSecret,
         fromNumber: activeFromNumber,
         to: to.replace(/[^0-9]/g, ''),
-        text
+        text,
+        imageUrls
       }
     });
 
@@ -1496,22 +1497,29 @@ function App() {
       // MMS 발송 시트 제작 (실제 전송은 여기서 Edge Function 호출하거나 window.open 등으로 유도)
       // 여기서는 UI 로직에 따라 문자 발송 안내를 띄움
       // MMS 발송 시트 제작
-      let mmsText = businessProfile.default_completion_message || `[클린브로] 청소 작업 완료 안내\n안녕하세요, 고객님! {customer_name}님 {memo} 작업이 완료되었습니다.\n\n📸 작업 사진 확인하기:\n{after_url}\n\n만족하셨다면 리뷰 부탁드립니다!\n[리뷰링크]`;
+      let mmsText = businessProfile.default_completion_message || `[클린브로] 청소 작업 완료 안내\n안녕하세요, 고객님! {customer_name}님 {memo} 작업이 완료되었습니다.\n\n만족하셨다면 리뷰 부탁드립니다!\n[리뷰링크]`;
 
       mmsText = mmsText
         .replace(/{customer_name}/g, completionTarget.customer_name || '고객')
         .replace(/{memo}/g, completionTarget.memo || '')
-        .replace(/{after_url}/g, uploadResults.after[0] || '');
+        .replace(/{after_url}/g, uploadResults.after[0] || ''); // 링크는 백업으로 남겨둠
+
+      const mmsImages = [];
+      // 전/후 사진 및 가이드 사진 수집
+      if (uploadResults.after[0]) mmsImages.push(uploadResults.after[0]);
+      if (uploadResults.before[0]) mmsImages.push(uploadResults.before[0]);
 
       // 가이드 이미지 포함 로직
+      let guideUrl = '';
       if (completionTarget.category === '에어컨' && businessProfile.ac_guide_url) {
-        mmsText += `\n\n❄️ 에어컨 사후관리 가이드:\n${businessProfile.ac_guide_url}`;
+        guideUrl = businessProfile.ac_guide_url;
       } else if (completionTarget.category === '세탁기' && businessProfile.washer_guide_url) {
-        mmsText += `\n\n🧺 세탁기 사후관리 가이드:\n${businessProfile.washer_guide_url}`;
+        guideUrl = businessProfile.washer_guide_url;
       }
+      if (guideUrl) mmsImages.push(guideUrl);
 
       try {
-        await sendSolapiMmsLocally(completionTarget.phone, mmsText);
+        await sendSolapiMmsLocally(completionTarget.phone, mmsText, mmsImages);
         alert('작업이 완벽하게 완료되었으며 고객님께 알림 문자가 바로 발송되었습니다.');
       } catch (err) {
         console.error(err);

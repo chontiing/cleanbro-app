@@ -1,5 +1,5 @@
-// import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { encodeBase64 } from "https://deno.land/std@0.203.0/encoding/base64.ts"
 
 export const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -24,7 +24,44 @@ async function getSolapiSignature(apiSecret: string, date: string, salt: string)
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to: string, text: string) {
+async function uploadToSolapi(apiKey: string, apiSecret: string, imageUrl: string) {
+    try {
+        console.log(`[Solapi] Uploading image: ${imageUrl.substring(0, 50)}...`)
+        const response = await fetch(imageUrl)
+        if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`)
+        const arrayBuffer = await response.arrayBuffer()
+        const base64 = encodeBase64(new Uint8Array(arrayBuffer))
+
+        const date = new Date().toISOString()
+        const salt = crypto.randomUUID().replace(/-/g, '')
+        const signature = await getSolapiSignature(apiSecret, date, salt)
+        const authHeader = `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`
+
+        const uploadResponse = await fetch('https://api.solapi.com/storage/v1/files', {
+            method: 'POST',
+            headers: {
+                'Authorization': authHeader,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                file: base64,
+                type: 'MMS'
+            })
+        })
+
+        const result = await uploadResponse.json()
+        if (!uploadResponse.ok) {
+            console.error('Solapi Upload error:', JSON.stringify(result))
+            return null
+        }
+        return result.fileId
+    } catch (err: any) {
+        console.error('uploadToSolapi failed:', err.message)
+        return null
+    }
+}
+
+async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to: string, text: string, imageId?: string) {
     const date = new Date().toISOString()
     const salt = crypto.randomUUID().replace(/-/g, '')
     const signature = await getSolapiSignature(apiSecret, date, salt)
@@ -33,7 +70,7 @@ async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to
 
     const cleanTo = to.replace(/[^0-9]/g, '')
     const cleanFrom = fromNumber.replace(/[^0-9]/g, '')
-    console.log(`[Solapi] Sending request: From=${cleanFrom}, To=${cleanTo}, TextLength=${text.length}`)
+    console.log(`[Solapi] Sending request: From=${cleanFrom}, To=${cleanTo}, TextLength=${text.length}, hasImage=${!!imageId}`)
 
     const response = await fetch('https://api.solapi.com/messages/v4/send', {
         method: 'POST',
@@ -45,7 +82,8 @@ async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to
             message: {
                 to: cleanTo,
                 from: cleanFrom,
-                text
+                text,
+                imageId: imageId
             }
         })
     })
@@ -53,7 +91,6 @@ async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to
     const result = await response.json()
     if (!response.ok || (result.statusCode && ![2000, '2000'].includes(result.statusCode))) {
         console.error('Solapi Error RESPONSE:', JSON.stringify(result))
-        // Solapi 에러 메시지 추출 우선순위 적용
         const errorMsg = result.errorMessage ||
             result.message ||
             (result.messages && result.messages[0]?.reason) ||
@@ -197,15 +234,24 @@ Deno.serve(async (req) => {
 
         // 3. 직접 발송 모드: 프론트엔드에서 수동 호출 (CORS 우회 용도)
         if (payload.action === 'send_custom_sms') {
-            const { apiKey, apiSecret, fromNumber, to, text } = payload;
-            console.log(`[send_custom_sms] To: ${to}, From: ${fromNumber}, Text preview: ${text?.substring(0, 10)}...`)
+            const { apiKey, apiSecret, fromNumber, to, text, imageUrls } = payload;
+            console.log(`[send_custom_sms] To: ${to}, From: ${fromNumber}, Text preview: ${text?.substring(0, 10)}..., Images: ${imageUrls?.length || 0}`)
 
             if (!apiKey || !apiSecret || !fromNumber || !to || !text) {
                 return new Response(JSON.stringify({ error: 'Missing required parameters for send_custom_sms' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
             }
 
             try {
-                const result = await sendSms(apiKey, apiSecret, fromNumber, to, text);
+                let imageIds = []
+                if (imageUrls && imageUrls.length > 0) {
+                    // 최대 3장까지 지원 (통상적인 MMS 제한)
+                    for (const url of imageUrls.slice(0, 3)) {
+                        const uploadedId = await uploadToSolapi(apiKey, apiSecret, url)
+                        if (uploadedId) imageIds.push(uploadedId)
+                    }
+                }
+
+                const result = await sendSms(apiKey, apiSecret, fromNumber, to, text, imageIds[0]);
                 console.log('Custom SMS sent successfully:', result);
                 return new Response(JSON.stringify(result), {
                     status: 200,
