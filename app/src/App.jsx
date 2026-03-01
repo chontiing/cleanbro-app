@@ -151,6 +151,7 @@ function App() {
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
   const [showInAppBrowserWarning, setShowInAppBrowserWarning] = useState(false);
   const [isAndroid, setIsAndroid] = useState(false);
+  const [settingsMsgSubTab, setSettingsMsgSubTab] = useState('completion'); // completion, auto_sms
   const [settingsActiveMenu, setSettingsActiveMenu] = useState('main'); // main, profile, message, sms, invite, bulk
 
   // ==========================================
@@ -2337,29 +2338,15 @@ function App() {
               </button>
 
               <button
-                onClick={() => setSettingsActiveMenu('message')}
+                onClick={() => setSettingsActiveMenu('message_settings')}
                 className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
               >
                 <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                  <span className="material-symbols-outlined">chat</span>
+                  <span className="material-symbols-outlined">forum</span>
                 </div>
                 <div className="flex-1">
-                  <h4 className="font-bold text-slate-800 dark:text-slate-100">작업 완료 메시지 관리</h4>
-                  <p className="text-xs text-slate-400">알림 피드백 템플릿 및 가이드 설정</p>
-                </div>
-                <span className="material-symbols-outlined text-slate-300">chevron_right</span>
-              </button>
-
-              <button
-                onClick={() => setSettingsActiveMenu('sms')}
-                className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
-              >
-                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-colors">
-                  <span className="material-symbols-outlined">sms</span>
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-slate-800 dark:text-slate-100">템플릿 & 발송 설정</h4>
-                  <p className="text-xs text-slate-400">자동 문자 내용 및 솔라피 연동</p>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100">메시지 발송 및 템플릿 관리</h4>
+                  <p className="text-xs text-slate-400">자동 문자, 완료 메시지 및 솔라피 연동</p>
                 </div>
                 <span className="material-symbols-outlined text-slate-300">chevron_right</span>
               </button>
@@ -2472,84 +2459,109 @@ function App() {
             </form>
           )}
 
-          {/* --- 상세 메뉴 2: 작업 완료 메시지 --- */}
-          {settingsActiveMenu === 'message' && (
-            <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-6 animate-slide-up">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 mb-1">고객 전송 메시지 템플릿</label>
-                <textarea value={editDefaultMessage} onChange={e => setEditDefaultMessage(e.target.value)} className="w-full h-40 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none" />
-                <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
-                  * 사용 가능 치환자 : <b>{"{customer_name}"}</b>, <b>{"{memo}"}</b>, <b>{"{after_url}"}</b>
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-bold text-slate-500">❄️ 에어컨 관리 가이드</label>
-                  {businessProfile.ac_guide_url && <img src={businessProfile.ac_guide_url} className="w-full h-24 object-cover rounded-lg border" />}
-                  <input type="file" accept="image/*" onChange={e => setEditAcGuideFile(e.target.files[0])} className="w-full text-[9px]" />
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-bold text-slate-500">🧺 세탁기 관리 가이드</label>
-                  {businessProfile.washer_guide_url && <img src={businessProfile.washer_guide_url} className="w-full h-24 object-cover rounded-lg border" />}
-                  <input type="file" accept="image/*" onChange={e => setEditWasherGuideFile(e.target.files[0])} className="w-full text-[9px]" />
-                </div>
-              </div>
-              <button onClick={handleSaveProfile} disabled={isSavingSettings} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all">
-                {isSavingSettings ? '저장 중...' : '메시지 및 가이드 설정 저장'}
-              </button>
-            </div>
-          )}
-
-          {/* --- 상세 메뉴 3: SMS 템플릿 & 솔라피 --- */}
-          {settingsActiveMenu === 'sms' && (
-            <div className="space-y-5 animate-slide-up">
-              <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
-                <h3 className="text-sm font-bold text-primary">발송 템플릿 설정</h3>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1">예약 확정 자동 문자</label>
-                  <textarea value={editConfirmedTemplate} onChange={e => setEditConfirmedTemplate(e.target.value)} className="w-full h-20 p-3 text-xs bg-slate-50 border rounded-xl" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1">당일 아침 8시 자동 알림</label>
-                  <textarea value={editMorningReminderTemplate} onChange={e => setEditMorningReminderTemplate(e.target.value)} className="w-full h-20 p-3 text-xs bg-slate-50 border rounded-xl" />
-                </div>
-                <div className="flex flex-col gap-2 mt-4">
-                  <label className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
-                    <div>
-                      <span className="text-xs font-bold text-slate-700">예약 즉시 자동 확정 문자</span>
-                      <p className="text-[9px] text-slate-400">새로운 예약 등록 시 고객에게 바로 문자를 보냅니다.</p>
-                    </div>
-                    <input type="checkbox" checked={editAutoConfirmSms} onChange={e => setEditAutoConfirmSms(e.target.checked)} className="w-5 h-5 accent-primary rounded" />
-                  </label>
-                  <label className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
-                    <div>
-                      <span className="text-xs font-bold text-slate-700">당일 아침 8시 자동 알림 발송</span>
-                      <p className="text-[9px] text-slate-400">당일 작업 대상자에게 아침 8시에 알림을 보냅니다. (서버 연동 필요)</p>
-                    </div>
-                    <input type="checkbox" checked={editAutoMorningReminders} onChange={e => setEditAutoMorningReminders(e.target.checked)} className="w-5 h-5 accent-primary rounded" />
-                  </label>
-                </div>
-                <p className="text-[9px] text-slate-400 font-medium px-1">* 사용 가능 치환자 : [고객명], [일시], [시간], [파트너전화번호]</p>
+          {/* --- 상세 메뉴 2: 메시지 및 템플릿 통합 설정 --- */}
+          {settingsActiveMenu === 'message_settings' && (
+            <div className="space-y-6 animate-slide-up">
+              {/* 서브 탭 카테고리 버튼 */}
+              <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
+                <button
+                  onClick={() => setSettingsMsgSubTab('completion')}
+                  className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${settingsMsgSubTab === 'completion' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  <span className="material-symbols-outlined text-sm">task_alt</span> 작업 완료 보고
+                </button>
+                <button
+                  onClick={() => setSettingsMsgSubTab('auto_sms')}
+                  className={`flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${settingsMsgSubTab === 'auto_sms' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                >
+                  <span className="material-symbols-outlined text-sm">auto_mode</span> 자동문자/솔라피
+                </button>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-sm font-bold text-slate-700 dark:text-slate-100">솔라피 연동 (API)</h3>
-                  {solapiBalance !== null && <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded-full">잔액: {fmtNum(solapiBalance)}원</span>}
-                </div>
-                <div className="space-y-3">
-                  <input type="password" value={editSolapiApiKey} onChange={e => setEditSolapiApiKey(e.target.value)} className="w-full p-3 text-xs border rounded-xl bg-slate-50" placeholder="API Key" />
-                  <input type="password" value={editSolapiApiSecret} onChange={e => setEditSolapiApiSecret(e.target.value)} className="w-full p-3 text-xs border rounded-xl bg-slate-50" placeholder="API Secret" />
-                  <input type="text" value={editSolapiFromNumber} onChange={e => setEditSolapiFromNumber(e.target.value)} className="w-full p-3 text-xs border rounded-xl bg-slate-50" placeholder="발신번호 (010...)" />
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={handleSaveProfile} className="flex-[2] py-3 bg-slate-800 text-white font-bold rounded-xl active:scale-95 transition-all text-xs shadow-md">설정 저장</button>
-                  <button onClick={handleTestSms} disabled={isTestingSms} className="flex-1 py-3 bg-blue-50 text-blue-600 border border-blue-200 font-bold rounded-xl active:scale-95 transition-all text-xs shadow-sm flex items-center justify-center gap-1">
-                    {isTestingSms ? <span className="material-symbols-outlined animate-spin text-sm">sync</span> : <span className="material-symbols-outlined text-sm">send</span>}
-                    테스트
+              {settingsMsgSubTab === 'completion' && (
+                <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-6 animate-fade-in">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1">작업 완료 보고 메시지 템플릿</label>
+                    <textarea value={editDefaultMessage} onChange={e => setEditDefaultMessage(e.target.value)} className="w-full h-40 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-xl focus:ring-2 focus:ring-primary outline-none" />
+                    <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                      * 사용 가능 치환자 : <b>{"{customer_name}"}</b>, <b>{"{memo}"}</b>, <b>{"{after_url}"}</b>
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 text-center border-t pt-4 border-slate-50">
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-bold text-slate-500">❄️ 에어컨 관리 가이드</label>
+                      {businessProfile.ac_guide_url && <img src={businessProfile.ac_guide_url} className="w-full h-24 object-cover rounded-lg border shadow-sm" />}
+                      <input type="file" accept="image/*" onChange={e => setEditAcGuideFile(e.target.files[0])} className="w-full text-[9px]" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="block text-[10px] font-bold text-slate-500">🧺 세탁기 관리 가이드</label>
+                      {businessProfile.washer_guide_url && <img src={businessProfile.washer_guide_url} className="w-full h-24 object-cover rounded-lg border shadow-sm" />}
+                      <input type="file" accept="image/*" onChange={e => setEditWasherGuideFile(e.target.files[0])} className="w-full text-[9px]" />
+                    </div>
+                  </div>
+                  <button onClick={handleSaveProfile} disabled={isSavingSettings} className="w-full py-4 bg-primary text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+                    <span className="material-symbols-outlined">save</span>
+                    {isSavingSettings ? '저장 중...' : '메시지 및 가이드 설정 저장'}
                   </button>
                 </div>
-              </div>
+              )}
+
+              {settingsMsgSubTab === 'auto_sms' && (
+                <div className="space-y-5 animate-fade-in">
+                  <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
+                    <h3 className="text-sm font-black text-primary flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm">notifications_active</span> 발송 템플릿 설정
+                    </h3>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">예약 확정 자동 문자 (치환자: [고객명], [일시], [시간], [파트너전화번호])</label>
+                      <textarea value={editConfirmedTemplate} onChange={e => setEditConfirmedTemplate(e.target.value)} className="w-full h-20 p-3 text-xs bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">당일 아침 8시 자동 알림</label>
+                      <textarea value={editMorningReminderTemplate} onChange={e => setEditMorningReminderTemplate(e.target.value)} className="w-full h-20 p-3 text-xs bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium" />
+                    </div>
+                    <div className="flex flex-col gap-2 mt-4">
+                      <label className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors">
+                        <div>
+                          <span className="text-xs font-black text-slate-700 flex items-center gap-1"><span className="material-symbols-outlined text-sm text-blue-500">flash_on</span> 예약 즉시 자동 확정 문자</span>
+                          <p className="text-[9px] text-slate-400 font-bold mt-0.5">새로운 예약 등록 시 고객에게 바로 문자를 보냅니다.</p>
+                        </div>
+                        <input type="checkbox" checked={editAutoConfirmSms} onChange={e => setEditAutoConfirmSms(e.target.checked)} className="w-5 h-5 accent-primary rounded-lg" />
+                      </label>
+                      <label className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors">
+                        <div>
+                          <span className="text-xs font-black text-slate-700 flex items-center gap-1"><span className="material-symbols-outlined text-sm text-orange-500">alarm</span> 당일 아침 8시 자동 알림 발송</span>
+                          <p className="text-[9px] text-slate-400 font-bold mt-0.5">당일 작업 대상자에게 아침 8시에 알림을 보냅니다.</p>
+                        </div>
+                        <input type="checkbox" checked={editAutoMorningReminders} onChange={e => setEditAutoMorningReminders(e.target.checked)} className="w-5 h-5 accent-primary rounded-lg" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-sm font-black text-slate-700 dark:text-slate-100 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-sm">api</span> 솔라피 연동 (API)
+                      </h3>
+                      {solapiBalance !== null && <span className="text-[10px] font-black bg-primary text-white px-2 py-0.5 rounded-full shadow-sm">잔액: {fmtNum(solapiBalance)}원</span>}
+                    </div>
+                    <div className="space-y-3">
+                      <input type="password" value={editSolapiApiKey} onChange={e => setEditSolapiApiKey(e.target.value)} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 focus:border-primary transition-all text-xs" placeholder="솔라피 API Key" />
+                      <input type="password" value={editSolapiApiSecret} onChange={e => setEditSolapiApiSecret(e.target.value)} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 focus:border-primary transition-all text-xs" placeholder="솔라피 API Secret" />
+                      <input type="text" value={editSolapiFromNumber} onChange={e => setEditSolapiFromNumber(e.target.value)} className="w-full p-4 rounded-xl border-2 border-slate-100 bg-slate-50 focus:border-primary transition-all text-xs" placeholder="발신인 번호 (010...)" />
+                    </div>
+                    <div className="flex gap-2 border-t pt-4 border-slate-50">
+                      <button onClick={handleSaveProfile} disabled={isSavingSettings} className="flex-[2] py-4 bg-slate-800 text-white font-black rounded-xl active:scale-95 transition-all text-sm shadow-md">
+                        {isSavingSettings ? '저장 중...' : '설정 저장'}
+                      </button>
+                      <button onClick={handleTestSms} disabled={isTestingSms} className="flex-1 py-4 bg-blue-50 text-blue-600 border-2 border-blue-100 font-black rounded-xl active:scale-95 transition-all text-sm shadow-sm flex items-center justify-center gap-1">
+                        {isTestingSms ? <span className="material-symbols-outlined animate-spin text-sm">sync</span> : <span className="material-symbols-outlined text-sm">send</span>}
+                        테스트
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
