@@ -612,16 +612,23 @@ function App() {
     });
 
     if (error) {
+      console.error('Edge Function invoke detail:', error);
       let errorMsg = error.message;
-      try {
-        // FunctionsHttpError 인 경우 상세 에러 내용을 파싱 시도
-        if (error.context && typeof error.context.json === 'function') {
+
+      // FunctionsHttpError 혹은 일반적인 응답 바디 추출 시도
+      if (error.context?.json) {
+        try {
           const body = await error.context.json();
           if (body && body.error) errorMsg = body.error;
+          else if (body && body.message) errorMsg = body.message;
+        } catch (e) {
+          console.warn("Failed to parse error context json", e);
         }
-      } catch (e) {
-        console.error("Error parsing function error response", e);
+      } else if (error.details) {
+        // 일부 버전이나 상황에서 details에 에러 내용이 담김
+        errorMsg = typeof error.details === 'string' ? error.details : JSON.stringify(error.details);
       }
+
       throw new Error("Edge Function 호출 에러: " + errorMsg);
     }
     if (data?.error) throw new Error("문자 발송 실패: " + data.error);
@@ -1977,9 +1984,9 @@ function App() {
 
           {/* 캘린더 및 통합 리스트 구역 */}
           {/* 캘린더 및 통합 리스트 구역 */}
-          <div className="flex gap-2 sm:gap-6 items-start">
+          <div className="flex gap-1.5 sm:gap-6 items-start">
             {/* 왼쪽: 캘린더 */}
-            <div className="flex-[1.4] bg-white dark:bg-slate-800 p-2 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 mb-0">
+            <div className="flex-1 bg-white dark:bg-slate-800 p-1.5 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 mb-0">
               <div className="flex justify-between items-center mb-4">
                 <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1))} className="p-0.5 text-slate-400 hover:text-primary">
                   <span className="material-symbols-outlined text-base sm:text-xl">chevron_left</span>
@@ -1990,7 +1997,7 @@ function App() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-7 gap-0.5 sm:gap-1 text-center text-[9px] sm:text-xs font-bold text-slate-400 mb-1 sm:mb-2 text-center">
+              <div className="grid grid-cols-7 gap-0 text-center text-[8px] sm:text-xs font-bold text-slate-400 mb-1 sm:mb-2 text-center">
                 <div className="text-red-400">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div className="text-blue-400">토</div>
               </div>
 
@@ -2051,11 +2058,11 @@ function App() {
                         setSelectedDate(c.book_date);
                         setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
                       }}
-                      className={`flex items-center gap-1.5 sm:gap-3 p-1.5 sm:p-3 rounded-xl sm:rounded-2xl cursor-pointer transition-all border group ${selectedDate === c.book_date ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10 shadow-sm scale-[1.02]' : 'bg-slate-50 dark:bg-slate-900/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700'}`}
+                      className={`flex items-center gap-1 sm:gap-3 p-1 sm:p-3 rounded-xl sm:rounded-2xl cursor-pointer transition-all border group ${selectedDate === c.book_date ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10 shadow-sm scale-[1.02]' : 'bg-slate-50 dark:bg-slate-900/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700'}`}
                     >
-                      <div className={`min-w-[30px] sm:min-w-[40px] h-8 sm:h-10 rounded-lg sm:rounded-xl flex flex-col items-center justify-center text-[7px] sm:text-[10px] font-black transition-colors ${selectedDate === c.book_date ? 'bg-primary text-white' : 'bg-white dark:bg-slate-800 text-slate-500 shadow-sm'}`}>
+                      <div className={`min-w-[28px] sm:min-w-[40px] h-7 sm:h-10 rounded-lg sm:rounded-xl flex flex-col items-center justify-center text-[6px] sm:text-[10px] font-black transition-colors ${selectedDate === c.book_date ? 'bg-primary text-white' : 'bg-white dark:bg-slate-800 text-slate-500 shadow-sm'}`}>
                         <span className="opacity-60">{c.book_date.split('-')[1]}월</span>
-                        <span className="text-[10px] sm:text-sm mt-[-2px]">{c.book_date.split('-')[2]}일</span>
+                        <span className="text-[9px] sm:text-sm mt-[-2px]">{c.book_date.split('-')[2]}일</span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1 mb-0 sm:mb-0.5">
