@@ -705,6 +705,7 @@ function App() {
               .replace(/\[파트너전화번호\]/g, senderPhone);
             await sendSolapiMmsLocally(entry.phone, msg);
             await supabase.from('bookings').update({ sms_sent_initial: true }).eq('id', data[0].id);
+            await fetchCustomers(); // UI 즉시 반영
           }
         } catch (err) {
           console.error('예약 확정 자동 문자 발송 실패:', err);
