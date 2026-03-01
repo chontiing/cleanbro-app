@@ -115,6 +115,15 @@ function App() {
   const [afterFiles, setAfterFiles] = useState([]);
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
 
+  // 블로그 초안 생성 관련 상태
+  const [showBlogDraftModal, setShowBlogDraftModal] = useState(false);
+  const [blogDraft, setBlogDraft] = useState(null);       // { title, body, tags, photoAltTexts }
+  const [blogDraftImages, setBlogDraftImages] = useState([]);  // image URLs for the draft
+  const [blogDraftTarget, setBlogDraftTarget] = useState(null);
+  const [isGeneratingBlog, setIsGeneratingBlog] = useState(false);
+  const [isPublishingBlog, setIsPublishingBlog] = useState(false);
+  const BOT_URL = 'http://localhost:8765';  // Python bot address
+
   // 파트너(개별) 프로필 추가 정보 및 솔라피
   const [userProfile, setUserProfile] = useState({});
   const [solapiBalance, setSolapiBalance] = useState(null);
@@ -636,6 +645,68 @@ function App() {
 
     // Solapi의 응답 구조에 따라 성공 여부 판단 (보통 statusCode 2000이나 null)
     return data;
+  };
+
+  // ===========================================
+  // [블로그 초안 생성 (Gemini Vision AI)]
+  // ===========================================
+  const generateBlogDraft = async (imageUrls, bookingInfo) => {
+    setIsGeneratingBlog(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-blog-draft', {
+        body: {
+          imageUrls,
+          category: bookingInfo.category,
+          product: bookingInfo.product,
+          address: bookingInfo.address,
+          customerName: bookingInfo.customer_name,
+          memo: bookingInfo.memo,
+          businessProfile: {
+            company_name: businessProfile.company_name,
+            qualifications: '삼성 가전 전문 세첵 교육 과정 이수 / 에어콘 설치 자격증 보유',
+          },
+        }
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      if (!data?.draft) throw new Error('응답 데이터가 비어있습니다.');
+      setBlogDraft(data.draft);
+    } finally {
+      setIsGeneratingBlog(false);
+    }
+  };
+
+  // ===========================================
+  // [네이버 블로그 발행 (븇 호출)]
+  // ===========================================
+  const publishToBlog = async () => {
+    if (!blogDraft) return;
+    setIsPublishingBlog(true);
+    try {
+      const res = await fetch(`${BOT_URL}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: blogDraft.title,
+          body: blogDraft.body,
+          tags: blogDraft.tags,
+          photo_alt_texts: blogDraft.photoAltTexts || [],
+          image_urls: blogDraftImages,
+          category: blogDraftTarget?.category,
+          product: blogDraftTarget?.product,
+          address: blogDraftTarget?.address,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.detail || '발행 실패');
+      alert(`네이버 블로그에 성공적으로 발행되었습니다!\n\n포스팅 URL: ${result.published_url || '확인 불가'}`);
+      setShowBlogDraftModal(false);
+      setBlogDraft(null);
+    } catch (err) {
+      alert('만약 Python 봇이 실행중이지 않다면 http://localhost:8765 에서 naver_blog_bot.py를 먼저 실행해주세요.\n\n오류: ' + err.message);
+    } finally {
+      setIsPublishingBlog(false);
+    }
   };
 
   const handleSaveBooking = async () => {
@@ -1532,6 +1603,20 @@ function App() {
       setShowCompletionModal(false);
       setBeforeFiles([]); setAfterFiles([]);
       fetchCustomers();
+
+      // 블로그 초안 생성 제안
+      const allUploadedImages = [...uploadResults.before, ...uploadResults.after];
+      if (allUploadedImages.length > 0) {
+        const wantBlog = window.confirm('✨ 블로그에 사진을 바탕으로 AI가 자동으로 포스팅 초안을 작성할까요? (Gemini 사진 분석)');
+        if (wantBlog) {
+          setBlogDraftTarget(completionTarget);
+          setBlogDraftImages(allUploadedImages);
+          setBlogDraft(null);
+          setShowBlogDraftModal(true);
+          // 비동기로 초안 생성 시작
+          generateBlogDraft(allUploadedImages, completionTarget);
+        }
+      }
     } catch (err) {
       alert('저장 중 오류: ' + err.message);
     } finally {
@@ -3652,6 +3737,43 @@ function App() {
             <button onClick={() => window.location.href = 'tel:01053155184'} className="mt-1 text-primary text-xs font-black underline">고객센터 연결</button>
           </div>
         </main>
+      )}
+      {/* ========================= [블로그 초안 승인 모달] ========================= */}
+      {showBlogDraftModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-end sm:items-center justify-center p-3 sm:p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-[2rem] w-full max-w-2xl shadow-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="material-symbols-outlined text-white text-[28px]">article</span>
+                <div><h3 className="font-black text-white text-lg">AI 블로그 초안</h3><p className="text-blue-200 text-[11px]">Gemini AI가 작성했습니다 · 수정 후 발행 승인</p></div>
+              </div>
+              <button onClick={() => { setShowBlogDraftModal(false); setBlogDraft(null); }} className="text-white/70 hover:text-white p-2 rounded-xl transition-colors"><span className="material-symbols-outlined">close</span></button>
+            </div>
+            <div className="p-5 overflow-y-auto max-h-[65vh] space-y-4">
+              {isGeneratingBlog ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-4">
+                  <span className="material-symbols-outlined animate-spin text-primary text-[48px]">progress_activity</span>
+                  <p className="font-bold text-slate-600">AI가 사진을 분석하여 SEO 초안을 작성 중입니다...</p>
+                </div>
+              ) : blogDraft ? (
+                <>
+                  <div><label className="block text-xs font-bold text-slate-500 mb-1">📌 포스팅 제목</label><input type="text" value={blogDraft.title} onChange={e => setBlogDraft({ ...blogDraft, title: e.target.value })} className="w-full border-2 border-blue-100 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-primary outline-none bg-slate-50" /></div>
+                  <div><label className="block text-xs font-bold text-slate-500 mb-1">📝 본문</label><textarea rows={10} value={blogDraft.body} onChange={e => setBlogDraft({ ...blogDraft, body: e.target.value })} className="w-full border-2 border-slate-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none bg-slate-50 font-medium leading-relaxed" /></div>
+                  <div><label className="block text-xs font-bold text-slate-500 mb-1">🏷 해시태그</label><div className="flex flex-wrap gap-2">{(blogDraft.tags || []).map((tag, i) => <span key={i} className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold border border-blue-100">#{tag.replace(/^#/, '')}</span>)}</div></div>
+                  {blogDraftImages.length > 0 && <div><label className="block text-xs font-bold text-slate-500 mb-2">📸 첨부 사진 ({blogDraftImages.length}장)</label><div className="flex gap-2 overflow-x-auto pb-1">{blogDraftImages.map((url, i) => <img key={i} src={url} alt={`photo-${i}`} className="w-20 h-20 object-cover rounded-xl border flex-shrink-0 shadow-sm" />)}</div></div>}
+                </>
+              ) : (
+                <div className="text-center py-10 text-slate-400"><span className="material-symbols-outlined text-[40px] opacity-20">error</span><p className="text-sm font-bold mt-2">초안 생성에 실패했습니다.</p></div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-100 flex gap-3">
+              <button onClick={() => { setShowBlogDraftModal(false); setBlogDraft(null); }} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm active:scale-95">취소</button>
+              <button onClick={publishToBlog} disabled={!blogDraft || isPublishingBlog || isGeneratingBlog} className="flex-[2] py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-black text-sm shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
+                {isPublishingBlog ? (<><span className="material-symbols-outlined animate-spin text-sm">sync</span>발행 중...</>) : (<><span className="material-symbols-outlined text-sm">publish</span>네이버 블로그 발행 승인</>)}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
