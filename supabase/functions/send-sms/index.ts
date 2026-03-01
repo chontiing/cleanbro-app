@@ -31,6 +31,10 @@ async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to
 
     const authHeader = `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`
 
+    const cleanTo = to.replace(/[^0-9]/g, '')
+    const cleanFrom = fromNumber.replace(/[^0-9]/g, '')
+    console.log(`[Solapi] Sending request: From=${cleanFrom}, To=${cleanTo}, TextLength=${text.length}`)
+
     const response = await fetch('https://api.solapi.com/messages/v4/send', {
         method: 'POST',
         headers: {
@@ -39,8 +43,8 @@ async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to
         },
         body: JSON.stringify({
             messages: [{
-                to: to.replace(/[^0-9]/g, ''),
-                from: fromNumber.replace(/[^0-9]/g, ''),
+                to: cleanTo,
+                from: cleanFrom,
                 text
             }]
         })
@@ -67,7 +71,7 @@ Deno.serve(async (req) => {
 
     try {
         const payload = await req.json()
-        console.log('Received payload:', payload)
+        console.log('Received payload action:', payload.action || payload.type || 'unknown')
 
         // Supabase Admin Client
         const supabase = createClient(
@@ -194,6 +198,7 @@ Deno.serve(async (req) => {
         // 3. 직접 발송 모드: 프론트엔드에서 수동 호출 (CORS 우회 용도)
         if (payload.action === 'send_custom_sms') {
             const { apiKey, apiSecret, fromNumber, to, text } = payload;
+            console.log(`[send_custom_sms] To: ${to}, From: ${fromNumber}, Text preview: ${text?.substring(0, 10)}...`)
 
             if (!apiKey || !apiSecret || !fromNumber || !to || !text) {
                 return new Response(JSON.stringify({ error: 'Missing required parameters for send_custom_sms' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });

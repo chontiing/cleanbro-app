@@ -592,7 +592,9 @@ function App() {
   const sendSolapiMmsLocally = async (to, text) => {
     const activeApiKey = userProfile?.solapi_api_key || businessProfile?.solapi_api_key;
     const activeApiSecret = userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret;
-    const activeFromNumber = userProfile?.solapi_from_number || businessProfile?.solapi_from_number;
+    const activeFromNumber = userProfile?.solapi_from_number || userProfile?.sender_number || businessProfile?.solapi_from_number || businessProfile?.phone;
+
+    console.log('Attempting SMS send with:', { hasKey: !!activeApiKey, hasSecret: !!activeApiSecret, from: activeFromNumber, to: to });
 
     if (!activeApiKey || !activeApiSecret || !activeFromNumber) {
       throw new Error("솔라피 연동 설정(API 키, 시크릿, 발신번호)을 확인해주세요.");
@@ -1974,26 +1976,27 @@ function App() {
           </div>
 
           {/* 캘린더 및 통합 리스트 구역 */}
-          <div className="lg:flex lg:gap-6 lg:items-start">
+          {/* 캘린더 및 통합 리스트 구역 */}
+          <div className="flex gap-2 sm:gap-6 items-start">
             {/* 왼쪽: 캘린더 */}
-            <div className="flex-1 lg:flex-[1.6] bg-white dark:bg-slate-800 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 mb-4 lg:mb-0">
+            <div className="flex-[1.4] bg-white dark:bg-slate-800 p-2 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 mb-0">
               <div className="flex justify-between items-center mb-4">
-                <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1))} className="p-1 text-slate-400 hover:text-primary">
-                  <span className="material-symbols-outlined">chevron_left</span>
+                <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1))} className="p-0.5 text-slate-400 hover:text-primary">
+                  <span className="material-symbols-outlined text-base sm:text-xl">chevron_left</span>
                 </button>
-                <h2 className="font-bold text-lg">{calDate.getFullYear()}년 {calDate.getMonth() + 1}월</h2>
-                <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1))} className="p-1 text-slate-400 hover:text-primary">
-                  <span className="material-symbols-outlined">chevron_right</span>
+                <h2 className="font-bold text-xs sm:text-lg">{calDate.getFullYear()}년 {calDate.getMonth() + 1}월</h2>
+                <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1))} className="p-0.5 text-slate-400 hover:text-primary">
+                  <span className="material-symbols-outlined text-base sm:text-xl">chevron_right</span>
                 </button>
               </div>
 
-              <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 mb-2">
+              <div className="grid grid-cols-7 gap-0.5 sm:gap-1 text-center text-[9px] sm:text-xs font-bold text-slate-400 mb-1 sm:mb-2 text-center">
                 <div className="text-red-400">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div className="text-blue-400">토</div>
               </div>
 
               <div className="grid grid-cols-7 gap-1">
                 {getCalendarDays().map((dStr, idx) => {
-                  if (!dStr) return <div key={`empty-${idx}`} className="h-14"></div>;
+                  if (!dStr) return <div key={`empty-${idx}`} className="h-10 sm:h-14"></div>;
 
                   const dList = customers.filter(c => c.book_date === dStr);
                   const hasMorning = dList.some(c => c.book_time_type === '오전' || (parseInt((c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type)?.split(':')[0]) < 12));
@@ -2006,17 +2009,17 @@ function App() {
                     <div
                       key={dStr}
                       onClick={() => setSelectedDate(dStr)}
-                      className={`h-14 flex flex-col items-center pt-1 border relative cursor-pointer transition-colors rounded-xl
+                      className={`h-10 sm:h-14 flex flex-col items-center pt-0.5 sm:pt-1 border relative cursor-pointer transition-colors rounded-lg sm:rounded-xl
                         ${isSelected ? 'bg-primary/10 border-primary ring-1 ring-primary' : 'bg-slate-50 dark:bg-slate-900 border-transparent hover:bg-slate-100'}
                       `}
                     >
-                      <span className={`text-sm font-semibold ${dObj.getDay() === 0 ? 'text-red-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-700 dark:text-slate-300'} ${isToday && !isSelected ? 'underline decoration-primary decoration-2 underline-offset-4' : ''}`}>
+                      <span className={`text-[10px] sm:text-sm font-semibold ${dObj.getDay() === 0 ? 'text-red-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-700 dark:text-slate-300'} ${isToday && !isSelected ? 'underline decoration-primary decoration-2 underline-offset-4' : ''}`}>
                         {dObj.getDate()}
                       </span>
-                      <div className="flex gap-0.5 mt-1 flex-wrap justify-center px-0.5">
-                        {hasMorning && <span className="w-1.5 h-1.5 rounded-full bg-orange-400"></span>}
-                        {hasAfternoon && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>}
-                        {dList.length > 0 && !hasMorning && !hasAfternoon && <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>}
+                      <div className="flex gap-0.5 mt-0.5 sm:mt-1 flex-wrap justify-center px-0.5">
+                        {hasMorning && <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-orange-400"></span>}
+                        {hasAfternoon && <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-indigo-400"></span>}
+                        {dList.length > 0 && !hasMorning && !hasAfternoon && <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-slate-400"></span>}
                       </div>
                     </div>
                   );
@@ -2024,14 +2027,14 @@ function App() {
               </div>
             </div>
 
-            {/* 오른쪽: 이달의 전체 리스트 (LG 이상에서 더 돋보임) */}
-            <div className="flex-[1] bg-white dark:bg-slate-800 p-6 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 h-[430px] flex flex-col">
-              <h3 className="font-black text-sm text-slate-700 dark:text-slate-300 mb-4 flex items-center justify-between px-1">
-                <span className="flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[18px] text-primary">event_note</span>
-                  {calDate.getMonth() + 1}월 전체 일정
+            {/* 오른쪽: 이달의 전체 리스트 */}
+            <div className="flex-1 bg-white dark:bg-slate-800 p-2 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 h-[300px] sm:h-[430px] flex flex-col min-w-0">
+              <h3 className="font-black text-[10px] sm:text-sm text-slate-700 dark:text-slate-300 mb-2 sm:mb-4 flex items-center justify-between px-0.5">
+                <span className="flex items-center gap-1 sm:gap-1.5 truncate">
+                  <span className="material-symbols-outlined text-[14px] sm:text-[18px] text-primary">event_note</span>
+                  {calDate.getMonth() + 1}월 일정
                 </span>
-                <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full font-bold">{monthlyCalendarList.length}건</span>
+                <span className="text-[8px] sm:text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-full font-bold">{monthlyCalendarList.length}건</span>
               </h3>
 
               <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
@@ -2048,24 +2051,24 @@ function App() {
                         setSelectedDate(c.book_date);
                         setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
                       }}
-                      className={`flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-all border group ${selectedDate === c.book_date ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10 shadow-sm scale-[1.02]' : 'bg-slate-50 dark:bg-slate-900/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700'}`}
+                      className={`flex items-center gap-1.5 sm:gap-3 p-1.5 sm:p-3 rounded-xl sm:rounded-2xl cursor-pointer transition-all border group ${selectedDate === c.book_date ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10 shadow-sm scale-[1.02]' : 'bg-slate-50 dark:bg-slate-900/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700'}`}
                     >
-                      <div className={`min-w-[40px] h-10 rounded-xl flex flex-col items-center justify-center text-[10px] font-black transition-colors ${selectedDate === c.book_date ? 'bg-primary text-white' : 'bg-white dark:bg-slate-800 text-slate-500 shadow-sm'}`}>
+                      <div className={`min-w-[30px] sm:min-w-[40px] h-8 sm:h-10 rounded-lg sm:rounded-xl flex flex-col items-center justify-center text-[7px] sm:text-[10px] font-black transition-colors ${selectedDate === c.book_date ? 'bg-primary text-white' : 'bg-white dark:bg-slate-800 text-slate-500 shadow-sm'}`}>
                         <span className="opacity-60">{c.book_date.split('-')[1]}월</span>
-                        <span className="text-sm mt-[-2px]">{c.book_date.split('-')[2]}일</span>
+                        <span className="text-[10px] sm:text-sm mt-[-2px]">{c.book_date.split('-')[2]}일</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <p className={`text-xs font-black truncate ${c.is_completed ? 'text-slate-400 line-through' : 'text-slate-800 dark:text-slate-100'}`}>
-                            {c.customer_name || '익명 고객'}
+                        <div className="flex items-center gap-1 mb-0 sm:mb-0.5">
+                          <p className={`text-[9px] sm:text-xs font-black truncate ${c.is_completed ? 'text-slate-400 line-through decoration-1' : 'text-slate-800 dark:text-slate-100'}`}>
+                            {c.customer_name || '익명'}
                           </p>
-                          {c.is_completed && <span className="material-symbols-outlined text-green-500 text-[14px]">check_circle</span>}
+                          {c.is_completed && <span className="material-symbols-outlined text-green-500 text-[12px] sm:text-[14px]">check_circle</span>}
                         </div>
-                        <p className="text-[10px] text-slate-400 font-bold truncate">
-                          <span className="text-primary/70">{c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type}</span> • {c.memo || c.product}
+                        <p className="text-[7px] sm:text-[10px] text-slate-400 font-bold truncate">
+                          <span className="text-primary/70">{c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type}</span>
                         </p>
                       </div>
-                      <span className="material-symbols-outlined text-slate-300 text-sm group-hover:translate-x-0.5 transition-transform">chevron_right</span>
+                      <span className="material-symbols-outlined text-slate-300 text-[12px] sm:text-sm group-hover:translate-x-0.5 transition-transform">chevron_right</span>
                     </div>
                   ))
                 )}
