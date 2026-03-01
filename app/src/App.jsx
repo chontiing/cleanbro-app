@@ -887,13 +887,26 @@ function App() {
         }
       });
 
-      if (error) throw new Error(error.message);
+      if (error) {
+        let errStr = error.message;
+        if (error.context?.json) {
+          try {
+            const body = await error.context.json();
+            if (body && (body.error || body.message)) {
+              errStr = body.error || body.message;
+            }
+          } catch (e) {
+            console.warn("Failed to parse error context", e);
+          }
+        }
+        throw new Error(errStr);
+      }
       if (data?.error) throw new Error(data.error);
 
       alert("테스트 문자가 성공적으로 발송되었습니다! 수신 여부를 확인해 보세요.");
       fetchSolapiBalance(); // 잔액 업데이트
     } catch (err) {
-      console.error(err);
+      console.error('Test SMS error detail:', err);
       alert("테스트 발송 실패: " + err.message);
     } finally {
       setIsTestingSms(false);
