@@ -42,11 +42,11 @@ async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            messages: [{
+            message: {
                 to: cleanTo,
                 from: cleanFrom,
                 text
-            }]
+            }
         })
     })
 

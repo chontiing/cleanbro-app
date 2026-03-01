@@ -2084,9 +2084,17 @@ function App() {
                           </p>
                           {c.is_completed && <span className="material-symbols-outlined text-green-500 text-[12px] sm:text-[14px]">check_circle</span>}
                         </div>
-                        <p className="text-[7px] sm:text-[10px] text-slate-400 font-bold truncate">
-                          <span className="text-primary/70">{c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type}</span>
-                        </p>
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                          <p className="text-[7px] sm:text-[10px] text-slate-400 font-bold truncate flex-1">
+                            <span className="text-primary/70">{c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type}</span>
+                          </p>
+                          {c.sms_sent_initial && (
+                            <span className="flex-shrink-0 flex items-center gap-0.5 px-1 py-0.5 bg-blue-50 text-blue-600 rounded-sm text-[6px] sm:text-[8px] font-black border border-blue-100">
+                              <span className="material-symbols-outlined text-[8px] sm:text-[10px]">send</span>
+                              확정
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <span className="material-symbols-outlined text-slate-300 text-[12px] sm:text-sm group-hover:translate-x-0.5 transition-transform">chevron_right</span>
                     </div>
