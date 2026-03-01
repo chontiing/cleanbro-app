@@ -122,6 +122,8 @@ function App() {
   const [editSolapiApiKey, setEditSolapiApiKey] = useState('');
   const [editSolapiApiSecret, setEditSolapiApiSecret] = useState('');
   const [editSolapiFromNumber, setEditSolapiFromNumber] = useState('');
+  const [isTestingSms, setIsTestingSms] = useState(false);
+
 
   // 프로 샵(Pro Shop) 상태
   const [products, setProducts] = useState([]);
@@ -840,6 +842,42 @@ function App() {
     setIsSavingSettings(false);
   };
 
+  const handleTestSms = async () => {
+    if (!editSolapiApiKey || !editSolapiApiSecret || !editSolapiFromNumber) {
+      alert("솔라피 API Key, Secret, 발신번호를 모두 입력한 후 테스트해 주세요.");
+      return;
+    }
+
+    const testPhone = window.prompt("테스트 문자를 받을 전화번호를 입력하세요.", editSolapiFromNumber);
+    if (!testPhone) return;
+
+    setIsTestingSms(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('send-sms', {
+        body: {
+          action: 'send_custom_sms',
+          apiKey: editSolapiApiKey,
+          apiSecret: editSolapiApiSecret,
+          fromNumber: editSolapiFromNumber,
+          to: testPhone.replace(/[^0-9]/g, ''),
+          text: `[클린브로] 솔라피 연동 테스트 성공! 이 메시지가 보인다면 문자가 정상적으로 발송되는 상태입니다.`
+        }
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      alert("테스트 문자가 성공적으로 발송되었습니다! 수신 여부를 확인해 보세요.");
+      fetchSolapiBalance(); // 잔액 업데이트
+    } catch (err) {
+      console.error(err);
+      alert("테스트 발송 실패: " + err.message);
+    } finally {
+      setIsTestingSms(false);
+    }
+  };
+
+
   const handleBulkTaxUpdate = async () => {
     if (!window.confirm(`${bulkStartDate} ~ ${bulkEndDate} 기간의 모든 데이터 세무 기준을 '${bulkTaxType}'(으)로 일괄 변경할까요?\n이 작업은 되돌릴 수 없습니다.`)) return;
     setIsBulking(true);
@@ -1125,21 +1163,39 @@ function App() {
     }
 
     const timeValue = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
-    const senderPhone = userProfile?.solapi_from_number || businessProfile?.phone || '';
+    const senderPhone = userProfile?.solapi_from_number || businessProfile?.solapi_from_number || businessProfile?.phone || '';
 
     const msg = template
       .replace(/\[고객명\]/g, c.customer_name || '고객')
       .replace(/\[일시\]/g, `${c.book_date} ${timeValue}`)
-      .replace(/\[시간\]/g, timeValue)
+      .replace(/\[시간\]/g, timeValue || '')
       .replace(/\[파트너전화번호\]/g, senderPhone);
 
-    // 수동 발송 시에도 DB 상태 업데이트 (UI 연동용)
-    if (updateField) {
-      await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
-      fetchCustomers();
-    }
+    try {
+      if (confirm('자동으로 문자를 발송하시겠습니까?\n(아니오 클릭 시 메시지 앱이 열립니다)')) {
+        await sendSolapiMmsLocally(c.phone, msg);
+        alert('문자가 자동으로 발송되었습니다.');
 
-    window.location.href = `sms:${c.phone}?body=${encodeURIComponent(msg)}`;
+        if (updateField) {
+          await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
+          fetchCustomers();
+        }
+      } else {
+        window.location.href = `sms:${c.phone}?body=${encodeURIComponent(msg)}`;
+        if (updateField) {
+          await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
+          fetchCustomers();
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      alert('자동 발송 실패: ' + err.message + '\n메시지 앱을 대신 엽니다.');
+      window.location.href = `sms:${c.phone}?body=${encodeURIComponent(msg)}`;
+      if (updateField) {
+        await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
+        fetchCustomers();
+      }
+    }
   };
 
   const handleBatchSmsNext = () => {
@@ -1254,11 +1310,25 @@ function App() {
             </div>
             {c.memo && <p className="text-xs text-slate-500 mt-1 line-clamp-1">{c.memo}</p>}
             <div className="flex items-center gap-2 mt-2">
-              <button onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'confirmed'); }} className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border cursor-pointer active:scale-95 transition-transform ${c.sms_sent_initial ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 opacity-60'}`}>
-                <span className="material-symbols-outlined text-[12px]">check_circle</span> {c.sms_sent_initial ? '확정문자(완료)' : '확정문자(미발송)'}
+              <button
+                onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'confirmed'); }}
+                className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md border cursor-pointer active:scale-95 transition-all
+                  ${c.sms_sent_initial
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                    : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'}`}
+              >
+                <span className="material-symbols-outlined text-[14px]">{c.sms_sent_initial ? 'check_circle' : 'pending_actions'}</span>
+                {c.sms_sent_initial ? '확정문자(발송완료)' : '확정문자(미발송)'}
               </button>
-              <button onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'morning'); }} className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border cursor-pointer active:scale-95 transition-transform ${c.sms_sent_reminder ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100 opacity-60'}`}>
-                <span className="material-symbols-outlined text-[12px]">wb_twilight</span> {c.sms_sent_reminder ? '아침알림(완료)' : '아침알림(미발송)'}
+              <button
+                onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'morning'); }}
+                className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md border cursor-pointer active:scale-95 transition-all
+                  ${c.sms_sent_reminder
+                    ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
+                    : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'}`}
+              >
+                <span className="material-symbols-outlined text-[14px]">{c.sms_sent_reminder ? 'check_circle' : 'wb_twilight'}</span>
+                {c.sms_sent_reminder ? '아침알림(발송완료)' : '아침알림(미발송)'}
               </button>
             </div>
           </div>
@@ -2472,7 +2542,13 @@ function App() {
                   <input type="password" value={editSolapiApiSecret} onChange={e => setEditSolapiApiSecret(e.target.value)} className="w-full p-3 text-xs border rounded-xl bg-slate-50" placeholder="API Secret" />
                   <input type="text" value={editSolapiFromNumber} onChange={e => setEditSolapiFromNumber(e.target.value)} className="w-full p-3 text-xs border rounded-xl bg-slate-50" placeholder="발신번호 (010...)" />
                 </div>
-                <button onClick={handleSaveProfile} className="w-full py-3 bg-slate-800 text-white font-bold rounded-xl active:scale-95 transition-all text-xs shadow-md">설정 저장</button>
+                <div className="flex gap-2">
+                  <button onClick={handleSaveProfile} className="flex-[2] py-3 bg-slate-800 text-white font-bold rounded-xl active:scale-95 transition-all text-xs shadow-md">설정 저장</button>
+                  <button onClick={handleTestSms} disabled={isTestingSms} className="flex-1 py-3 bg-blue-50 text-blue-600 border border-blue-200 font-bold rounded-xl active:scale-95 transition-all text-xs shadow-sm flex items-center justify-center gap-1">
+                    {isTestingSms ? <span className="material-symbols-outlined animate-spin text-sm">sync</span> : <span className="material-symbols-outlined text-sm">send</span>}
+                    테스트
+                  </button>
+                </div>
               </div>
             </div>
           )}

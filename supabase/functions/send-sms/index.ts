@@ -46,7 +46,12 @@ async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to
         })
     })
 
-    return response.json()
+    const result = await response.json()
+    if (!response.ok || (result.statusCode && result.statusCode !== '2000' && result.statusCode !== 2000)) {
+        console.error('Solapi Error:', result)
+        throw new Error(result.errorMessage || result.message || `Solapi Error ${response.status}`)
+    }
+    return result
 }
 
 serve(async (req: any) => {
@@ -96,9 +101,16 @@ serve(async (req: any) => {
                 .replace(/\[파트너전화번호\]/g, senderPhone)
 
             if (apiKey && apiSecret && senderPhone) {
-                console.log('Sending initial confirmed text to', phone)
-                await sendSms(apiKey, apiSecret, senderPhone, phone, text)
-                await supabase.from('bookings').update({ sms_sent_initial: true }).eq('id', id)
+                console.log('Attempting to send initial confirmed text to', phone)
+                try {
+                    const result = await sendSms(apiKey, apiSecret, senderPhone, phone, text)
+                    console.log('SMS sent successfully:', result)
+                    await supabase.from('bookings').update({ sms_sent_initial: true }).eq('id', id)
+                } catch (err: any) {
+                    console.error('Failed to send initial SMS:', err.message)
+                }
+            } else {
+                console.warn('Skipping SMS: Missing credentials or sender phone.', { hasApiKey: !!apiKey, hasApiSecret: !!apiSecret, senderPhone })
             }
 
             return new Response(JSON.stringify({ message: 'Initial SMS processed' }), { status: 200 })
@@ -167,12 +179,20 @@ serve(async (req: any) => {
                 return new Response(JSON.stringify({ error: 'Missing required parameters for send_custom_sms' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
             }
 
-            console.log('Sending custom SMS to', to);
-            const result = await sendSms(apiKey, apiSecret, fromNumber, to, text);
-            return new Response(JSON.stringify(result), {
-                status: 200,
-                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-            });
+            try {
+                const result = await sendSms(apiKey, apiSecret, fromNumber, to, text);
+                console.log('Custom SMS sent successfully:', result);
+                return new Response(JSON.stringify(result), {
+                    status: 200,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            } catch (err: any) {
+                console.error('Custom SMS send failed:', err.message);
+                return new Response(JSON.stringify({ error: err.message }), {
+                    status: 500,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
         }
 
         return new Response(JSON.stringify({ message: 'No valid action performed' }), {
