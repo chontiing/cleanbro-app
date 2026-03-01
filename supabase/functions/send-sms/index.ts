@@ -1,4 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+// import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 export const corsHeaders = {
@@ -47,14 +47,19 @@ async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to
     })
 
     const result = await response.json()
-    if (!response.ok || (result.statusCode && result.statusCode !== '2000' && result.statusCode !== 2000)) {
-        console.error('Solapi Error:', result)
-        throw new Error(result.errorMessage || result.message || `Solapi Error ${response.status}`)
+    if (!response.ok || (result.statusCode && ![2000, '2000'].includes(result.statusCode))) {
+        console.error('Solapi Error RESPONSE:', JSON.stringify(result))
+        // Solapi 에러 메시지 추출 우선순위 적용
+        const errorMsg = result.errorMessage ||
+            result.message ||
+            (result.messages && result.messages[0]?.reason) ||
+            `Solapi Error ${result.statusCode || response.status}`;
+        throw new Error(errorMsg)
     }
     return result
 }
 
-serve(async (req: any) => {
+Deno.serve(async (req) => {
     // Handle CORS pre-flight requests
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
@@ -75,7 +80,10 @@ serve(async (req: any) => {
             const { id, customer_name, book_date, book_time_type, book_time_custom, assignee, phone, business_id, user_id } = payload.record
 
             if (!phone || phone.length < 10) {
-                return new Response(JSON.stringify({ error: 'No valid phone number' }), { status: 400 })
+                return new Response(JSON.stringify({ error: 'No valid phone number' }), {
+                    status: 400,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                })
             }
 
             // DB에서 업체 정보 및 템플릿 가져오기
@@ -83,7 +91,10 @@ serve(async (req: any) => {
             const { data: profile } = await supabase.from('profiles').select('*').eq('id', user_id).single()
 
             if (!business?.auto_confirm_sms) {
-                return new Response(JSON.stringify({ message: 'Auto confirm SMS is disabled for this business' }), { status: 200 })
+                return new Response(JSON.stringify({ message: 'Auto confirm SMS is disabled for this business' }), {
+                    status: 200,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                })
             }
 
             const confirmedTpl = business?.confirmed_template || `[예약 확정] [일시]에 방문 예정입니다. - 클린브로 ([파트너전화번호])`
@@ -113,7 +124,10 @@ serve(async (req: any) => {
                 console.warn('Skipping SMS: Missing credentials or sender phone.', { hasApiKey: !!apiKey, hasApiSecret: !!apiSecret, senderPhone })
             }
 
-            return new Response(JSON.stringify({ message: 'Initial SMS processed' }), { status: 200 })
+            return new Response(JSON.stringify({ message: 'Initial SMS processed' }), {
+                status: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            })
         }
 
         // 2. Cron (스케줄러) 모드: 오늘 예약자 아침 8시 알림
@@ -126,7 +140,10 @@ serve(async (req: any) => {
             // 먼저 자동 발송이 활성화된 업체 리스트 가져오기
             const { data: activeBusinesses } = await supabase.from('businesses').select('id').eq('auto_morning_reminders', true)
             if (!activeBusinesses || activeBusinesses.length === 0) {
-                return new Response(JSON.stringify({ message: 'No businesses with auto_morning_reminders enabled' }), { status: 200 })
+                return new Response(JSON.stringify({ message: 'No businesses with auto_morning_reminders enabled' }), {
+                    status: 200,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                })
             }
             const activeBusinessIds = activeBusinesses.map((b: any) => b.id)
 
@@ -168,7 +185,10 @@ serve(async (req: any) => {
                 }
             }
 
-            return new Response(JSON.stringify({ message: `Sent ${sentCount} reminders for ${todayStr}` }), { status: 200 })
+            return new Response(JSON.stringify({ message: `Sent ${sentCount} reminders for ${todayStr}` }), {
+                status: 200,
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+            })
         }
 
         // 3. 직접 발송 모드: 프론트엔드에서 수동 호출 (CORS 우회 용도)

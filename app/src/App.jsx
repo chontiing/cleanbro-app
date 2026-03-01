@@ -143,6 +143,7 @@ function App() {
   const [isSavingProduct, setIsSavingProduct] = useState(false);
 
   // PWA 업데이트 감지용
+  const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
   const APP_VERSION = "v1.1.0"; // 현재 버전
@@ -608,7 +609,19 @@ function App() {
       }
     });
 
-    if (error) throw new Error("Edge Function 호출 에러: " + error.message);
+    if (error) {
+      let errorMsg = error.message;
+      try {
+        // FunctionsHttpError 인 경우 상세 에러 내용을 파싱 시도
+        if (error.context && typeof error.context.json === 'function') {
+          const body = await error.context.json();
+          if (body && body.error) errorMsg = body.error;
+        }
+      } catch (e) {
+        console.error("Error parsing function error response", e);
+      }
+      throw new Error("Edge Function 호출 에러: " + errorMsg);
+    }
     if (data?.error) throw new Error("문자 발송 실패: " + data.error);
 
     // Solapi의 응답 구조에 따라 성공 여부 판단 (보통 statusCode 2000이나 null)
@@ -1251,6 +1264,15 @@ function App() {
     };
   }, [customers]);
 
+  const monthlyCalendarList = useMemo(() => {
+    return customers
+      .filter(c => {
+        const d = new Date(c.book_date);
+        return d.getFullYear() === calDate.getFullYear() && d.getMonth() === calDate.getMonth();
+      })
+      .sort((a, b) => a.book_date.localeCompare(b.book_date) || (a.book_time_type || '').localeCompare(b.book_time_type || ''));
+  }, [customers, calDate]);
+
   // 아이템 컴포넌트
   const BookingItem = ({ c }) => {
     const longPressHooks = useLongPress(() => {
@@ -1860,11 +1882,11 @@ function App() {
 
       {/* ======================= [탭 1: 일정 / 달력] ======================= */}
       {currentTab === 'calendar' && (
-        <main className="flex-1 max-w-lg mx-auto w-full flex flex-col space-y-4 pt-4 px-4 overflow-x-hidden">
+        <main className="flex-1 max-w-5xl mx-auto w-full flex flex-col space-y-4 pt-4 px-4 overflow-x-hidden">
 
           {/* 아침 알림 리스트 */}
           {todayTargetList.length > 0 && selectedDate === getTodayStr() && (
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-700 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 animate-fade-in">
+            <div className="max-w-lg mx-auto w-full bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-700 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 animate-fade-in">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-bold text-primary flex items-center gap-1">
                   <span className="material-symbols-outlined text-[18px]">notifications_active</span>오늘 방문 예정 ({todayTargetList.length})
@@ -1897,7 +1919,7 @@ function App() {
           )}
 
           {/* 대시보드 */}
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-[2.2rem] shadow-[0_10px_30px_-5px_rgba(0,0,0,0.05)] border-0">
+          <div className="max-w-lg mx-auto w-full bg-white dark:bg-slate-800 p-5 rounded-[2.2rem] shadow-[0_10px_30px_-5px_rgba(0,0,0,0.05)] border-0">
             <div className="flex items-center justify-between px-1">
               <div className="cursor-pointer transition-transform active:scale-95 flex-1" onClick={() => setCurrentTab('stats')}>
                 <p className="text-[10px] font-bold text-slate-400 mb-0.5 leading-none">오늘의 합계 매출</p>
@@ -1951,67 +1973,122 @@ function App() {
             </div>
           </div>
 
-          {/* 캘린더 구역 */}
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 mb-4">
-            <div className="flex justify-between items-center mb-4">
-              <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1))} className="p-1 text-slate-400 hover:text-primary">
-                <span className="material-symbols-outlined">chevron_left</span>
-              </button>
-              <h2 className="font-bold text-lg">{calDate.getFullYear()}년 {calDate.getMonth() + 1}월</h2>
-              <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1))} className="p-1 text-slate-400 hover:text-primary">
-                <span className="material-symbols-outlined">chevron_right</span>
-              </button>
-            </div>
+          {/* 캘린더 및 통합 리스트 구역 */}
+          <div className="lg:flex lg:gap-6 lg:items-start">
+            {/* 왼쪽: 캘린더 */}
+            <div className="flex-1 lg:flex-[1.6] bg-white dark:bg-slate-800 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 mb-4 lg:mb-0">
+              <div className="flex justify-between items-center mb-4">
+                <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1))} className="p-1 text-slate-400 hover:text-primary">
+                  <span className="material-symbols-outlined">chevron_left</span>
+                </button>
+                <h2 className="font-bold text-lg">{calDate.getFullYear()}년 {calDate.getMonth() + 1}월</h2>
+                <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1))} className="p-1 text-slate-400 hover:text-primary">
+                  <span className="material-symbols-outlined">chevron_right</span>
+                </button>
+              </div>
 
-            <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 mb-2">
-              <div className="text-red-400">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div className="text-blue-400">토</div>
-            </div>
+              <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 mb-2">
+                <div className="text-red-400">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div className="text-blue-400">토</div>
+              </div>
 
-            <div className="grid grid-cols-7 gap-1">
-              {getCalendarDays().map((dStr, idx) => {
-                if (!dStr) return <div key={`empty-${idx}`} className="h-14"></div>;
+              <div className="grid grid-cols-7 gap-1">
+                {getCalendarDays().map((dStr, idx) => {
+                  if (!dStr) return <div key={`empty-${idx}`} className="h-14"></div>;
 
-                const dList = customers.filter(c => c.book_date === dStr);
-                const hasMorning = dList.some(c => c.book_time_type === '오전' || (parseInt((c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type)?.split(':')[0]) < 12));
-                const hasAfternoon = dList.some(c => c.book_time_type === '오후' || (parseInt((c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type)?.split(':')[0]) >= 12));
-                const dObj = new Date(dStr);
-                const isToday = dStr === getTodayStr();
-                const isSelected = dStr === selectedDate;
+                  const dList = customers.filter(c => c.book_date === dStr);
+                  const hasMorning = dList.some(c => c.book_time_type === '오전' || (parseInt((c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type)?.split(':')[0]) < 12));
+                  const hasAfternoon = dList.some(c => c.book_time_type === '오후' || (parseInt((c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type)?.split(':')[0]) >= 12));
+                  const dObj = new Date(dStr);
+                  const isToday = dStr === getTodayStr();
+                  const isSelected = dStr === selectedDate;
 
-                return (
-                  <div
-                    key={dStr}
-                    onClick={() => setSelectedDate(dStr)}
-                    className={`h-14 flex flex-col items-center pt-1 border relative cursor-pointer transition-colors rounded-xl
-                      ${isSelected ? 'bg-primary/10 border-primary ring-1 ring-primary' : 'bg-slate-50 dark:bg-slate-900 border-transparent hover:bg-slate-100'}
-                    `}
-                  >
-                    <span className={`text-sm font-semibold ${dObj.getDay() === 0 ? 'text-red-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-700 dark:text-slate-300'} ${isToday && !isSelected ? 'underline decoration-primary decoration-2 underline-offset-4' : ''}`}>
-                      {dObj.getDate()}
-                    </span>
-                    <div className="flex gap-0.5 mt-1 flex-wrap justify-center px-0.5">
-                      {hasMorning && <span className="w-1.5 h-1.5 rounded-full bg-orange-400"></span>}
-                      {hasAfternoon && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>}
-                      {dList.length > 0 && !hasMorning && !hasAfternoon && <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>}
+                  return (
+                    <div
+                      key={dStr}
+                      onClick={() => setSelectedDate(dStr)}
+                      className={`h-14 flex flex-col items-center pt-1 border relative cursor-pointer transition-colors rounded-xl
+                        ${isSelected ? 'bg-primary/10 border-primary ring-1 ring-primary' : 'bg-slate-50 dark:bg-slate-900 border-transparent hover:bg-slate-100'}
+                      `}
+                    >
+                      <span className={`text-sm font-semibold ${dObj.getDay() === 0 ? 'text-red-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-700 dark:text-slate-300'} ${isToday && !isSelected ? 'underline decoration-primary decoration-2 underline-offset-4' : ''}`}>
+                        {dObj.getDate()}
+                      </span>
+                      <div className="flex gap-0.5 mt-1 flex-wrap justify-center px-0.5">
+                        {hasMorning && <span className="w-1.5 h-1.5 rounded-full bg-orange-400"></span>}
+                        {hasAfternoon && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>}
+                        {dList.length > 0 && !hasMorning && !hasAfternoon && <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>}
+                      </div>
                     </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 오른쪽: 이달의 전체 리스트 (LG 이상에서 더 돋보임) */}
+            <div className="flex-[1] bg-white dark:bg-slate-800 p-6 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 h-[430px] flex flex-col">
+              <h3 className="font-black text-sm text-slate-700 dark:text-slate-300 mb-4 flex items-center justify-between px-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[18px] text-primary">event_note</span>
+                  {calDate.getMonth() + 1}월 전체 일정
+                </span>
+                <span className="text-[10px] bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-full font-bold">{monthlyCalendarList.length}건</span>
+              </h3>
+
+              <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                {monthlyCalendarList.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-slate-400 py-10">
+                    <span className="material-symbols-outlined text-[40px] opacity-20 mb-2">event_busy</span>
+                    <p className="text-xs font-bold">일정이 없습니다.</p>
                   </div>
-                );
-              })}
+                ) : (
+                  monthlyCalendarList.map(c => (
+                    <div
+                      key={c.id}
+                      onClick={() => {
+                        setSelectedDate(c.book_date);
+                        setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+                      }}
+                      className={`flex items-center gap-3 p-3 rounded-2xl cursor-pointer transition-all border group ${selectedDate === c.book_date ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10 shadow-sm scale-[1.02]' : 'bg-slate-50 dark:bg-slate-900/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700'}`}
+                    >
+                      <div className={`min-w-[40px] h-10 rounded-xl flex flex-col items-center justify-center text-[10px] font-black transition-colors ${selectedDate === c.book_date ? 'bg-primary text-white' : 'bg-white dark:bg-slate-800 text-slate-500 shadow-sm'}`}>
+                        <span className="opacity-60">{c.book_date.split('-')[1]}월</span>
+                        <span className="text-sm mt-[-2px]">{c.book_date.split('-')[2]}일</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <p className={`text-xs font-black truncate ${c.is_completed ? 'text-slate-400 line-through' : 'text-slate-800 dark:text-slate-100'}`}>
+                            {c.customer_name || '익명 고객'}
+                          </p>
+                          {c.is_completed && <span className="material-symbols-outlined text-green-500 text-[14px]">check_circle</span>}
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-bold truncate">
+                          <span className="text-primary/70">{c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type}</span> • {c.memo || c.product}
+                        </p>
+                      </div>
+                      <span className="material-symbols-outlined text-slate-300 text-sm group-hover:translate-x-0.5 transition-transform">chevron_right</span>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </div>
 
-          {/* 선택된 날짜의 리스트 */}
-          <div>
-            <h3 className="font-bold text-sm text-slate-600 dark:text-slate-400 mb-2 px-1 flex justify-between">
-              <span>{selectedDate.split('-')[2]}일 예약 리스트</span>
-              <span className="font-normal text-xs">(항목을 길게 누르면 수정/삭제)</span>
+          {/* 선택된 날짜의 리스트 상세 */}
+          <div className="max-w-lg mx-auto w-full pt-4" ref={detailRef}>
+            <h3 className="font-bold text-sm text-slate-600 dark:text-slate-400 mb-3 px-1 flex justify-between items-center">
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                {selectedDate.split('-')[2]}일 예약 상세 리스트
+              </span>
+              <span className="font-normal text-[10px] opacity-70">(길게 눌러 수정/삭제)</span>
             </h3>
             {calcDashboard(selectedDate).list.length === 0 ? (
-              <div className="text-center py-8 text-slate-400 text-sm bg-white/50 dark:bg-slate-800/50 rounded-[1.5rem]">
-                예약이 없습니다.
+              <div className="text-center py-12 text-slate-400 text-sm bg-white dark:bg-slate-800/50 rounded-[2rem] border-2 border-dashed border-slate-100 dark:border-slate-700 shadow-inner">
+                <span className="material-symbols-outlined text-[30px] block mb-2 opacity-20">history_edu</span>
+                해당 날짜에 예약이 없습니다.
               </div>
             ) : (
-              <div className="space-y-3 pb-8">
+              <div className="space-y-4 pb-12">
                 {calcDashboard(selectedDate).list.map(c => <BookingItem key={c.id} c={c} />)}
               </div>
             )}
