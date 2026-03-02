@@ -1558,7 +1558,7 @@ function App() {
       // 메시지앱 열기 (완료 안내문구 pre-fill)
       const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
       const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
-      window.open(`sms:${cleanPhone}${sep}body=${encodeURIComponent(completionText)}`, '_blank');
+      window.location.href = `sms:${cleanPhone}${sep}body=${encodeURIComponent(completionText)}`;
 
       setShowCompletionModal(false);
       fetchCustomers();
