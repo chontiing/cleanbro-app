@@ -1537,87 +1537,45 @@ function App() {
     });
   };
 
-  // --- 작업 완료 & 사진 업로드 & MMS 발송 ---
+  // --- 작업 완료 처리 (사진 첨부 없이 빠른 완료 + 메시지앱 열기 + 블로그 모달) ---
   const handleFinalComplete = async () => {
-    if (beforeFiles.length === 0 || afterFiles.length === 0) return alert('전/후 사진을 최소 1장씩은 등록해주세요.');
     setIsUploadingPhotos(true);
-
     try {
-      const uploadResults = { before: [], after: [] };
-
-      // 병렬 압축 + 병렬 업로드로 속도 대폭 향상
-      const uploadOne = async (file, type) => {
-        const processed = await processImage(file);
-        const fileName = `${myBusinessId}/${completionTarget.id}/${type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.jpg`;
-        const { error: upErr } = await supabase.storage.from('receipts').upload(fileName, processed);
-        if (upErr) throw upErr;
-        const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
-        return data.publicUrl;
-      };
-
-      // 전/후 사진 동시 병렬 업로드
-      const [beforeUrls, afterUrls] = await Promise.all([
-        Promise.all(beforeFiles.map(f => uploadOne(f, 'before'))),
-        Promise.all(afterFiles.map(f => uploadOne(f, 'after'))),
-      ]);
-      uploadResults.before = beforeUrls;
-      uploadResults.after = afterUrls;
-
-      // DB 업데이트
+      // DB 완료 처리
       const { error: dbErr } = await supabase.from('bookings').update({
         is_completed: true,
-        photo_before: uploadResults.before,
-        photo_after: uploadResults.after
       }).eq('id', completionTarget.id);
-
       if (dbErr) throw dbErr;
 
-      // ── 완료 안내 문구 준비 ──────────────────────────────────────────────
+      // 완료 안내문구 준비
       let completionText = businessProfile.default_completion_message ||
         `[클린브로] 안녕하세요, 고객님!\n{customer_name}님 {memo} 작업이 완료되었습니다.\n깨끗하게 청소해 드렸으니 확인해 주세요. 감사합니다! 😊`;
-
       completionText = completionText
         .replace(/{customer_name}/g, completionTarget.customer_name || '고객')
         .replace(/{memo}/g, completionTarget.memo || '')
         .replace(/{after_url}/g, '');
 
-      // ── 가이드 URL 파악 ───────────────────────────────────────────────────
-      let guideUrl = '';
-      if (completionTarget.category === '에어컨' && businessProfile.ac_guide_url) {
-        guideUrl = businessProfile.ac_guide_url;
-      } else if (completionTarget.category === '세탁기' && businessProfile.washer_guide_url) {
-        guideUrl = businessProfile.washer_guide_url;
-      }
-
-      // ── 완료 안내문구를 메시지앱에 pre-fill하여 바로 열기 ─────────────────
+      // 메시지앱 열기 (완료 안내문구 pre-fill)
       const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
       const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
       window.open(`sms:${cleanPhone}${sep}body=${encodeURIComponent(completionText)}`, '_blank');
 
-
       setShowCompletionModal(false);
-      setBeforeFiles([]); setAfterFiles([]);
       fetchCustomers();
 
-      // 블로그 초안 생성 제안
-      const allUploadedImages = [...uploadResults.before, ...uploadResults.after];
-      if (allUploadedImages.length > 0) {
-        const wantBlog = window.confirm('✨ 블로그에 사진을 바탕으로 AI가 자동으로 포스팅 초안을 작성할까요? (Gemini 사진 분석)');
-        if (wantBlog) {
-          setBlogDraftTarget(completionTarget);
-          setBlogDraftImages(allUploadedImages);
-          setBlogDraft(null);
-          setShowBlogDraftModal(true);
-          // 비동기로 초안 생성 시작
-          generateBlogDraft(allUploadedImages, completionTarget);
-        }
-      }
+      // 블로그 모달 자동 열기 (사진 첨부는 블로그 모달에서)
+      setBlogDraftTarget(completionTarget);
+      setBlogDraftImages([]);
+      setBlogDraft(null);
+      setShowBlogDraftModal(true);
+
     } catch (err) {
       alert('저장 중 오류: ' + err.message);
     } finally {
       setIsUploadingPhotos(false);
     }
   };
+
 
   const handleSaveProduct = async (e) => {
     e.preventDefault();
@@ -3499,84 +3457,33 @@ function App() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
-
-              {/* BEFORE */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-end">
-                  <h4 className="font-black text-blue-600 flex items-center gap-1 text-sm"><span className="material-symbols-outlined text-sm">cleaning_services</span> 작업 전 실황 (Before)</h4>
-                  <span className="text-[10px] font-bold text-slate-400">{beforeFiles.length}/5</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {beforeFiles.map((f, i) => (
-                    <div key={i} className="aspect-square rounded-xl bg-slate-100 relative overflow-hidden group">
-                      <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" />
-                      <button onClick={() => setBeforeFiles(beforeFiles.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="material-symbols-outlined text-xs">close</span>
-                      </button>
-                    </div>
-                  ))}
-                  {beforeFiles.length < 5 && (
-                    <label className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 cursor-pointer active:bg-slate-50 transition-colors">
-                      <span className="material-symbols-outlined text-2xl">add_a_photo</span>
-                      <span className="text-[10px] font-black mt-1">사진 추가</span>
-                      <input type="file" multiple accept="image/*" onChange={e => setBeforeFiles([...beforeFiles, ...Array.from(e.target.files)].slice(0, 5))} className="hidden" />
-                    </label>
-                  )}
-                </div>
-              </div>
-
-              {/* AFTER */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-end">
-                  <h4 className="font-black text-green-600 flex items-center gap-1 text-sm"><span className="material-symbols-outlined text-sm">magic_button</span> 작업 후 광채 (After)</h4>
-                  <span className="text-[10px] font-bold text-slate-400">{afterFiles.length}/5</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {afterFiles.map((f, i) => (
-                    <div key={i} className="aspect-square rounded-xl bg-slate-100 relative overflow-hidden group">
-                      <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" />
-                      <button onClick={() => setAfterFiles(afterFiles.filter((_, idx) => idx !== i))} className="absolute top-1 right-1 bg-black/50 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="material-symbols-outlined text-xs">close</span>
-                      </button>
-                    </div>
-                  ))}
-                  {afterFiles.length < 5 && (
-                    <label className="aspect-square rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 cursor-pointer active:bg-slate-50 transition-colors">
-                      <span className="material-symbols-outlined text-2xl">add_a_photo</span>
-                      <span className="text-[10px] font-black mt-1">사진 추가</span>
-                      <input type="file" multiple accept="image/*" onChange={e => setAfterFiles([...afterFiles, ...Array.from(e.target.files)].slice(0, 5))} className="hidden" />
-                    </label>
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-100 dark:border-slate-700 space-y-2">
-                <p className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1"><span className="material-symbols-outlined text-xs">info</span> AI 이미지 자동 처리 안내</p>
-                <ul className="text-[10px] text-slate-400 font-medium space-y-1 ml-1">
-                  <li>- 이미지는 최적의 품질로 압축 및 리사이징됩니다 (데이터 절약)</li>
-                  <li>- 사진 우측 하단에 [클린브로 | {businessProfile.company_name}] 워터마크가 삽입됩니다.</li>
-                </ul>
-              </div>
-
+            <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 text-center gap-4">
+              <span className="text-5xl">✅</span>
+              <h3 className="font-black text-xl text-slate-800 dark:text-white">작업 완료 처리할까요?</h3>
+              <p className="text-sm text-slate-500 font-medium leading-relaxed">
+                완료를 누르면 <strong>메시지앱</strong>이 열리고<br />
+                완료 안내문구가 자동으로 입력됩니다.<br />
+                <span className="text-blue-500 font-bold">사진 첨부는 블로그 작성 화면</span>에서 이어서 할 수 있어요.
+              </p>
             </div>
 
             <div className="p-6 shrink-0 border-t bg-white dark:bg-slate-900 pb-10">
               <button
                 disabled={isUploadingPhotos}
                 onClick={handleFinalComplete}
-                className="w-full py-4.5 bg-primary text-white font-black rounded-[1.5rem] shadow-xl shadow-primary/30 flex items-center justify-center gap-2 active:scale-95 transition-all text-lg"
+                className="w-full py-4 bg-primary text-white font-black rounded-[1.5rem] shadow-xl shadow-primary/30 flex items-center justify-center gap-2 active:scale-95 transition-all text-lg"
               >
                 {isUploadingPhotos ? (
-                  <><span className="material-symbols-outlined animate-spin">sync</span> 처리 및 업로드 중...</>
+                  <><span className="material-symbols-outlined animate-spin">sync</span> 처리 중...</>
                 ) : (
-                  <><span className="material-symbols-outlined">send</span> 완벽하게 완료 & 고객 메시지 전송</>
+                  <><span className="material-symbols-outlined">send</span> 완료 & 메시지 앱 열기</>
                 )}
               </button>
             </div>
           </div>
         </div>
       )}
+
 
       {/* 3. 인앱 브라우저 경고 모달 (카카오톡 등) */}
       {showInAppBrowserWarning && (
@@ -3796,7 +3703,105 @@ function App() {
               </div>
               <button onClick={() => { setShowBlogDraftModal(false); setBlogDraft(null); }} className="text-white/70 hover:text-white p-2 rounded-xl transition-colors"><span className="material-symbols-outlined">close</span></button>
             </div>
-            <div className="p-5 overflow-y-auto max-h-[65vh] space-y-4">
+            <div className="p-5 overflow-y-auto max-h-[70vh] space-y-4">
+
+              {/* ── 사진 첨부 섹션 (블로그 AI 분석용) ── */}
+              {!blogDraft && !isGeneratingBlog && (
+                <div className="space-y-4">
+                  <p className="text-xs font-bold text-slate-500 text-center">사진을 첨부하면 Gemini AI가 분석하여 블로그 초안을 자동 작성합니다</p>
+
+                  {/* 전/후 사진 첨부 */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Before */}
+                    <div className="space-y-2">
+                      <h5 className="text-xs font-black text-blue-600 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-xs">cleaning_services</span> 청소 전 사진
+                      </h5>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {beforeFiles.map((f, i) => (
+                          <div key={i} className="aspect-square rounded-lg bg-slate-100 relative overflow-hidden">
+                            <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" />
+                            <button onClick={() => setBeforeFiles(beforeFiles.filter((_, idx) => idx !== i))} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5">
+                              <span className="material-symbols-outlined text-[10px]">close</span>
+                            </button>
+                          </div>
+                        ))}
+                        {beforeFiles.length < 5 && (
+                          <label className="aspect-square rounded-lg border-2 border-dashed border-blue-200 flex flex-col items-center justify-center text-blue-400 cursor-pointer bg-blue-50">
+                            <span className="material-symbols-outlined text-lg">add_a_photo</span>
+                            <input type="file" multiple accept="image/*" onChange={e => setBeforeFiles([...beforeFiles, ...Array.from(e.target.files)].slice(0, 5))} className="hidden" />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                    {/* After */}
+                    <div className="space-y-2">
+                      <h5 className="text-xs font-black text-green-600 flex items-center gap-1">
+                        <span className="material-symbols-outlined text-xs">magic_button</span> 청소 후 사진
+                      </h5>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {afterFiles.map((f, i) => (
+                          <div key={i} className="aspect-square rounded-lg bg-slate-100 relative overflow-hidden">
+                            <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" />
+                            <button onClick={() => setAfterFiles(afterFiles.filter((_, idx) => idx !== i))} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5">
+                              <span className="material-symbols-outlined text-[10px]">close</span>
+                            </button>
+                          </div>
+                        ))}
+                        {afterFiles.length < 5 && (
+                          <label className="aspect-square rounded-lg border-2 border-dashed border-green-200 flex flex-col items-center justify-center text-green-400 cursor-pointer bg-green-50">
+                            <span className="material-symbols-outlined text-lg">add_a_photo</span>
+                            <input type="file" multiple accept="image/*" onChange={e => setAfterFiles([...afterFiles, ...Array.from(e.target.files)].slice(0, 5))} className="hidden" />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* AI 초안 생성 버튼 */}
+                  <button
+                    onClick={async () => {
+                      if (beforeFiles.length === 0 && afterFiles.length === 0) return alert('사진을 최소 1장 첨부해주세요.');
+                      setIsUploadingPhotos(true);
+                      try {
+                        // 사진 업로드 (Supabase storage)
+                        const uploadOne = async (file, type) => {
+                          const processed = await processImage(file);
+                          const fileName = `${myBusinessId}/${blogDraftTarget?.id || 'blog'}/${type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.jpg`;
+                          const { error: upErr } = await supabase.storage.from('receipts').upload(fileName, processed);
+                          if (upErr) throw upErr;
+                          const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
+                          return data.publicUrl;
+                        };
+                        const [beforeUrls, afterUrls] = await Promise.all([
+                          Promise.all(beforeFiles.map(f => uploadOne(f, 'before'))),
+                          Promise.all(afterFiles.map(f => uploadOne(f, 'after'))),
+                        ]);
+                        const allUrls = [...beforeUrls, ...afterUrls];
+                        // DB에도 사진 저장
+                        if (blogDraftTarget?.id) {
+                          await supabase.from('bookings').update({ photo_before: beforeUrls, photo_after: afterUrls }).eq('id', blogDraftTarget.id);
+                        }
+                        setBlogDraftImages(allUrls);
+                        generateBlogDraft(allUrls, blogDraftTarget);
+                      } catch (e) {
+                        alert('업로드 오류: ' + e.message);
+                      } finally {
+                        setIsUploadingPhotos(false);
+                      }
+                    }}
+                    disabled={isUploadingPhotos}
+                    className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-lg active:scale-95 disabled:opacity-60"
+                  >
+                    {isUploadingPhotos ? (
+                      <><span className="material-symbols-outlined animate-spin text-sm">sync</span> 업로드 중...</>
+                    ) : (
+                      <><span className="material-symbols-outlined text-sm">auto_awesome</span> AI 블로그 초안 자동 생성</>
+                    )}
+                  </button>
+                </div>
+              )}
+
               {isGeneratingBlog ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-4">
                   <span className="material-symbols-outlined animate-spin text-primary text-[48px]">progress_activity</span>
@@ -3809,9 +3814,8 @@ function App() {
                   <div><label className="block text-xs font-bold text-slate-500 mb-1">🏷 해시태그</label><div className="flex flex-wrap gap-2">{(blogDraft.tags || []).map((tag, i) => <span key={i} className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold border border-blue-100">#{tag.replace(/^#/, '')}</span>)}</div></div>
                   {blogDraftImages.length > 0 && <div><label className="block text-xs font-bold text-slate-500 mb-2">📸 첨부 사진 ({blogDraftImages.length}장)</label><div className="flex gap-2 overflow-x-auto pb-1">{blogDraftImages.map((url, i) => <img key={i} src={url} alt={`photo-${i}`} className="w-20 h-20 object-cover rounded-xl border flex-shrink-0 shadow-sm" />)}</div></div>}
                 </>
-              ) : (
-                <div className="text-center py-10 text-slate-400"><span className="material-symbols-outlined text-[40px] opacity-20">error</span><p className="text-sm font-bold mt-2">초안 생성에 실패했습니다.</p></div>
-              )}
+              ) : null}
+
             </div>
             <div className="p-4 border-t border-slate-100 flex gap-3">
               <button onClick={() => { setShowBlogDraftModal(false); setBlogDraft(null); }} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm active:scale-95">취소</button>
