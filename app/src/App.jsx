@@ -1500,8 +1500,8 @@ function App() {
 
   // --- 이미지 워터마크 & 압축 로직 ---
   const processImage = async (file) => {
-    // 1. 이미지 압축 (최대 500KB, 가로세로 1024px)
-    const options = { maxSizeMB: 0.5, maxWidthOrHeight: 1024, useWebWorker: true };
+    // 1. 이미지 압축 (최대 250KB, 가로세로 800px - 속도 우선)
+    const options = { maxSizeMB: 0.25, maxWidthOrHeight: 800, useWebWorker: true, initialQuality: 0.75 };
     const compressedFile = await imageCompression(file, options);
 
     // 2. 워터마크 합성
@@ -1545,19 +1545,23 @@ function App() {
     try {
       const uploadResults = { before: [], after: [] };
 
-      const doUpload = async (files, type) => {
-        for (const file of files) {
-          const processed = await processImage(file);
-          const fileName = `${myBusinessId}/${completionTarget.id}/${type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.jpg`;
-          const { error: upErr } = await supabase.storage.from('receipts').upload(fileName, processed);
-          if (upErr) throw upErr;
-          const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
-          uploadResults[type].push(data.publicUrl);
-        }
+      // 병렬 압축 + 병렬 업로드로 속도 대폭 향상
+      const uploadOne = async (file, type) => {
+        const processed = await processImage(file);
+        const fileName = `${myBusinessId}/${completionTarget.id}/${type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.jpg`;
+        const { error: upErr } = await supabase.storage.from('receipts').upload(fileName, processed);
+        if (upErr) throw upErr;
+        const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
+        return data.publicUrl;
       };
 
-      await doUpload(beforeFiles, 'before');
-      await doUpload(afterFiles, 'after');
+      // 전/후 사진 동시 병렬 업로드
+      const [beforeUrls, afterUrls] = await Promise.all([
+        Promise.all(beforeFiles.map(f => uploadOne(f, 'before'))),
+        Promise.all(afterFiles.map(f => uploadOne(f, 'after'))),
+      ]);
+      uploadResults.before = beforeUrls;
+      uploadResults.after = afterUrls;
 
       // DB 업데이트
       const { error: dbErr } = await supabase.from('bookings').update({
@@ -1585,40 +1589,11 @@ function App() {
         guideUrl = businessProfile.washer_guide_url;
       }
 
-      // ── 업로드 완료 → 공유 데이터 준비 후 공유 모달 표시 ──────────────────
-      // (Web Share API는 사용자 제스처 직후에만 동작 → 버튼 클릭으로 처리)
-      const urlToFile = async (url, idx, prefix) => {
-        try {
-          const res = await fetch(url);
-          const blob = await res.blob();
-          const ext = blob.type.includes('png') ? 'png' : 'jpg';
-          return new File([blob], `${prefix}_${idx + 1}.${ext}`, { type: blob.type });
-        } catch { return null; }
-      };
-
-      const filePromises = [
-        ...uploadResults.before.map((u, i) => urlToFile(u, i, '청소전')),
-        ...uploadResults.after.map((u, i) => urlToFile(u, i, '청소후')),
-        ...(guideUrl ? [urlToFile(guideUrl, 0, '가이드')] : []),
-      ];
-      const preparedFiles = (await Promise.all(filePromises)).filter(Boolean);
-
-      const fallbackBody = [
-        '📸 청소 전 사진', ...uploadResults.before.map((u, i) => `  ${i + 1}. ${u}`),
-        '\n✅ 청소 후 사진', ...uploadResults.after.map((u, i) => `  ${i + 1}. ${u}`),
-        ...(guideUrl ? ['\n🌬️ 가이드', `  ${guideUrl}`] : []),
-        `\n${completionText}`,
-      ].join('\n');
-
+      // ── 완료 안내문구를 메시지앱에 pre-fill하여 바로 열기 ─────────────────
       const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
       const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
+      window.open(`sms:${cleanPhone}${sep}body=${encodeURIComponent(completionText)}`, '_blank');
 
-      setPendingShare({
-        files: preparedFiles,
-        text: completionText,
-        fallbackSmsUrl: `sms:${cleanPhone}${sep}body=${encodeURIComponent(fallbackBody)}`,
-        customerName: completionTarget.customer_name,
-      });
 
       setShowCompletionModal(false);
       setBeforeFiles([]); setAfterFiles([]);
