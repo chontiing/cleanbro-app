@@ -1348,7 +1348,12 @@ function App() {
 
         // 3. 비동기 백그라운드 DB 동기화
         if (updateField) {
-          await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
+          const { error: dbErr, data } = await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id).select();
+          if (dbErr || !data || data.length === 0) {
+            console.error('DB Update Error:', dbErr || 'No rows updated. Check RLS or schema.');
+            setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, [updateField]: false } : item));
+            alert('DB 반영에 실패했습니다: ' + (dbErr?.message || '권한 문제 또는 테이블 스키마 검토 필요'));
+          }
         }
       } else {
         // 수동 발송 (팝업)
@@ -1357,12 +1362,17 @@ function App() {
         }
         window.location.href = `sms:${c.phone}?body=${encodeURIComponent(msg)}`;
         if (updateField) {
-          await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
+          const { error: dbErr, data } = await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id).select();
+          if (dbErr || !data || data.length === 0) {
+            console.error('DB Update Error:', dbErr || 'No rows updated. Check RLS or schema.');
+            setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, [updateField]: false } : item));
+            alert('DB 반영에 실패했습니다: ' + (dbErr?.message || '권한 문제 또는 테이블 스키마 검토 필요'));
+          }
         }
       }
     } catch (err) {
-      console.error(err);
-      alert('자동 발송 실패: ' + err.message);
+      console.error('자동 발송 Exception:', err);
+      alert('자동 발송 에러: ' + err.message);
       // 에러 시 롤백 (실패 상태: false)
       if (updateField) {
         setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, [updateField]: false } : item));
