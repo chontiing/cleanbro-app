@@ -684,6 +684,11 @@ function App() {
         throw new Error(data.error || data.message || `서버 오류 (${response.status})`);
       }
 
+      // Edge Function이 200 STATUS로 에러를 보낸 경우 처리
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
       if (!data?.draft) throw new Error('응답 데이터에 초안이 없습니다.');
       setBlogDraft(data.draft);
     } catch (err) {
