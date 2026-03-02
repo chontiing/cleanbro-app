@@ -654,25 +654,29 @@ function App() {
   // ===========================================
   const generateBlogDraft = async (imageUrls, bookingInfo) => {
     setIsGeneratingBlog(true);
+    setBlogDraft(null);
     try {
       const { data, error } = await supabase.functions.invoke('generate-blog-draft', {
         body: {
           imageUrls,
-          category: bookingInfo.category,
-          product: bookingInfo.product,
-          address: bookingInfo.address,
-          customerName: bookingInfo.customer_name,
-          memo: bookingInfo.memo,
+          category: bookingInfo?.category,
+          product: bookingInfo?.product,
+          address: bookingInfo?.address,
+          customerName: bookingInfo?.customer_name,
+          memo: bookingInfo?.memo,
           businessProfile: {
             company_name: businessProfile.company_name,
-            qualifications: '삼성 가전 전문 세첵 교육 과정 이수 / 에어콘 설치 자격증 보유',
+            qualifications: '삼성 가전 전문 세척 교육 과정 이수 / 에어컨 설치 자격증 보유',
           },
         }
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-      if (!data?.draft) throw new Error('응답 데이터가 비어있습니다.');
+      if (!data?.draft) throw new Error('응답 데이터가 비어있습니다. (draft 없음)');
       setBlogDraft(data.draft);
+    } catch (err) {
+      console.error('[블로그 초안 오류]', err);
+      alert('❌ AI 초안 생성 실패: ' + err.message);
     } finally {
       setIsGeneratingBlog(false);
     }
