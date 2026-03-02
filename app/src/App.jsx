@@ -1583,39 +1583,75 @@ function App() {
         guideUrl = businessProfile.washer_guide_url;
       }
 
-      // ── 메시지앱 본문 조합 ────────────────────────────────────────────────
-      const lines = [];
+      // ── Web Share API로 이미지 공유 ──────────────────────────────────────
+      // URL 목록 수집 (전 사진 → 후 사진 → 가이드 순)
+      const allShareUrls = [
+        ...uploadResults.before,
+        ...uploadResults.after,
+        ...(guideUrl ? [guideUrl] : []),
+      ];
 
-      // 청소 전 사진
-      if (uploadResults.before.length > 0) {
-        lines.push('📸 청소 전 사진');
-        uploadResults.before.forEach((url, i) => lines.push(`  ${i + 1}. ${url}`));
+      // 완료 문자 본문 (순수 텍스트)
+      const shareText = completionText;
+
+      // URL → File object 변환 헬퍼
+      const urlToFile = async (url, idx, prefix) => {
+        try {
+          const res = await fetch(url);
+          const blob = await res.blob();
+          const ext = blob.type.includes('png') ? 'png' : 'jpg';
+          return new File([blob], `${prefix}_${idx + 1}.${ext}`, { type: blob.type });
+        } catch {
+          return null;
+        }
+      };
+
+      const canShare = typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
+
+      if (canShare) {
+        // 이미지 파일 준비 (전/후 + 가이드)
+        const filePromises = [
+          ...uploadResults.before.map((u, i) => urlToFile(u, i, '청소전')),
+          ...uploadResults.after.map((u, i) => urlToFile(u, i, '청소후')),
+          ...(guideUrl ? [urlToFile(guideUrl, 0, '가이드')] : []),
+        ];
+        const files = (await Promise.all(filePromises)).filter(Boolean);
+
+        const shareData = {
+          text: shareText,
+          ...(files.length > 0 && navigator.canShare({ files }) ? { files } : {}),
+        };
+
+        try {
+          await navigator.share(shareData);
+        } catch (shareErr) {
+          if (shareErr.name !== 'AbortError') {
+            // 공유 취소가 아닌 진짜 오류 → URL 폴백
+            const fallbackBody = [
+              '📸 청소 전 사진', ...uploadResults.before.map((u, i) => `  ${i + 1}. ${u}`),
+              '\n✅ 청소 후 사진', ...uploadResults.after.map((u, i) => `  ${i + 1}. ${u}`),
+              ...(guideUrl ? ['\n🌬️ 가이드', `  ${guideUrl}`] : []),
+              `\n${shareText}`,
+            ].join('\n');
+            const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
+            const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
+            window.open(`sms:${cleanPhone}${sep}body=${encodeURIComponent(fallbackBody)}`, '_blank');
+          }
+        }
+      } else {
+        // Web Share 미지원 → 메시지앱 URL 열기 폴백
+        const fallbackBody = [
+          '📸 청소 전 사진', ...uploadResults.before.map((u, i) => `  ${i + 1}. ${u}`),
+          '\n✅ 청소 후 사진', ...uploadResults.after.map((u, i) => `  ${i + 1}. ${u}`),
+          ...(guideUrl ? ['\n🌬️ 가이드', `  ${guideUrl}`] : []),
+          `\n${shareText}`,
+        ].join('\n');
+        const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
+        const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
+        window.open(`sms:${cleanPhone}${sep}body=${encodeURIComponent(fallbackBody)}`, '_blank');
+        alert('✅ 사진 저장 완료!\n메시지앱이 열렸습니다. 사진을 첨부하여 발송해 주세요.');
       }
 
-      // 청소 후 사진
-      if (uploadResults.after.length > 0) {
-        lines.push('\n✅ 청소 후 사진');
-        uploadResults.after.forEach((url, i) => lines.push(`  ${i + 1}. ${url}`));
-      }
-
-      // 가이드 이미지
-      if (guideUrl) {
-        const guideLabel = completionTarget.category === '에어컨'
-          ? '\n🌬️ 에어컨 관리 가이드' : '\n🫧 세탁기 관리 가이드';
-        lines.push(guideLabel);
-        lines.push(`  ${guideUrl}`);
-      }
-
-      // 완료 안내문구
-      lines.push(`\n${completionText}`);
-
-      const smsBody = lines.join('\n');
-      const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
-      const smsUrl = `sms:${cleanPhone}${/iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?'}body=${encodeURIComponent(smsBody)}`;
-
-      // ── 메시지앱 열기 ─────────────────────────────────────────────────────
-      window.open(smsUrl, '_blank');
-      alert('✅ 사진 저장 완료!\n메시지앱이 열렸습니다. 사진을 직접 첨부하여 발송해 주세요.');
 
 
       setShowCompletionModal(false);
