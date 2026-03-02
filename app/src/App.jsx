@@ -1320,13 +1320,13 @@ function App() {
 
         if (updateField) {
           await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
-          fetchCustomers();
+          setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, [updateField]: true } : item));
         }
       } else {
         window.location.href = `sms:${c.phone}?body=${encodeURIComponent(msg)}`;
         if (updateField) {
           await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
-          fetchCustomers();
+          setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, [updateField]: true } : item));
         }
       }
     } catch (err) {
@@ -1334,7 +1334,7 @@ function App() {
       alert('자동 발송 실패: ' + err.message);
       if (updateField) {
         await supabase.from('bookings').update({ [updateField]: false }).eq('id', c.id);
-        fetchCustomers();
+        setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, [updateField]: false } : item));
       }
     }
   };
