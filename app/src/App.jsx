@@ -791,18 +791,28 @@ function App() {
           const dateTimeStr = `${entry.book_date} ${timeVal}`;
           const senderPhone = userProfile?.solapi_from_number || userProfile?.sender_number || businessProfile?.solapi_from_number || businessProfile?.phone || '';
 
-          if (businessProfile.auto_confirm_sms && senderPhone && (userProfile?.solapi_api_key || businessProfile?.solapi_api_key) && entry.phone) {
+          // 클라우드 저장 시 즉시 자동 발송 (설정 무관하게 무조건 발송 처리)
+          if (senderPhone && (userProfile?.solapi_api_key || businessProfile?.solapi_api_key) && entry.phone) {
             const msg = confirmedTpl
               .replace(/\[고객명\]/g, entry.customer_name || '고객')
               .replace(/\[일시\]/g, dateTimeStr)
               .replace(/\[시간\]/g, timeVal || '')
               .replace(/\[파트너전화번호\]/g, senderPhone);
-            await sendSolapiMmsLocally(entry.phone, msg);
-            await supabase.from('bookings').update({ sms_sent_initial: true }).eq('id', data[0].id);
-            await fetchCustomers(); // UI 즉시 반영
+
+            try {
+              await sendSolapiMmsLocally(entry.phone, msg);
+              await supabase.from('bookings').update({ sms_sent_initial: true }).eq('id', data[0].id);
+            } catch (err) {
+              console.error('발송 에러:', err);
+              await supabase.from('bookings').update({ sms_sent_initial: false }).eq('id', data[0].id);
+            }
+          } else {
+            // API 키나 발신번호가 설정되지 않아서 발송할 수 없는 경우 실패 처리
+            await supabase.from('bookings').update({ sms_sent_initial: false }).eq('id', data[0].id);
           }
         } catch (err) {
           console.error('예약 확정 자동 문자 발송 실패:', err);
+          await supabase.from('bookings').update({ sms_sent_initial: false }).eq('id', data[0].id);
         }
       }
     }
@@ -1321,10 +1331,9 @@ function App() {
       }
     } catch (err) {
       console.error(err);
-      alert('자동 발송 실패: ' + err.message + '\n메시지 앱을 대신 엽니다.');
-      window.location.href = `sms:${c.phone}?body=${encodeURIComponent(msg)}`;
+      alert('자동 발송 실패: ' + err.message);
       if (updateField) {
-        await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
+        await supabase.from('bookings').update({ [updateField]: false }).eq('id', c.id);
         fetchCustomers();
       }
     }
@@ -1454,22 +1463,30 @@ function App() {
               <button
                 onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'confirmed'); }}
                 className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md border cursor-pointer active:scale-95 transition-all
-                  ${c.sms_sent_initial
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                    : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'}`}
+                  ${c.sms_sent_initial === true
+                    ? 'bg-green-50 text-green-700 border-green-200 shadow-sm'
+                    : c.sms_sent_initial === false
+                      ? 'bg-red-50 text-red-600 border-red-200 shadow-sm'
+                      : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'}`}
               >
-                <span className="material-symbols-outlined text-[14px]">{c.sms_sent_initial ? 'check_circle' : 'pending_actions'}</span>
-                {c.sms_sent_initial ? '확정문자(발송완료)' : '확정문자(미발송)'}
+                <span className="material-symbols-outlined text-[14px]">
+                  {c.sms_sent_initial === true ? 'check_circle' : c.sms_sent_initial === false ? 'error' : 'pending_actions'}
+                </span>
+                {c.sms_sent_initial === true ? '확정문자(발송완료)' : c.sms_sent_initial === false ? '확정문자(발송실패)' : '확정문자(미발송)'}
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'morning'); }}
                 className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md border cursor-pointer active:scale-95 transition-all
-                  ${c.sms_sent_reminder
-                    ? 'bg-orange-500 text-white border-orange-500 shadow-sm'
-                    : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'}`}
+                  ${c.sms_sent_reminder === true
+                    ? 'bg-green-50 text-green-700 border-green-200 shadow-sm'
+                    : c.sms_sent_reminder === false
+                      ? 'bg-red-50 text-red-600 border-red-200 shadow-sm'
+                      : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'}`}
               >
-                <span className="material-symbols-outlined text-[14px]">{c.sms_sent_reminder ? 'check_circle' : 'wb_twilight'}</span>
-                {c.sms_sent_reminder ? '아침알림(발송완료)' : '아침알림(미발송)'}
+                <span className="material-symbols-outlined text-[14px]">
+                  {c.sms_sent_reminder === true ? 'check_circle' : c.sms_sent_reminder === false ? 'error' : 'wb_twilight'}
+                </span>
+                {c.sms_sent_reminder === true ? '아침알림(발송완료)' : c.sms_sent_reminder === false ? '아침알림(발송실패)' : '아침알림(미발송)'}
               </button>
             </div>
           </div>
