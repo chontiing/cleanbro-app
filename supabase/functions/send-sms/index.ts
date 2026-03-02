@@ -25,40 +25,42 @@ async function getSolapiSignature(apiSecret: string, date: string, salt: string)
 }
 
 async function uploadToSolapi(apiKey: string, apiSecret: string, imageUrl: string) {
-    try {
-        console.log(`[Solapi] Uploading image: ${imageUrl.substring(0, 50)}...`)
-        const response = await fetch(imageUrl)
-        if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`)
-        const arrayBuffer = await response.arrayBuffer()
-        const base64 = encodeBase64(new Uint8Array(arrayBuffer))
+    console.log(`[Solapi] Uploading image: ${imageUrl.substring(0, 50)}...`)
+    const response = await fetch(imageUrl)
 
-        const date = new Date().toISOString()
-        const salt = crypto.randomUUID().replace(/-/g, '')
-        const signature = await getSolapiSignature(apiSecret, date, salt)
-        const authHeader = `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`
-
-        const uploadResponse = await fetch('https://api.solapi.com/storage/v1/files', {
-            method: 'POST',
-            headers: {
-                'Authorization': authHeader,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                file: base64,
-                type: 'MMS'
-            })
-        })
-
-        const result = await uploadResponse.json()
-        if (!uploadResponse.ok) {
-            console.error('Solapi Upload error:', JSON.stringify(result))
-            return null
-        }
-        return result.fileId
-    } catch (err: any) {
-        console.error('uploadToSolapi failed:', err.message)
-        return null
+    // 1. 저장소(Bucket) 접근 권한 문제 확인
+    if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`이미지 다운로드 실패 (${response.status}). 수파베이스 Storage가 Public 상태인지 확인하세요. 상세: ${errText.substring(0, 50)}`);
     }
+
+    const arrayBuffer = await response.arrayBuffer()
+    const base64 = encodeBase64(new Uint8Array(arrayBuffer))
+
+    const date = new Date().toISOString()
+    const salt = crypto.randomUUID().replace(/-/g, '')
+    const signature = await getSolapiSignature(apiSecret, date, salt)
+    const authHeader = `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`
+
+    // 2. 솔라피 업로드 요청
+    const uploadResponse = await fetch('https://api.solapi.com/storage/v1/files', {
+        method: 'POST',
+        headers: {
+            'Authorization': authHeader,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            file: base64,
+            type: 'MMS'
+        })
+    })
+
+    const result = await uploadResponse.json()
+    if (!uploadResponse.ok) {
+        console.error('Solapi Upload error:', JSON.stringify(result))
+        throw new Error(`이미지를 솔라피에 등록하는데 실패했습니다: ${result.errorMessage || result.message || JSON.stringify(result)}`);
+    }
+    return result.fileId
 }
 
 async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to: string, text: string, imageId?: string) {
@@ -242,26 +244,26 @@ Deno.serve(async (req) => {
             }
 
             try {
-                let imageIds = []
+                let imageId: string | undefined = undefined;
                 if (imageUrls && imageUrls.length > 0) {
-                    // 최대 3장까지 지원 (통상적인 MMS 제한)
-                    for (const url of imageUrls.slice(0, 3)) {
-                        const uploadedId = await uploadToSolapi(apiKey, apiSecret, url)
-                        if (uploadedId) imageIds.push(uploadedId)
+                    try {
+                        imageId = await uploadToSolapi(apiKey, apiSecret, imageUrls[0]);
+                    } catch (uploadErr: any) {
+                        console.warn(`[send_custom_sms] Image upload skipped: ${uploadErr.message}`);
                     }
                 }
 
-                const result = await sendSms(apiKey, apiSecret, fromNumber, to, text, imageIds[0]);
+                const result = await sendSms(apiKey, apiSecret, fromNumber, to, text, imageId);
                 console.log('Custom SMS sent successfully:', result);
                 return new Response(JSON.stringify(result), {
                     status: 200,
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 });
             } catch (err: any) {
                 console.error('Custom SMS send failed:', err.message);
                 return new Response(JSON.stringify({ error: err.message }), {
                     status: 500,
-                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
                 });
             }
         }
