@@ -3,6 +3,8 @@
 // and returns a full SEO blog post draft (title, body, tags).
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encodeBase64 } from "https://deno.land/std@0.203.0/encoding/base64.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -30,14 +32,80 @@ serve(async (req: Request) => {
             throw new Error("GEMINI_API_KEY 환경변수가 설정되지 않았습니다.");
         }
 
+        const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+        const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
         // ─── 1. Build vision parts from image URLs ────────────────────────────────
         const imageParts = await Promise.all(
             (imageUrls || []).slice(0, 10).map(async (url: string) => {
-                const res = await fetch(url);
-                if (!res.ok) throw new Error(`이미지 다운로드 실패: ${url}`);
-                const arrayBuffer = await res.arrayBuffer();
-                const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-                const mimeType = res.headers.get("content-type") || "image/jpeg";
+                let arrayBuffer: ArrayBuffer | null = null;
+                let mimeType = "image/jpeg";
+
+                // 1) SDK 직결 다운로드 (502 통신오류 원천 차단)
+                try {
+                    if (url.includes("/storage/v1/object/public/")) {
+                        const parts = url.split("/storage/v1/object/public/")[1].split("/");
+                        const bucket = parts[0];
+                        const path = parts.slice(1).join("/");
+
+                        console.log(`[generate-blog-draft] SDK 직접 다운로드 시도: ${bucket}/${path}`);
+                        const { data, error } = await supabase.storage.from(bucket).download(decodeURIComponent(path));
+
+                        if (!error && data) {
+                            arrayBuffer = await data.arrayBuffer();
+                            mimeType = data.type || mimeType;
+                            console.log(`[generate-blog-draft] SDK 다운로드 성공`);
+                        } else {
+                            console.warn(`[generate-blog-draft] SDK 실패, 외부 Fetch 폴백 시작:`, error?.message);
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`[generate-blog-draft] SDK 내부 오류:`, e);
+                }
+
+                // 2) SDK 실패 시 기존 방식(Fetch) 폴백
+                if (!arrayBuffer) {
+                    let lastErr: any;
+                    for (let attempt = 1; attempt <= 3; attempt++) {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 35000); // 35초 타임아웃
+
+                        try {
+                            console.log(`[generate-blog-draft] 이미지를 가져오는 중 (시도 ${attempt}/3): ${url}`);
+                            const res = await fetch(url, {
+                                signal: controller.signal,
+                                redirect: 'follow', // 리디렉션 자동 추적
+                                headers: {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                                    'Accept': 'image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                                    'Cache-Control': 'no-cache'
+                                }
+                            });
+
+                            if (!res.ok) throw new Error(`Status ${res.status}`);
+
+                            arrayBuffer = await res.arrayBuffer();
+                            mimeType = res.headers.get("content-type") || "image/jpeg";
+                            break;
+                        } catch (e: any) {
+                            lastErr = e;
+                            console.warn(`[generate-blog-draft] 이미지 다운로드 실패 (시도 ${attempt}/3) - ${url}:`, e.message || String(e));
+                            if (attempt < 3) await new Promise(res => setTimeout(res, 1000)); // 1초 대기 후 재시도
+                        } finally {
+                            clearTimeout(timeoutId);
+                        }
+                    }
+
+                    if (!arrayBuffer) {
+                        if (lastErr?.name === 'AbortError') {
+                            throw new Error(`이미지 다운로드 3회 타임아웃 초과: ${url}`);
+                        }
+                        throw new Error(`이미지 다운로드 3회 실패 (${url}): ${lastErr?.message || String(lastErr)}`);
+                    }
+                }
+
+                const base64 = encodeBase64(arrayBuffer!);
                 return { inline_data: { mime_type: mimeType, data: base64 } };
             })
         );
@@ -54,6 +122,7 @@ serve(async (req: Request) => {
         const systemPrompt = `
 당신은 국내 청소 전문 업체의 공식 블로그 에디터입니다.
 제공된 청소 전・후 사진들을 분석하여 네이버 블로그 상위 노출에 최적화된 포스팅 초안을 작성해주세요.
+모든 이미지는 9:16 세로 비율(Mobile-friendly)로 촬영된 것을 가정하고, 이에 맞춰 모바일 가독성이 좋은 숏폼 형태의 문체나 짧고 강렬한 단락으로 구성해주세요.
 
 [규칙]
 1. 제목: 지역명, 제품 브랜드/모델, 오염 증상, 업체명을 포함. 예) "속초 삼성 무풍 에어컨 곰팡이 청소 완료 후기 | ${companyName}"
@@ -70,34 +139,46 @@ serve(async (req: Request) => {
 지역: ${locationHint}
 메모(기사 특이사항): ${memo || "없음"}
 
-사진 ${imageParts.length}장을 보고 위 규칙에 따라 블로그 초안을 JSON으로 작성해주세요.
+사진 ${imageParts.length}장을 보고 위 규칙에 따라 블로그 초안을 JSON으로 작성해주세요. 특히 9:16 세로 사진의 특징을 잘 살려 모바일 친화적으로 작성 바랍니다.
 `;
 
-        // ─── 3. Call Gemini 1.5 Flash (cheaper & fast, sufficient for this) ───────
-        const geminiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        // ─── 3. Call Gemini 1.5 Flash (v1 default, fallback to v1 flash-latest) ───
+        const reqBody = {
+            contents: [
+                {
+                    role: "user",
+                    parts: [
+                        { text: `[지시사항]\n${systemPrompt}\n\n[사용자 요청]\n${userPrompt}` },
+                        ...imageParts,
+                    ],
+                },
+            ],
+            generationConfig: {
+                temperature: 0.8,
+                maxOutputTokens: 4096,
+            },
+        };
+
+        let geminiRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    system_instruction: { parts: [{ text: systemPrompt }] },
-                    contents: [
-                        {
-                            role: "user",
-                            parts: [
-                                ...imageParts,
-                                { text: userPrompt },
-                            ],
-                        },
-                    ],
-                    generationConfig: {
-                        response_mime_type: "application/json",
-                        temperature: 0.8,
-                        maxOutputTokens: 4096,
-                    },
-                }),
+                body: JSON.stringify(reqBody),
             }
         );
+
+        if (!geminiRes.ok && (geminiRes.status === 404 || geminiRes.status === 400)) {
+            console.warn(`[generate-blog-draft] v1/gemini-1.5-flash 실패 (${geminiRes.status}). v1/gemini-1.5-flash-latest 모델로 폴백 수행...`);
+            geminiRes = await fetch(
+                `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(reqBody),
+                }
+            );
+        }
 
         if (!geminiRes.ok) {
             const errText = await geminiRes.text();
@@ -110,7 +191,13 @@ serve(async (req: Request) => {
 
         let draft: Record<string, unknown>;
         try {
-            draft = JSON.parse(rawText);
+            let jsonStr = rawText.trim();
+            if (jsonStr.startsWith('```json')) {
+                jsonStr = jsonStr.replace(/^```json/, '').replace(/```$/, '').trim();
+            } else if (jsonStr.startsWith('```')) {
+                jsonStr = jsonStr.replace(/^```/, '').replace(/```$/, '').trim();
+            }
+            draft = JSON.parse(jsonStr);
         } catch {
             throw new Error("Gemini 응답 파싱 실패: " + rawText.slice(0, 300));
         }
@@ -118,11 +205,11 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ draft }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
-    } catch (err) {
-        console.error("[generate-blog-draft] Error:", err);
+    } catch (err: any) {
+        console.error("[generate-blog-draft] Final Error:", err);
         return new Response(
-            JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
-            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ error: err.message || String(err) }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
     }
 });
