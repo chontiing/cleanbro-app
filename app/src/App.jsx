@@ -114,6 +114,8 @@ function App() {
   const [beforeFiles, setBeforeFiles] = useState([]);
   const [afterFiles, setAfterFiles] = useState([]);
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
+  // 업로드 완료 후 공유 대기 데이터 { files: File[], text: string, fallbackSmsUrl: string }
+  const [pendingShare, setPendingShare] = useState(null);
 
   // 블로그 초안 생성 관련 상태
   const [showBlogDraftModal, setShowBlogDraftModal] = useState(false);
@@ -1583,76 +1585,40 @@ function App() {
         guideUrl = businessProfile.washer_guide_url;
       }
 
-      // ── Web Share API로 이미지 공유 ──────────────────────────────────────
-      // URL 목록 수집 (전 사진 → 후 사진 → 가이드 순)
-      const allShareUrls = [
-        ...uploadResults.before,
-        ...uploadResults.after,
-        ...(guideUrl ? [guideUrl] : []),
-      ];
-
-      // 완료 문자 본문 (순수 텍스트)
-      const shareText = completionText;
-
-      // URL → File object 변환 헬퍼
+      // ── 업로드 완료 → 공유 데이터 준비 후 공유 모달 표시 ──────────────────
+      // (Web Share API는 사용자 제스처 직후에만 동작 → 버튼 클릭으로 처리)
       const urlToFile = async (url, idx, prefix) => {
         try {
           const res = await fetch(url);
           const blob = await res.blob();
           const ext = blob.type.includes('png') ? 'png' : 'jpg';
           return new File([blob], `${prefix}_${idx + 1}.${ext}`, { type: blob.type });
-        } catch {
-          return null;
-        }
+        } catch { return null; }
       };
 
-      const canShare = typeof navigator.share === 'function' && typeof navigator.canShare === 'function';
+      const filePromises = [
+        ...uploadResults.before.map((u, i) => urlToFile(u, i, '청소전')),
+        ...uploadResults.after.map((u, i) => urlToFile(u, i, '청소후')),
+        ...(guideUrl ? [urlToFile(guideUrl, 0, '가이드')] : []),
+      ];
+      const preparedFiles = (await Promise.all(filePromises)).filter(Boolean);
 
-      if (canShare) {
-        // 이미지 파일 준비 (전/후 + 가이드)
-        const filePromises = [
-          ...uploadResults.before.map((u, i) => urlToFile(u, i, '청소전')),
-          ...uploadResults.after.map((u, i) => urlToFile(u, i, '청소후')),
-          ...(guideUrl ? [urlToFile(guideUrl, 0, '가이드')] : []),
-        ];
-        const files = (await Promise.all(filePromises)).filter(Boolean);
+      const fallbackBody = [
+        '📸 청소 전 사진', ...uploadResults.before.map((u, i) => `  ${i + 1}. ${u}`),
+        '\n✅ 청소 후 사진', ...uploadResults.after.map((u, i) => `  ${i + 1}. ${u}`),
+        ...(guideUrl ? ['\n🌬️ 가이드', `  ${guideUrl}`] : []),
+        `\n${completionText}`,
+      ].join('\n');
 
-        const shareData = {
-          text: shareText,
-          ...(files.length > 0 && navigator.canShare({ files }) ? { files } : {}),
-        };
+      const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
+      const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
 
-        try {
-          await navigator.share(shareData);
-        } catch (shareErr) {
-          if (shareErr.name !== 'AbortError') {
-            // 공유 취소가 아닌 진짜 오류 → URL 폴백
-            const fallbackBody = [
-              '📸 청소 전 사진', ...uploadResults.before.map((u, i) => `  ${i + 1}. ${u}`),
-              '\n✅ 청소 후 사진', ...uploadResults.after.map((u, i) => `  ${i + 1}. ${u}`),
-              ...(guideUrl ? ['\n🌬️ 가이드', `  ${guideUrl}`] : []),
-              `\n${shareText}`,
-            ].join('\n');
-            const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
-            const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
-            window.open(`sms:${cleanPhone}${sep}body=${encodeURIComponent(fallbackBody)}`, '_blank');
-          }
-        }
-      } else {
-        // Web Share 미지원 → 메시지앱 URL 열기 폴백
-        const fallbackBody = [
-          '📸 청소 전 사진', ...uploadResults.before.map((u, i) => `  ${i + 1}. ${u}`),
-          '\n✅ 청소 후 사진', ...uploadResults.after.map((u, i) => `  ${i + 1}. ${u}`),
-          ...(guideUrl ? ['\n🌬️ 가이드', `  ${guideUrl}`] : []),
-          `\n${shareText}`,
-        ].join('\n');
-        const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
-        const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
-        window.open(`sms:${cleanPhone}${sep}body=${encodeURIComponent(fallbackBody)}`, '_blank');
-        alert('✅ 사진 저장 완료!\n메시지앱이 열렸습니다. 사진을 첨부하여 발송해 주세요.');
-      }
-
-
+      setPendingShare({
+        files: preparedFiles,
+        text: completionText,
+        fallbackSmsUrl: `sms:${cleanPhone}${sep}body=${encodeURIComponent(fallbackBody)}`,
+        customerName: completionTarget.customer_name,
+      });
 
       setShowCompletionModal(false);
       setBeforeFiles([]); setAfterFiles([]);
@@ -3792,8 +3758,60 @@ function App() {
           </div>
         </main>
       )}
+      {/* ========================= [공유 모달] ========================= */}
+      {pendingShare && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9999] flex items-end sm:items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-[2rem] w-full max-w-sm shadow-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-yellow-400 to-orange-400 p-5 text-center">
+              <span className="text-4xl">✅</span>
+              <h3 className="font-black text-white text-lg mt-1">작업 완료!</h3>
+              <p className="text-yellow-100 text-xs mt-0.5">{pendingShare.customerName}님께 사진을 공유해 주세요</p>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-slate-500 text-center">전/후 사진 + 가이드 이미지가 준비되었습니다</p>
+              {/* 카카오톡 공유 버튼 (Web Share API - 사용자 제스처 직접 호출) */}
+              <button
+                onClick={async () => {
+                  try {
+                    if (typeof navigator.share === 'function') {
+                      const shareData = {
+                        text: pendingShare.text,
+                        ...(pendingShare.files.length > 0 &&
+                          typeof navigator.canShare === 'function' &&
+                          navigator.canShare({ files: pendingShare.files })
+                          ? { files: pendingShare.files } : {}),
+                      };
+                      await navigator.share(shareData);
+                    } else {
+                      window.open(pendingShare.fallbackSmsUrl, '_blank');
+                    }
+                  } catch (e) {
+                    if (e.name !== 'AbortError') window.open(pendingShare.fallbackSmsUrl, '_blank');
+                  }
+                }}
+                className="w-full py-3.5 bg-[#FEE500] text-[#3C1E1E] rounded-2xl font-black text-base flex items-center justify-center gap-2 shadow-md active:scale-95 transition-transform"
+              >
+                <span className="text-xl">💬</span> 카카오톡으로 공유하기
+              </button>
+              <button
+                onClick={() => window.open(pendingShare.fallbackSmsUrl, '_blank')}
+                className="w-full py-3 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-transform"
+              >
+                <span className="text-lg">💬</span> 문자 메시지로 공유
+              </button>
+              <button
+                onClick={() => setPendingShare(null)}
+                className="w-full py-2.5 text-slate-400 rounded-xl font-bold text-sm active:scale-95"
+              >
+                나중에 하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ========================= [블로그 초안 승인 모달] ========================= */}
       {showBlogDraftModal && (
+
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-end sm:items-center justify-center p-3 sm:p-4 animate-fade-in">
           <div className="bg-white dark:bg-slate-900 rounded-[2rem] w-full max-w-2xl shadow-2xl overflow-hidden">
             <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 flex items-center justify-between">
