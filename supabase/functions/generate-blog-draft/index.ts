@@ -42,67 +42,41 @@ serve(async (req: Request) => {
                 let arrayBuffer: ArrayBuffer | null = null;
                 let mimeType = "image/jpeg";
 
-                // 1) SDK 직결 다운로드 (502 통신오류 원천 차단)
+                // 1) SDK 직결 다운로드 전용 (502 통신오류 원천 차단, 외부 Fetch 금지)
                 try {
                     if (url.includes("/storage/v1/object/public/")) {
-                        const parts = url.split("/storage/v1/object/public/")[1].split("/");
-                        const bucket = parts[0];
-                        const path = parts.slice(1).join("/");
+                        // ex) .../storage/v1/object/public/receipts/a3999.../after_...jpg
+                        const prefixIndex = url.indexOf("/storage/v1/object/public/") + "/storage/v1/object/public/".length;
+                        const remainder = url.substring(prefixIndex); // e.g., "receipts/a3999.../after_...jpg"
 
-                        console.log(`[generate-blog-draft] SDK 직접 다운로드 시도: ${bucket}/${path}`);
+                        const firstSlashIdx = remainder.indexOf("/");
+                        const bucket = remainder.substring(0, firstSlashIdx); // "receipts"
+                        let path = remainder.substring(firstSlashIdx + 1);    // "a3999.../after_...jpg"
+
+                        // query string 제거 (?t=... 등)
+                        if (path.includes("?")) {
+                            path = path.split("?")[0];
+                        }
+
+                        console.log(`[generate-blog-draft] SDK 직접 다운로드 시도: 버킷 '${bucket}', 경로 '${decodeURIComponent(path)}'`);
                         const { data, error } = await supabase.storage.from(bucket).download(decodeURIComponent(path));
 
                         if (!error && data) {
                             arrayBuffer = await data.arrayBuffer();
                             mimeType = data.type || mimeType;
-                            console.log(`[generate-blog-draft] SDK 다운로드 성공`);
+                            console.log(`[generate-blog-draft] SDK 다운로드 성공 (${arrayBuffer?.byteLength} bytes)`);
                         } else {
-                            console.warn(`[generate-blog-draft] SDK 실패, 외부 Fetch 폴백 시작:`, error?.message);
+                            // 에러 객체가 비어보이는 현상 방지: JSON 파싱이 안되는 고유 객체일 수 있으므로 명시적 속성 추출
+                            const errDesc = error ? (error.message || error.name || JSON.stringify(error)) : "Unknown unknown SDK error";
+                            console.error(`[generate-blog-draft] SDK 에러 상세:`, error);
+                            throw new Error(`SDK 다운로드 실패: ${errDesc}`);
                         }
+                    } else {
+                        throw new Error(`Supabase Storage URL 형식이 아닙니다: ${url}`);
                     }
-                } catch (e) {
-                    console.warn(`[generate-blog-draft] SDK 내부 오류:`, e);
-                }
-
-                // 2) SDK 실패 시 기존 방식(Fetch) 폴백
-                if (!arrayBuffer) {
-                    let lastErr: any;
-                    for (let attempt = 1; attempt <= 3; attempt++) {
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 35000); // 35초 타임아웃
-
-                        try {
-                            console.log(`[generate-blog-draft] 이미지를 가져오는 중 (시도 ${attempt}/3): ${url}`);
-                            const res = await fetch(url, {
-                                signal: controller.signal,
-                                redirect: 'follow', // 리디렉션 자동 추적
-                                headers: {
-                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                                    'Accept': 'image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-                                    'Cache-Control': 'no-cache'
-                                }
-                            });
-
-                            if (!res.ok) throw new Error(`Status ${res.status}`);
-
-                            arrayBuffer = await res.arrayBuffer();
-                            mimeType = res.headers.get("content-type") || "image/jpeg";
-                            break;
-                        } catch (e: any) {
-                            lastErr = e;
-                            console.warn(`[generate-blog-draft] 이미지 다운로드 실패 (시도 ${attempt}/3) - ${url}:`, e.message || String(e));
-                            if (attempt < 3) await new Promise(res => setTimeout(res, 1000)); // 1초 대기 후 재시도
-                        } finally {
-                            clearTimeout(timeoutId);
-                        }
-                    }
-
-                    if (!arrayBuffer) {
-                        if (lastErr?.name === 'AbortError') {
-                            throw new Error(`이미지 다운로드 3회 타임아웃 초과: ${url}`);
-                        }
-                        throw new Error(`이미지 다운로드 3회 실패 (${url}): ${lastErr?.message || String(lastErr)}`);
-                    }
+                } catch (e: any) {
+                    console.error(`[generate-blog-draft] 이미지 추출 에러:`, e);
+                    throw new Error(`이미지를 가져오는데 실패했습니다 (${url}): ${e.message || String(e)}`);
                 }
 
                 const base64 = encodeBase64(arrayBuffer!);
@@ -160,25 +134,13 @@ serve(async (req: Request) => {
         };
 
         let geminiRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
             {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(reqBody),
             }
         );
-
-        if (!geminiRes.ok && (geminiRes.status === 404 || geminiRes.status === 400)) {
-            console.warn(`[generate-blog-draft] v1/gemini-1.5-flash 실패 (${geminiRes.status}). v1/gemini-1.5-flash-latest 모델로 폴백 수행...`);
-            geminiRes = await fetch(
-                `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(reqBody),
-                }
-            );
-        }
 
         if (!geminiRes.ok) {
             const errText = await geminiRes.text();
