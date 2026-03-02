@@ -1315,26 +1315,36 @@ function App() {
 
     try {
       if (confirm('자동으로 문자를 발송하시겠습니까?\n(아니오 클릭 시 메시지 앱이 열립니다)')) {
+        // 1. 낙관적 업데이트 (Optimistic Update) - 통신 전 즉각 UI 반영
+        if (updateField) {
+          setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, [updateField]: true } : item));
+        }
+
+        // 2. 실제 문자 발송
         await sendSolapiMmsLocally(c.phone, msg);
         alert('문자가 자동으로 발송되었습니다.');
 
+        // 3. 비동기 백그라운드 DB 동기화
         if (updateField) {
           await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
-          setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, [updateField]: true } : item));
         }
       } else {
+        // 수동 발송 (팝업)
+        if (updateField) {
+          setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, [updateField]: true } : item));
+        }
         window.location.href = `sms:${c.phone}?body=${encodeURIComponent(msg)}`;
         if (updateField) {
           await supabase.from('bookings').update({ [updateField]: true }).eq('id', c.id);
-          setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, [updateField]: true } : item));
         }
       }
     } catch (err) {
       console.error(err);
       alert('자동 발송 실패: ' + err.message);
+      // 에러 시 롤백 (실패 상태: false)
       if (updateField) {
-        await supabase.from('bookings').update({ [updateField]: false }).eq('id', c.id);
         setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, [updateField]: false } : item));
+        await supabase.from('bookings').update({ [updateField]: false }).eq('id', c.id);
       }
     }
   };
