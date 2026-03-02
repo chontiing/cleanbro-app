@@ -656,8 +656,16 @@ function App() {
     setIsGeneratingBlog(true);
     setBlogDraft(null);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-blog-draft', {
-        body: {
+      // supabase.functions.invoke 대신 상세 에러 확인을 위해 fetch 사용
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-blog-draft`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({
           imageUrls,
           category: bookingInfo?.category,
           product: bookingInfo?.product,
@@ -668,15 +676,19 @@ function App() {
             company_name: businessProfile.company_name,
             qualifications: '삼성 가전 전문 세척 교육 과정 이수 / 에어컨 설치 자격증 보유',
           },
-        }
+        })
       });
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-      if (!data?.draft) throw new Error('응답 데이터가 비어있습니다. (draft 없음)');
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || data.message || `서버 오류 (${response.status})`);
+      }
+
+      if (!data?.draft) throw new Error('응답 데이터에 초안이 없습니다.');
       setBlogDraft(data.draft);
     } catch (err) {
       console.error('[블로그 초안 오류]', err);
-      alert('❌ AI 초안 생성 실패: ' + err.message);
+      alert('❌ AI 초안 생성 실패:\n' + err.message);
     } finally {
       setIsGeneratingBlog(false);
     }
