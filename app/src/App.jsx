@@ -1566,16 +1566,16 @@ function App() {
 
       if (dbErr) throw dbErr;
 
-      // ── 완료 문자 메시지 준비 ─────────────────────────────────────────────
-      let mmsText = businessProfile.default_completion_message ||
+      // ── 완료 안내 문구 준비 ──────────────────────────────────────────────
+      let completionText = businessProfile.default_completion_message ||
         `[클린브로] 안녕하세요, 고객님!\n{customer_name}님 {memo} 작업이 완료되었습니다.\n깨끗하게 청소해 드렸으니 확인해 주세요. 감사합니다! 😊`;
 
-      mmsText = mmsText
+      completionText = completionText
         .replace(/{customer_name}/g, completionTarget.customer_name || '고객')
         .replace(/{memo}/g, completionTarget.memo || '')
-        .replace(/{after_url}/g, uploadResults.after[0] || '');
+        .replace(/{after_url}/g, '');
 
-      // 가이드 URL 파악
+      // ── 가이드 URL 파악 ───────────────────────────────────────────────────
       let guideUrl = '';
       if (completionTarget.category === '에어컨' && businessProfile.ac_guide_url) {
         guideUrl = businessProfile.ac_guide_url;
@@ -1583,45 +1583,40 @@ function App() {
         guideUrl = businessProfile.washer_guide_url;
       }
 
-      // ── 순차 발송 헬퍼 ────────────────────────────────────────────────────
-      const sendOne = async (msg, imgUrl) => {
-        await sendSolapiMmsLocally(completionTarget.phone, msg, imgUrl ? [imgUrl] : []);
-        await new Promise(r => setTimeout(r, 300)); // 연속 발송 방지용 딜레이
-      };
+      // ── 메시지앱 본문 조합 ────────────────────────────────────────────────
+      const lines = [];
 
-      try {
-        // ① 청소 전 사진 (장수별 개별 발송)
-        for (let i = 0; i < uploadResults.before.length; i++) {
-          await sendOne(
-            `[클린브로] 📸 청소 전 사진 (${i + 1}/${uploadResults.before.length})`,
-            uploadResults.before[i]
-          );
-        }
-
-        // ② 청소 후 사진 (장수별 개별 발송)
-        for (let i = 0; i < uploadResults.after.length; i++) {
-          await sendOne(
-            `[클린브로] ✅ 청소 후 사진 (${i + 1}/${uploadResults.after.length})`,
-            uploadResults.after[i]
-          );
-        }
-
-        // ③ 관리 가이드 이미지
-        if (guideUrl) {
-          const guideLabel = completionTarget.category === '에어컨'
-            ? '[클린브로] 🌬️ 에어컨 관리 가이드입니다. 주기적으로 참고해 주세요!'
-            : '[클린브로] 🫧 세탁기 관리 가이드입니다. 주기적으로 참고해 주세요!';
-          await sendOne(guideLabel, guideUrl);
-        }
-
-        // ④ 작업 완료 안내 문자 (이미지 없음)
-        await sendSolapiMmsLocally(completionTarget.phone, mmsText, []);
-
-        alert('✅ 작업 완료! 고객님께 사진과 완료 안내 문자가 순차 발송되었습니다.');
-      } catch (err) {
-        console.error(err);
-        alert('작업 완료/사진 저장은 성공했지만 자동 문자 발송 중 오류가 발생했습니다.\n사유: ' + err.message);
+      // 청소 전 사진
+      if (uploadResults.before.length > 0) {
+        lines.push('📸 청소 전 사진');
+        uploadResults.before.forEach((url, i) => lines.push(`  ${i + 1}. ${url}`));
       }
+
+      // 청소 후 사진
+      if (uploadResults.after.length > 0) {
+        lines.push('\n✅ 청소 후 사진');
+        uploadResults.after.forEach((url, i) => lines.push(`  ${i + 1}. ${url}`));
+      }
+
+      // 가이드 이미지
+      if (guideUrl) {
+        const guideLabel = completionTarget.category === '에어컨'
+          ? '\n🌬️ 에어컨 관리 가이드' : '\n🫧 세탁기 관리 가이드';
+        lines.push(guideLabel);
+        lines.push(`  ${guideUrl}`);
+      }
+
+      // 완료 안내문구
+      lines.push(`\n${completionText}`);
+
+      const smsBody = lines.join('\n');
+      const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
+      const smsUrl = `sms:${cleanPhone}${/iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?'}body=${encodeURIComponent(smsBody)}`;
+
+      // ── 메시지앱 열기 ─────────────────────────────────────────────────────
+      window.open(smsUrl, '_blank');
+      alert('✅ 사진 저장 완료!\n메시지앱이 열렸습니다. 사진을 직접 첨부하여 발송해 주세요.');
+
 
       setShowCompletionModal(false);
       setBeforeFiles([]); setAfterFiles([]);
