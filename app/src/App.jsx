@@ -66,6 +66,22 @@ function useLongPress(callback, ms = 500) {
   };
 }
 
+// 90바이트 SMS 길이 제한 유틸리티 (LMS/MMS 요금 폭탄 방지)
+const truncateToSMS = (str) => {
+  let byteLength = 0;
+  let result = '';
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charAt(i);
+    const charCode = char.charCodeAt(0);
+    // 한글 등 다국어는 2바이트, 영어/숫자/공백/기호는 1바이트 처리 (euc-kr 통상 기준)
+    const byteSize = charCode <= 0x00007F ? 1 : 2;
+    if (byteLength + byteSize > 90) break;
+    byteLength += byteSize;
+    result += char;
+  }
+  return result;
+};
+
 
 function App() {
   const [session, setSession] = useState(null);
@@ -786,18 +802,21 @@ function App() {
       error = insErr;
       if (!error && data && data[0]) {
         try {
-          const confirmedTpl = businessProfile.confirmed_template || `[예약 확정] [일시]에 방문 예정입니다. - 클린브로 ([파트너전화번호])`;
+          const confirmedTpl = businessProfile.confirmed_template || `[클린브로] [일시] 방문예정. 감사합니다!`;
           const timeVal = entry.book_time_type === '직접입력' ? entry.book_time_custom : entry.book_time_type;
           const dateTimeStr = `${entry.book_date} ${timeVal}`;
           const senderPhone = userProfile?.solapi_from_number || userProfile?.sender_number || businessProfile?.solapi_from_number || businessProfile?.phone || '';
 
           // 클라우드 저장 시 즉시 자동 발송 (설정 무관하게 무조건 발송 처리)
           if (senderPhone && (userProfile?.solapi_api_key || businessProfile?.solapi_api_key) && entry.phone) {
-            const msg = confirmedTpl
+            let msg = confirmedTpl
               .replace(/\[고객명\]/g, entry.customer_name || '고객')
               .replace(/\[일시\]/g, dateTimeStr)
               .replace(/\[시간\]/g, timeVal || '')
               .replace(/\[파트너전화번호\]/g, senderPhone);
+
+            // 문자 길이 90바이트 제한 (SMS만 발송)
+            msg = truncateToSMS(msg);
 
             try {
               await sendSolapiMmsLocally(entry.phone, msg);
@@ -1297,21 +1316,24 @@ function App() {
     let updateField = '';
 
     if (type === 'confirmed') {
-      template = businessProfile.confirmed_template || `[예약 확정] [일시]에 예약이 완료되었습니다. - 클린브로 ([파트너전화번호])`;
+      template = businessProfile.confirmed_template || `[클린브로] [일시] 방문예정. 감사합니다!`;
       updateField = 'sms_sent_initial';
     } else {
-      template = businessProfile.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`;
+      template = businessProfile.morning_reminder_template || `[클린브로] 오늘 [시간] 방문예정. 뵙겠습니다!`;
       updateField = 'sms_sent_reminder';
     }
 
     const timeValue = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
     const senderPhone = userProfile?.solapi_from_number || businessProfile?.solapi_from_number || businessProfile?.phone || '';
 
-    const msg = template
+    let msg = template
       .replace(/\[고객명\]/g, c.customer_name || '고객')
       .replace(/\[일시\]/g, `${c.book_date} ${timeValue}`)
       .replace(/\[시간\]/g, timeValue || '')
       .replace(/\[파트너전화번호\]/g, senderPhone);
+
+    // 문자 길이 90바이트 제한 (SMS만 발송)
+    msg = truncateToSMS(msg);
 
     try {
       if (confirm('자동으로 문자를 발송하시겠습니까?\n(아니오 클릭 시 메시지 앱이 열립니다)')) {
