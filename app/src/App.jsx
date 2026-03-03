@@ -138,6 +138,7 @@ function App() {
   const [blogDraft, setBlogDraft] = useState(null);       // { title, body, tags, photoAltTexts }
   const [blogDraftImages, setBlogDraftImages] = useState([]);  // image URLs for the draft
   const [blogDraftTarget, setBlogDraftTarget] = useState(null);
+  const [manualDraftInfo, setManualDraftInfo] = useState({ address: '', category: '에어컨', product: '벽걸이', memo: '' });
   const [isGeneratingBlog, setIsGeneratingBlog] = useState(false);
   const [isPublishingBlog, setIsPublishingBlog] = useState(false);
   const BOT_URL = 'http://localhost:8765';  // Python bot address
@@ -158,6 +159,15 @@ function App() {
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState({ title: '', description: '', image_url: '', link_url: '', category: '에어컨', platform: '쿠팡', tag: '', price: '', stock: '' });
   const [productImageFile, setProductImageFile] = useState(null);
+
+  // 쇼츠 AI 상태
+  const [shortsView, setShortsView] = useState("home"); // home | create | loading | result
+  const [shortsTopic, setShortsTopic] = useState("");
+  const [shortsCategory, setShortsCategory] = useState("감동/힐링");
+  const [shortsDuration, setShortsDuration] = useState("60");
+  const [shortsScript, setShortsScript] = useState("");
+  const [shortsError, setShortsError] = useState("");
+  const SHORTS_CATEGORIES = ["감동/힐링", "반전/충격", "정보/교육", "유머", "동기부여"];
 
   // 인증 및 모드 관련 상태
   const [isResetMode, setIsResetMode] = useState(false);
@@ -683,11 +693,11 @@ function App() {
         },
         body: JSON.stringify({
           imageUrls,
-          category: bookingInfo?.category,
-          product: bookingInfo?.product,
-          address: bookingInfo?.address,
-          customerName: bookingInfo?.customer_name,
-          memo: bookingInfo?.memo,
+          category: bookingInfo?.category || manualDraftInfo.category,
+          product: bookingInfo?.product || manualDraftInfo.product,
+          address: bookingInfo?.address || manualDraftInfo.address,
+          customerName: bookingInfo?.customer_name || '고객',
+          memo: bookingInfo?.memo || manualDraftInfo.memo,
           businessProfile: {
             company_name: businessProfile.company_name,
             qualifications: '삼성 가전 전문 세척 교육 과정 이수 / 에어컨 설치 자격증 보유',
@@ -731,9 +741,9 @@ function App() {
           tags: blogDraft.tags,
           photo_alt_texts: blogDraft.photoAltTexts || [],
           image_urls: blogDraftImages,
-          category: blogDraftTarget?.category,
-          product: blogDraftTarget?.product,
-          address: blogDraftTarget?.address,
+          category: blogDraftTarget?.category || manualDraftInfo.category,
+          product: blogDraftTarget?.product || manualDraftInfo.product,
+          address: blogDraftTarget?.address || manualDraftInfo.address,
         }),
       });
       const result = await res.json();
@@ -747,6 +757,81 @@ function App() {
       setIsPublishingBlog(false);
     }
   };
+
+  const handleCopyShortsScript = () => {
+    navigator.clipboard.writeText(shortsScript);
+    alert('스크립트가 복사되었습니다!');
+  };
+
+  const generateShortsScript = async () => {
+    if (!shortsTopic.trim()) { setShortsError("주제를 입력해주세요!"); return; }
+    setShortsError("");
+    setShortsView("loading");
+
+    const prompt = `당신은 한국 유튜브 쇼츠 전문 작가입니다. 시청자는 주로 50~70대 여성입니다.
+
+다음 조건으로 쇼츠 스크립트를 작성해주세요:
+- 주제: ${shortsTopic}
+- 카테고리: ${shortsCategory}
+- 영상 길이: ${shortsDuration}초
+- 말하는 속도 기준, ${shortsDuration}초 분량의 나레이션
+- 감정이입이 잘 되는 구어체
+- 후킹 첫문장으로 시작
+- 마지막에 구독 유도 멘트 포함
+
+형식:
+[후킹 도입부]
+(내용)
+
+[본문]
+(내용)
+
+[마무리 & 구독 유도]
+(내용)
+
+---
+⏱ 예상 시간: ${shortsDuration}초
+`;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      // We will proxy this through an edge function to keep API keys secure eventually.
+      // For now, if anthropic key is directly exposed or we mock it:
+      // Note: Ideally you should create a Supabase edge function `generate-shorts-script` 
+      // similar to `generate-blog-draft` to prevent Anthropic key leaking.
+      // Here is a simulated direct API call placeholder or we just use gemini edge function to mock it temporary.
+
+      // Let's use Gemini edge function for script generation since Anthropic key is not provided in env.
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-blog-draft`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token || ''}`,
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
+        },
+        body: JSON.stringify({
+          imageUrls: [],
+          category: shortsCategory,
+          memo: `쇼츠 스크립트 작성 요청! 프롬프트:\n${prompt}`,
+          businessProfile: {}
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+
+      const draft = data.draft;
+      setShortsScript(draft.title + '\n\n' + draft.body);
+      setShortsView("result");
+    } catch (e) {
+      setShortsError("생성 실패. 다시 시도해주세요. " + e.message);
+      setShortsView("create");
+    }
+  };
+
+
+
+
 
   const handleSaveBooking = async () => {
     if (!newPhone.trim() || !address.trim()) {
@@ -1640,12 +1725,6 @@ function App() {
 
       setShowCompletionModal(false);
       fetchCustomers();
-
-      // 블로그 모달 자동 열기 (사진 첨부는 블로그 모달에서)
-      setBlogDraftTarget(completionTarget);
-      setBlogDraftImages([]);
-      setBlogDraft(null);
-      setShowBlogDraftModal(true);
 
     } catch (err) {
       alert('저장 중 오류: ' + err.message);
@@ -2613,6 +2692,25 @@ function App() {
               </button>
 
               <button
+                onClick={() => {
+                  setBlogDraftTarget(null);
+                  setBlogDraftImages([]);
+                  setBlogDraft(null);
+                  setShowBlogDraftModal(true);
+                }}
+                className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
+              >
+                <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
+                  <span className="material-symbols-outlined">edit_document</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100">AI 블로그 자동 작성하기</h4>
+                  <p className="text-xs text-slate-400">사진만 올려도 찰떡같이 블로그 글을 써드려요</p>
+                </div>
+                <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+              </button>
+
+              <button
                 onClick={() => setSettingsActiveMenu('invite')}
                 className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
               >
@@ -2638,6 +2736,21 @@ function App() {
                   <p className="text-xs text-slate-400">앱 사용 설명서 및 최신 업데이트 확인</p>
                 </div>
                 <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+              </button>
+
+              {/* 바이럴 쇼츠 AI 기능 추가 */}
+              <button
+                onClick={() => setSettingsActiveMenu('shorts_ai')}
+                className="bg-gradient-to-br from-purple-500 to-fuchsia-600 p-5 rounded-2xl shadow-lg border-0 flex items-center gap-4 active:scale-95 transition-all text-left group"
+              >
+                <div className="w-12 h-12 bg-white/20 text-white rounded-xl flex items-center justify-center backdrop-blur-sm">
+                  <span className="material-symbols-outlined">movie</span>
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-black text-white">쇼츠 AI 대시보드</h4>
+                  <p className="text-xs text-purple-100 font-medium">바이럴 숏폼 제작 자동화</p>
+                </div>
+                <span className="material-symbols-outlined text-white/50">chevron_right</span>
               </button>
 
               <a
@@ -2959,6 +3072,176 @@ function App() {
               <button disabled={isBulking} onClick={handleBulkTaxUpdate} className="w-full py-4 bg-red-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all">
                 {isBulking ? '적용 중...' : '데이터 일괄 적용하기'}
               </button>
+            </div>
+          )}
+
+          {/* --- [추가] 상세 메뉴 6: 쇼츠 AI 대시보드 --- */}
+          {settingsActiveMenu === 'shorts_ai' && (
+            <div className="space-y-5 animate-slide-up pb-20">
+              <style>{`
+                @keyframes pulse-ring { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+              `}</style>
+
+              {/* Header section matching Stitch design conceptually */}
+              <div className="bg-slate-900 rounded-[2rem] p-6 text-white shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500 rounded-full blur-[80px] opacity-30 -mr-20 -mt-20"></div>
+                <div className="absolute bottom-0 left-0 w-40 h-40 bg-fuchsia-600 rounded-full blur-[60px] opacity-20 -ml-10 -mb-10"></div>
+
+                <div className="relative z-10 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="px-3 py-1 bg-white/10 rounded-full text-[10px] font-bold tracking-wider uppercase text-purple-200 border border-white/10 backdrop-blur-md">VIRAL SHORTS MAKER</span>
+                    <button onClick={() => { setSettingsActiveMenu('main'); setShortsView('home'); }} className="material-symbols-outlined text-white/40 hover:text-white bg-slate-800 p-1.5 rounded-full text-sm">close</button>
+                  </div>
+
+                  <div>
+                    <h2 className="text-3xl font-black mb-2 tracking-tight">쇼츠 AI<br />대시보드</h2>
+                    <p className="text-sm text-slate-300 font-medium leading-relaxed opacity-90">
+                      어떤 아이디어든 고성능 세로형 콘텐츠로<br />버튼 한 번에 변환하세요.
+                    </p>
+                  </div>
+
+                  {shortsView === 'home' && (
+                    <div className="pt-4 grid grid-cols-2 gap-3">
+                      <button onClick={() => setShortsView('create')} className="bg-white text-slate-900 font-black py-4 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 active:scale-95 transition-all shadow-lg hover:bg-slate-50">
+                        <span className="material-symbols-outlined text-2xl text-purple-600">add_circle</span>
+                        <span className="text-[13px]">새로 제작</span>
+                      </button>
+                      <button className="bg-white/10 text-white font-bold py-4 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 backdrop-blur-md border border-white/10 active:scale-95 transition-all hover:bg-white/20">
+                        <span className="material-symbols-outlined text-2xl">folder_copy</span>
+                        <span className="text-[13px]">라이브러리</span>
+                      </button>
+                      <button className="col-span-2 bg-white/10 text-white font-bold py-4 px-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 backdrop-blur-md border border-white/10 active:scale-95 transition-all hover:bg-white/20">
+                        <span className="material-symbols-outlined text-2xl">analytics</span>
+                        <span className="text-[13px]">분석</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {shortsView === 'home' && (
+                <>
+                  {/* 장면 미리보기 (Scene Preview) */}
+                  <div className="space-y-4 pt-2">
+                    <div className="flex items-center justify-between px-1">
+                      <h3 className="font-black text-slate-800 dark:text-slate-100 text-lg">장면 미리보기</h3>
+                      <button className="text-xs font-bold text-purple-600 bg-purple-50 dark:bg-purple-900/30 px-3 py-1.5 rounded-full">전체 보기</button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Item 1 */}
+                      <div className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-sm border border-slate-100 dark:border-slate-700 aspect-[9/16] relative group">
+                        <img src="https://images.unsplash.com/photo-1620207418302-439b387441b0?q=80&w=400&auto=format&fit=crop" className="w-full h-full object-cover" alt="preview" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-4">
+                          <span className="material-symbols-outlined text-white mb-2 drop-shadow-md">play_circle</span>
+                          <p className="text-white text-xs font-medium line-clamp-2 drop-shadow-md">"세탁기, 아직도 겉만 닦으시나요?..."</p>
+                        </div>
+                      </div>
+
+                      {/* Item 2 */}
+                      <div className="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden shadow-sm border border-slate-100 dark:border-slate-700 aspect-[9/16] relative group">
+                        <img src="https://images.unsplash.com/photo-1581622558667-3419a8dc5f83?q=80&w=400&auto=format&fit=crop" className="w-full h-full object-cover" alt="preview" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-4">
+                          <span className="material-symbols-outlined text-white mb-2 drop-shadow-md">play_circle</span>
+                          <p className="text-white text-xs font-medium line-clamp-2 drop-shadow-md">"여름 필수 홈케어 꿀팁 대방출..."</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 발행 준비 완료 (Ready to Publish) */}
+                  <div className="bg-slate-50 dark:bg-slate-800/80 rounded-2xl p-5 border border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-slate-800 dark:text-white text-sm">발행 준비 완료</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">4K 해상도로 유튜브에 직접 내보내기</p>
+                    </div>
+                    <button className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 w-10 h-10 rounded-full flex items-center justify-center shadow-lg active:scale-95 transition-transform hover:bg-black/80">
+                      <span className="material-symbols-outlined text-xl">file_upload</span>
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* 제작 화면 */}
+              {shortsView === 'create' && (
+                <div className="bg-white dark:bg-slate-800 p-6 flex flex-col gap-5 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 animate-slide-up">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => setShortsView('home')} className="flex items-center justify-center bg-slate-100 text-slate-500 rounded-full w-8 h-8 hover:bg-slate-200">
+                      <span className="material-symbols-outlined text-sm">arrow_back</span>
+                    </button>
+                    <h3 className="font-black text-slate-800 dark:text-white text-lg">새로운 스크립트 작성</h3>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-300">📌 콘텐츠 주제</label>
+                    <textarea
+                      value={shortsTopic}
+                      onChange={e => { setShortsTopic(e.target.value); setShortsError(""); }}
+                      placeholder="예) 에어컨 분해 청소 안 하면 생기는 끔찍한 일벌레와 곰팡이들..."
+                      rows={3}
+                      className={`w-full bg-slate-50 dark:bg-slate-900 border ${shortsError ? 'border-red-400 focus:ring-red-400' : 'border-slate-200 dark:border-slate-700 focus:ring-purple-500'} rounded-xl p-4 text-sm outline-none transition-all resize-none`}
+                    />
+                    {shortsError && <p className="text-red-500 text-xs mt-1">{shortsError}</p>}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 dark:text-slate-300">🎭 카테고리</label>
+                      <select value={shortsCategory} onChange={e => setShortsCategory(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm outline-none">
+                        {SHORTS_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 dark:text-slate-300">⏱ 영상 길이</label>
+                      <select value={shortsDuration} onChange={e => setShortsDuration(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-3.5 text-sm outline-none">
+                        <option value="30">30초</option>
+                        <option value="60">60초</option>
+                        <option value="90">90초</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <button onClick={generateShortsScript} className="w-full bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white font-black py-4 rounded-xl shadow-lg shadow-purple-500/30 active:scale-95 transition-all text-[15px] flex items-center justify-center gap-2 mt-2">
+                    <span className="material-symbols-outlined text-lg">auto_awesome</span>
+                    스크립트 생성하기
+                  </button>
+                </div>
+              )}
+
+              {/* 로딩 화면 */}
+              {shortsView === 'loading' && (
+                <div className="bg-white dark:bg-slate-800 p-10 flex flex-col items-center justify-center gap-5 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 h-64">
+                  <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+                  <div className="text-center space-y-1">
+                    <p className="text-purple-600 font-black animate-pulse">AI가 스크립트를 작성 중입니다...</p>
+                    <p className="text-xs text-slate-400">보통 10~20초 안에 완료됩니다.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* 결과 화면 */}
+              {shortsView === 'result' && (
+                <div className="bg-white dark:bg-slate-800 p-6 flex flex-col gap-4 rounded-2xl shadow-lg border border-purple-200 dark:border-purple-600/30 animate-slide-up">
+                  <div className="flex items-center justify-between">
+                    <button onClick={() => setShortsView('create')} className="flex items-center gap-2 text-slate-500 text-xs font-bold px-3 py-1.5 bg-slate-100 rounded-lg hover:bg-slate-200">
+                      <span className="material-symbols-outlined text-sm">refresh</span> 다시 만들기
+                    </button>
+                    <span className="text-purple-600 font-bold text-sm flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm">task_alt</span> 완성 완료
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-5 text-sm leading-relaxed whitespace-pre-wrap max-h-[360px] overflow-y-auto font-medium text-slate-700 dark:text-slate-300">
+                    {shortsScript}
+                  </div>
+
+                  <button onClick={handleCopyShortsScript} className="w-full bg-purple-100 text-purple-700 border border-purple-200 font-black py-4 rounded-xl active:scale-95 transition-all text-sm flex items-center justify-center gap-2">
+                    <span className="material-symbols-outlined text-lg">content_copy</span>
+                    스크립트 클립보드에 복사하기
+                  </button>
+                </div>
+              )}
+
             </div>
           )}
 
@@ -3786,6 +4069,21 @@ function App() {
               {/* ── 사진 첨부 섹션 (블로그 AI 분석용) ── */}
               {!blogDraft && !isGeneratingBlog && (
                 <div className="space-y-4">
+                  {!blogDraftTarget && (
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-blue-100 dark:border-slate-700 space-y-3">
+                      <p className="text-xs font-bold text-slate-500">포스팅 기본 정보 (썸네일 제작에 활용됩니다)</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input type="text" placeholder="지역명 (예: 속초)" value={manualDraftInfo.address} onChange={e => setManualDraftInfo({ ...manualDraftInfo, address: e.target.value })} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none" />
+                        <select value={manualDraftInfo.category} onChange={e => setManualDraftInfo({ ...manualDraftInfo, category: e.target.value })} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none">
+                          {Object.keys(CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <select value={manualDraftInfo.product} onChange={e => setManualDraftInfo({ ...manualDraftInfo, product: e.target.value })} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none">
+                          {CATEGORIES[manualDraftInfo.category]?.map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                        <input type="text" placeholder="특이사항 (선택)" value={manualDraftInfo.memo} onChange={e => setManualDraftInfo({ ...manualDraftInfo, memo: e.target.value })} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none" />
+                      </div>
+                    </div>
+                  )}
                   <p className="text-xs font-bold text-slate-500 text-center">사진을 첨부하면 Gemini AI가 분석하여 블로그 초안을 자동 작성합니다</p>
 
                   {/* 전/후 사진 첨부 */}
