@@ -387,9 +387,9 @@ function App() {
 
   const fetchTeamMembers = async () => {
     if (!myBusinessId) return;
-    const { data, error } = await supabase.from('profiles').select('*').eq('business_id', myBusinessId);
+    const { data, error } = await supabase.from('profiles').select('*').eq('business_id', myBusinessId).order('user_role', { ascending: true });
     if (!error && data) {
-      setTeamMembers(data.map(p => p.nickname).filter(Boolean));
+      setTeamMembers(data);
     }
   };
 
@@ -914,6 +914,32 @@ function App() {
             // API 키나 발신번호가 설정되지 않아서 발송할 수 없는 경우 실패 처리
             await supabase.from('bookings').update({ sms_sent_initial: false }).eq('id', data[0].id);
           }
+          // [추가] 내 파트너(본인 제외 동일 비즈니스 소속)에게 예약 알림 발송
+          if (senderPhone && (userProfile?.solapi_api_key || businessProfile?.solapi_api_key)) {
+            try {
+              const { data: partners } = await supabase
+                .from('profiles')
+                .select('solapi_from_number')
+                .eq('business_id', myBusinessId)
+                .neq('id', session.user.id);
+
+              if (partners && partners.length > 0) {
+                const partnerMsg = `[클린브로] 새 예약: ${dateTimeStr}, ${entry.product} (앱 확인요망)`;
+                const pPhones = partners.map(p => p.solapi_from_number).filter(Boolean);
+
+                for (const pPhone of pPhones) {
+                  // 파트너 번호에는 '-'가 포함되어 있을 수 있으므로 숫자만 추출해서 보내거나, API가 알아서 처리하도록 함. solapi는 숫자만 받는것 권장
+                  const cleanPhone = pPhone.replace(/[^0-9]/g, '');
+                  if (cleanPhone) {
+                    await sendSolapiMmsLocally(cleanPhone, partnerMsg).catch(err => console.error('파트너 문자 발송 실패:', err));
+                  }
+                }
+              }
+            } catch (err) {
+              console.error('파트너 알림 발송 에러:', err);
+            }
+          }
+
         } catch (err) {
           console.error('예약 확정 자동 문자 발송 실패:', err);
           await supabase.from('bookings').update({ sms_sent_initial: false }).eq('id', data[0].id);
@@ -1572,7 +1598,13 @@ function App() {
               </div>
             </h4>
             <div className="flex items-center gap-2">
-              <p className="text-slate-400 font-mono text-sm">{c.phone ? c.phone.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`) : '번호 없음'}</p>
+              <p className="text-slate-400 font-mono text-sm">
+                {c.phone ? (
+                  <a href={`tel:${c.phone}`} className="hover:text-primary transition-colors hover:underline">
+                    {c.phone.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`)}
+                  </a>
+                ) : '번호 없음'}
+              </p>
               {c.phone && (
                 <button
                   onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.phone); alert('전화번호가 복사되었습니다!'); }}
@@ -2505,7 +2537,7 @@ function App() {
                     onChange={e => setAssignee(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 bg-white"
                   >
-                    {[...new Set([myNickname, ...teamMembers])].filter(Boolean).map(nickname => (
+                    {[...new Set([myNickname, ...(teamMembers || []).map(m => m.nickname)])].filter(Boolean).map(nickname => (
                       <option key={nickname} value={nickname}>{nickname}</option>
                     ))}
                     <option value="파트너">파트너 (닉네임 미지정)</option>
@@ -2691,24 +2723,26 @@ function App() {
                 <span className="material-symbols-outlined text-slate-300">chevron_right</span>
               </button>
 
-              <button
-                onClick={() => {
-                  setBlogDraftTarget(null);
-                  setBlogDraftImages([]);
-                  setBlogDraft(null);
-                  setShowBlogDraftModal(true);
-                }}
-                className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
-              >
-                <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
-                  <span className="material-symbols-outlined">edit_document</span>
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-bold text-slate-800 dark:text-slate-100">AI 블로그 자동 작성하기</h4>
-                  <p className="text-xs text-slate-400">사진만 올려도 찰떡같이 블로그 글을 써드려요</p>
-                </div>
-                <span className="material-symbols-outlined text-slate-300">chevron_right</span>
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => {
+                    setBlogDraftTarget(null);
+                    setBlogDraftImages([]);
+                    setBlogDraft(null);
+                    setShowBlogDraftModal(true);
+                  }}
+                  className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
+                >
+                  <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
+                    <span className="material-symbols-outlined">edit_document</span>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-slate-800 dark:text-slate-100">AI 블로그 자동 작성하기</h4>
+                    <p className="text-xs text-slate-400">사진만 올려도 찰떡같이 블로그 글을 써드려요</p>
+                  </div>
+                  <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setSettingsActiveMenu('invite')}
@@ -2739,19 +2773,21 @@ function App() {
               </button>
 
               {/* 바이럴 쇼츠 AI 기능 추가 */}
-              <button
-                onClick={() => setSettingsActiveMenu('shorts_ai')}
-                className="bg-gradient-to-br from-purple-500 to-fuchsia-600 p-5 rounded-2xl shadow-lg border-0 flex items-center gap-4 active:scale-95 transition-all text-left group"
-              >
-                <div className="w-12 h-12 bg-white/20 text-white rounded-xl flex items-center justify-center backdrop-blur-sm">
-                  <span className="material-symbols-outlined">movie</span>
-                </div>
-                <div className="flex-1">
-                  <h4 className="font-black text-white">쇼츠 AI 대시보드</h4>
-                  <p className="text-xs text-purple-100 font-medium">바이럴 숏폼 제작 자동화</p>
-                </div>
-                <span className="material-symbols-outlined text-white/50">chevron_right</span>
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setSettingsActiveMenu('shorts_ai')}
+                  className="bg-gradient-to-br from-purple-500 to-fuchsia-600 p-5 rounded-2xl shadow-lg border-0 flex items-center gap-4 active:scale-95 transition-all text-left group"
+                >
+                  <div className="w-12 h-12 bg-white/20 text-white rounded-xl flex items-center justify-center backdrop-blur-sm">
+                    <span className="material-symbols-outlined">movie</span>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-black text-white">쇼츠 AI 대시보드</h4>
+                    <p className="text-xs text-purple-100 font-medium">바이럴 숏폼 제작 자동화</p>
+                  </div>
+                  <span className="material-symbols-outlined text-white/50">chevron_right</span>
+                </button>
+              )}
 
               <a
                 href="https://open.kakao.com/o/g5rleHii"
@@ -3036,15 +3072,21 @@ function App() {
                     <div key={member.id} className="py-3 flex justify-between items-center">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center font-bold text-xs text-uppercase">
-                          {(member.nickname || member.email || 'P').substring(0, 1).toUpperCase()}
+                          {(member.nickname || 'P').substring(0, 1).toUpperCase()}
                         </div>
                         <div>
                           <p className="text-xs font-bold text-slate-800 dark:text-white">{member.nickname || '파트너'}</p>
-                          <p className="text-[9px] text-slate-400">{member.email || '-'}</p>
+                          <p className="text-[9px] text-slate-400">
+                            전화: {member.solapi_from_number ? (
+                              <a href={`tel:${member.solapi_from_number.replace(/[^0-9]/g, '')}`} className="hover:text-primary transition-colors hover:underline">
+                                {member.solapi_from_number.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`)}
+                              </a>
+                            ) : '미등록'}
+                          </p>
                         </div>
                       </div>
-                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${member.is_admin ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {member.is_admin ? '대표' : '파트너'}
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${member.user_role === 'admin' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {member.user_role === 'admin' ? '대표' : '파트너'}
                       </span>
                     </div>
                   ))}
