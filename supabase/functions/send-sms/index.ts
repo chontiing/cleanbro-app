@@ -1,5 +1,9 @@
+// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// @ts-ignore
 import { encodeBase64 } from "https://deno.land/std@0.203.0/encoding/base64.ts"
+
+declare const Deno: any;
 
 export const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -102,7 +106,7 @@ async function sendSms(apiKey: string, apiSecret: string, fromNumber: string, to
     return result
 }
 
-Deno.serve(async (req) => {
+Deno.serve(async (req: any) => {
     // Handle CORS pre-flight requests
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
@@ -176,9 +180,9 @@ Deno.serve(async (req) => {
         // 2. Cron (스케줄러) 모드: 오늘 예약자 아침 8시 알림
         if (payload.action === 'send_morning_reminders' || (!payload.type && !payload.action)) {
             const today = new Date()
-            const offset = today.getTimezoneOffset() * 60000
-            const localISOTime = (new Date(today.getTime() - offset)).toISOString()
-            const todayStr = localISOTime.split('T')[0]
+            // Supabase Edge Function은 UTC이므로 한국 시간(KST)으로 수동 변환 (+9시간)
+            const kstTime = new Date(today.getTime() + (9 * 60 * 60 * 1000))
+            const todayStr = kstTime.toISOString().split('T')[0]
 
             // 먼저 자동 발송이 활성화된 업체 리스트 가져오기
             const { data: activeBusinesses } = await supabase.from('businesses').select('id').eq('auto_morning_reminders', true)
@@ -272,7 +276,7 @@ Deno.serve(async (req) => {
             status: 200,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
-    } catch (error) {
+    } catch (error: any) {
         console.error(error)
         return new Response(JSON.stringify({ error: error.message }), {
             status: 500,

@@ -25,11 +25,12 @@ serve(async (req: Request) => {
             customerName,    // optional
             memo,            // optional technician notes
             businessProfile, // { company_name, qualifications }
+            geminiApiKey,    // [Optional] Fallback API key from client
         } = await req.json();
 
-        const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+        const GEMINI_API_KEY = geminiApiKey || Deno.env.get("GEMINI_API_KEY");
         if (!GEMINI_API_KEY) {
-            throw new Error("GEMINI_API_KEY 환경변수가 설정되지 않았습니다.");
+            throw new Error("GEMINI_API_KEY가 설정되지 않았습니다. (Env or Client)");
         }
 
         const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -89,34 +90,35 @@ serve(async (req: Request) => {
         const companyName = businessProfile?.company_name || "클린브로";
 
         const systemPrompt = `
-당신은 국내 청소 전문 업체 '${companyName}'의 공식 블로그 에디터입니다. (주의: 본문에 "안녕하세요", "클린브로 사장입니다" 같은 인위적인 인사말이나 자신을 사장으로 지칭하는 표현은 절대 쓰지 마세요. 무조건 본론 형태의 정보 전달과 신뢰감 주는 글로만 바로 시작하세요.)
-제공된 청소 전・후 사진들을 분석하여 네이버 블로그 상위 노출에 최적화된 포스팅 초안을 작성해주세요.
-주 독자층은 신생아가 있는 집부터 노인까지 전 연령대이므로, 누구나 읽기 쉽도록 친절하면서도 전문적인 말투를 유지해주세요.
-모든 이미지는 9:16 세로 비율(Mobile-friendly)로 촬영된 것을 가정하고, 이에 맞춰 9:16 모바일 화면에 꽉 차고 가독성이 좋은 숏폼 형태의 문체나 짧고 강렬한 단락으로 구성해주세요.
+당신은 국내 청소 전문 업체 '${companyName}'의 최고의 공식 블로그 에디터이자 마케터입니다. (주의: 본문에 "안녕하세요", "클린브로 사장입니다" 등 인위적 인사나 자신을 사장으로 지칭하는 표현 금지. 정보 전달과 신뢰감 위주의 글로 시작하세요.)
+제공된 청소 전・후 사진들을 분석하여 네이버 블로그 상위 노출에 최적화된 포스팅 초안과 동네 주민에게 홍보할 당근마켓 소식글을 함께 작성해주세요.
+모든 이미지는 9:16 세로 비율을 가정하고 숏폼 형태의 문체나 짧고 강렬한 단락으로 구성해주세요.
 
-[타겟별 소구점 강조 (본문에 자연스럽게 녹여주세요)]
-- 신생아/영유아 집: 면역력이 약한 아기를 위한 '무균 세척'과 '친환경 세제' 강조. ("우리 아이 첫 숨결, 곰팡이 섞인 에어컨 바람에 맡길 수 없죠.")
-- 노인/환자 집: 호흡기 질환 예방을 위한 전문적인 가전 살균 강조. ("부모님 댁 효도 선물, 쾌적한 실내 공기로 건강을 선물하세요.")
-- 일반 가정/전문성: 꼼꼼한 분해 세척과 가전 수명 연장 강조. ("삼성 가전 교육을 수료한 전문가가 속초 전 지역 어디든 달려갑니다.")
+[블로그 SEO 최적화 및 작성 필수 조건 (매우 중요)]
+- 업체 정보 및 키워드: 본문 내에 "속초 에어컨 청소", "속초 세탁기 청소", "클린브로" 키워드를 가장 자연스럽게 2~3회 포함하세요.
+- 첫 문단: 첫 문단에는 반드시 "속초" + 해당하는 "서비스명(예: 에어컨 청소)"을 결합하여 명시하세요.
+- 계절감: 현재 계절감(여름철 에어컨 사용, 환절기 맞이 청소 등)에 맞는 공감형 멘트를 자연스럽게 본문에 넣어주세요.
+- 네이버 스마트플레이스 SEO: 문서 중간중간 업체명+지역명 조합(예: 클린브로 속초점)을 2~3회 언급하세요.
+- 마무리 멘트: 본문 제일 마지막 하단에는 반드시 "${qualifications}" 자구와 예약 문의 번호 "010-2716-8635" 및 스마트플레이스 링크 "https://naver.me/xAFO9mgm" 를 표기하고, 바로 다음 줄에 "클린브로를 이용하신 후 네이버 플레이스에 소감을 남겨주시면 감사하겠습니다 😊" 라는 문장을 필수로 넣으세요.
+ 
+[당근마켓 소식글 작성 조건 (블로그와 별도로 작성)]
+- 분량 및 말투: 200~300자 이내. 동네 주민들에게 말하는 따뜻하고 자연스러운 이웃 말투 (예: 당근 이웃님들~).
+- 내용 구성: 핵심 키워드(속초 에어컨/세탁기 청소, 클린브로)를 문장 앞쪽에 자연스럽게 배치하고 홍보 느낌을 최소화한 진정성 있는 후기나 작업 소식 형태로 작성.
+- 금지 사항: 홈페이지/블로그 링크 유도 문구를 일절 적지 마세요.
 
-[규칙]
-1. 제목: 첨부된 사용자의 기존 블로그 썸네일 제목 스타일을 완벽하게 따라하세요. (예: "속초 에어컨 청소 삼성 시스템 분해 [1]", "속초에어컨청소 업체 가격 [2]"). 반드시 띄어쓰기나 대괄호 숫자 패턴을 유사하게 맞춰 적당한 번호를 붙여주세요.
-2. 본문: 2000자 내외. 청소 전 오염 상태(사진에서 시각적으로 확인된 구체적 묘사 필수) → 청소 과정 → 청소 후 결과 순서. (쌍따옴표 등 특수문자 사용 시 반드시 이스케이프(\\") 처리할 것)
-3. 단락마다 소제목(##) 사용. 글머리 기호(-)로 핵심 포인트 정리.
-4. 전문성/문의 안내(필수): 본문 제일 마지막 하단에 "${qualifications}" 자구를 언급하고, 이어서 예약 문의 번호 "010-2716-8635" 및 스마트플레이스 링크 "https://naver.me/xAFO9mgm" 를 꼭 포함시키세요.
-5. 태그: #지역 #제품종류 #${companyName} 조합으로 10개 이내.
-6. 각 사진에 대한 한 줄 설명(alt 텍스트 역할) 배열도 반환.
-7. 이미지 배치(매우 중요): 제공된 사진 ${imageParts.length}장에 대응하여, 본문 글의 문맥에 맞게 가장 적절한 위치에 \`[IMAGE_1]\`, \`[IMAGE_2]\` ... 형식의 마커를 삽입하세요. 마커는 반드시 1부터 사진 총 개수까지 빠짐없이 들어가야 합니다. (예: "청소 전 모습입니다. \\n[IMAGE_1]\\n정말 심각하죠?")
-8. 출력 형식 (JSON 절대 금지): 반드시 아래의 구분자를 사용해 텍스트 형태로 답변하세요.
+[응답 규칙 (출력 구조를 완벽히 준수할 것)]
+반드시 아래의 5개 구분자를 사용해 텍스트 형태로만 답변하세요 (절대 JSON 구조나 마크다운 블록 금지).
+
 [제목]
-(여기에 제목 작성)
+(여기에 블로그 썸네일 제목 스타일의 제목 작성)
 [본문]
-(여기에 본문 전체 작성, 자연스러운 실제 줄바꿈(엔터) 사용 가능, 중간에 [IMAGE_1] 마커 삽입)
+(블로그 본문 전체 작성. [IMAGE_1], [IMAGE_2] 형태의 사진 삽입 마커를 사진 개수만큼 내용 문맥에 맞게 반드시 모두 삽입할 것)
+[당근소식]
+(당근마켓용 따뜻한 소식글 200~300자 작성)
 [태그]
-(여기에 태그 목록 작성, 쉼표로 구분. 예: #속초,#에어컨청소)
+#속초에어컨청소 #속초세탁기청소 #클린브로 #강원도에어컨청소 #에어컨분해청소 #속초청소업체 #(추가 태그들...)
 [설명]
-(여기에 각 사진에 대한 한 줄 설명 작성, 실제 줄바꿈으로 구분)
-★완전 초집중 주의사항★: 절대 JSON 구조({ })나 마크다운(\`\`\`)으로 답변하지 마세요. 반드시 위 4개의 구분자([제목], [본문], [태그], [설명])를 기준으로 작성하세요.
+(각 사진에 대한 한 줄 설명 작성, 줄바꿈으로 구분)
 `;
 
         const userPrompt = `
@@ -124,7 +126,7 @@ serve(async (req: Request) => {
 지역: ${locationHint}
 메모(기사 특이사항): ${memo || "없음"}
 
-사진 ${imageParts.length}장을 보고 위 규칙에 따라 블로그 초안을 작성해주세요. 내용의 형태가 9:16 세로 사진 특유의 모바일 숏폼 규격에 완전히 어울리도록 배치해주세요. 다시 한 번 강조하지만 절대 JSON 형식으로 답하지 말고 [제목], [본문], [태그], [설명] 구분자를 사용해 텍스트로만 응답하세요.
+사진 ${imageParts.length}장을 보고 위 규칙에 따라 블로그 초안과 당근마켓 소식을 작성해주세요. 절대 JSON 반환 금지. 반드시 5개의 구분자([제목], [본문], [당근소식], [태그], [설명])를 기준으로 텍스트로만 응답하세요.
 `;
 
         // ─── 3. Call Gemini 2.5 Flash ───
@@ -170,23 +172,28 @@ serve(async (req: Request) => {
         };
 
         try {
-            const titleMatch = rawText.match(/\[제목\]([\s\S]*?)\[본문\]/i);
-            const bodyMatch = rawText.match(/\[본문\]([\s\S]*?)\[태그\]/i);
-            const tagsMatch = rawText.match(/\[태그\]([\s\S]*?)\[설명\]/i);
+            const titleMatch = rawText.match(/\[제목\]([\s\S]*?)(?:\[본문\]|\[당근소식\]|\[태그\]|\[설명\]|$)/i);
+            const bodyMatch = rawText.match(/\[본문\]([\s\S]*?)(?:\[당근소식\]|\[태그\]|\[설명\]|$)/i);
+            const karrotMatch = rawText.match(/\[당근소식\]([\s\S]*?)(?:\[태그\]|\[설명\]|$)/i);
+            const tagsMatch = rawText.match(/\[태그\]([\s\S]*?)(?:\[설명\]|$)/i);
             const descMatch = rawText.match(/\[설명\]([\s\S]*)$/i);
 
             if (titleMatch) draft.title = titleMatch[1].trim();
             if (bodyMatch) draft.body = bodyMatch[1].trim();
+            if (karrotMatch) draft.karrotText = karrotMatch[1].trim();
 
-            if (tagsMatch) {
-                draft.tags = tagsMatch[1]
+            const tagsText = tagsMatch ? tagsMatch[1] : null;
+            const descText = descMatch ? descMatch[1] : null;
+
+            if (tagsText) {
+                draft.tags = tagsText
                     .split(/[,#\n]/)
                     .map((t: string) => t.trim())
                     .filter((t: string) => t.length > 0)
                     .map((t: string) => t.startsWith('#') ? t : `#${t}`);
             }
-            if (descMatch) {
-                draft.photoAltTexts = descMatch[1]
+            if (descText) {
+                draft.photoAltTexts = descText
                     .split('\n')
                     .map((t: string) => t.trim())
                     .filter((t: string) => t.length > 0);

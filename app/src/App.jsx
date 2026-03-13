@@ -134,14 +134,25 @@ function App() {
   const [pendingShare, setPendingShare] = useState(null);
 
   // 블로그 초안 생성 관련 상태
-  const [showBlogDraftModal, setShowBlogDraftModal] = useState(false);
-  const [blogDraft, setBlogDraft] = useState(null);       // { title, body, tags, photoAltTexts }
-  const [blogDraftImages, setBlogDraftImages] = useState([]);  // image URLs for the draft
-  const [blogDraftTarget, setBlogDraftTarget] = useState(null);
+
   const [manualDraftInfo, setManualDraftInfo] = useState({ address: '', category: '에어컨', product: '벽걸이', memo: '' });
-  const [isGeneratingBlog, setIsGeneratingBlog] = useState(false);
-  const [isPublishingBlog, setIsPublishingBlog] = useState(false);
   const BOT_URL = 'http://localhost:8765';  // Python bot address
+
+  // 당근마켓 소식 연동 상태
+  const [socialPosts, setSocialPosts] = useState([]);
+  const [isFetchingSocialPosts, setIsFetchingSocialPosts] = useState(false);
+
+  // 블로그 5슬롯 자동화 상태
+  const [showBatchBlogModal, setShowBatchBlogModal] = useState(false);
+  const [batchSlots, setBatchSlots] = useState([
+    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
+    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
+    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
+    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
+    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' }
+  ]);
+  const [isBatchProcessing, setIsBatchProcessing] = useState(false);
+  const [batchProgressText, setBatchProgressText] = useState("");
 
   // 파트너(개별) 프로필 추가 정보 및 솔라피
   const [userProfile, setUserProfile] = useState({});
@@ -394,15 +405,48 @@ function App() {
   };
 
   const fetchExpenses = async () => {
-    if (!myBusinessId) return;
-    const { data, error } = await supabase
-      .from('expenses')
-      .select('*')
-      .eq('business_id', myBusinessId)
-      .order('id', { ascending: false });
-    if (!error && data) setExpenses(data);
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('business_id', myBusinessId)
+        .order('date', { ascending: false });
+      if (error) throw error;
+      setExpenses(data || []);
+    } catch (err) {
+      console.error('지출 로드 실패', err);
+    }
   };
 
+  const fetchSocialPosts = async () => {
+    if (!myBusinessId) return;
+    setIsFetchingSocialPosts(true);
+    try {
+      const { data, error } = await supabase
+        .from('social_posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setSocialPosts(data || []);
+    } catch (err) {
+      console.error('당근 소식 로드 실패', err);
+    } finally {
+      setIsFetchingSocialPosts(false);
+    }
+  };
+
+  const markSocialPostAsDone = async (postId, currentState) => {
+    try {
+      const { error } = await supabase
+        .from('social_posts')
+        .update({ is_posted_karrot: !currentState })
+        .eq('id', postId);
+      if (error) throw error;
+      setSocialPosts(socialPosts.map(p => p.id === postId ? { ...p, is_posted_karrot: !currentState } : p));
+    } catch (e) {
+      console.error("당근 소식 상태 업데이트 실패", e);
+    }
+  };
   const fetchCustomers = async () => {
     setLoadingData(true);
     const { data, error } = await supabase
@@ -675,86 +719,166 @@ function App() {
     return data;
   };
 
-  // ===========================================
-  // [블로그 초안 생성 (Gemini Vision AI)]
-  // ===========================================
-  const generateBlogDraft = async (imageUrls, bookingInfo) => {
-    setIsGeneratingBlog(true);
-    setBlogDraft(null);
+  const [blogQueue, setBlogQueue] = useState([]);
+
+  const fetchBlogQueue = async () => {
     try {
-      // supabase.functions.invoke 대신 상세 에러 확인을 위해 fetch 사용
-      const { data: { session } } = await supabase.auth.getSession();
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-blog-draft`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session?.access_token || ''}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY
-        },
-        body: JSON.stringify({
-          imageUrls,
-          category: bookingInfo?.category || manualDraftInfo.category,
-          product: bookingInfo?.product || manualDraftInfo.product,
-          address: bookingInfo?.address || manualDraftInfo.address,
-          customerName: bookingInfo?.customer_name || '고객',
-          memo: bookingInfo?.memo || manualDraftInfo.memo,
-          businessProfile: {
-            company_name: businessProfile.company_name,
-            qualifications: '삼성 가전 전문 세척 교육 과정 이수 / 에어컨 설치 자격증 보유',
-          },
-        })
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || data.message || `서버 오류 (${response.status})`);
+      const res = await fetch(`${BOT_URL}/queue`);
+      if (res.ok) {
+        const json = await res.json();
+        setBlogQueue(json.queue || []);
       }
+    } catch(e) { }
+  };
 
-      // Edge Function이 200 STATUS로 에러를 보낸 경우 처리
-      if (data.error) {
-        throw new Error(data.error);
-      }
+  useEffect(() => {
+    if (showBatchBlogModal) fetchBlogQueue();
+  }, [showBatchBlogModal]);
 
-      if (!data?.draft) throw new Error('응답 데이터에 초안이 없습니다.');
-      setBlogDraft(data.draft);
+  const deleteFromQueue = async (id) => {
+    if(!window.confirm('예약을 취소하시겠습니까?')) return;
+    try {
+      const res = await fetch(`${BOT_URL}/queue/${id}`, { method: 'DELETE' });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.detail || '취소 실패');
+      fetchBlogQueue();
     } catch (err) {
-      console.error('[블로그 초안 오류]', err);
-      alert('❌ AI 초안 생성 실패:\n' + err.message);
-    } finally {
-      setIsGeneratingBlog(false);
+      alert('취소 실패: ' + err.message);
     }
   };
 
   // ===========================================
-  // [네이버 블로그 발행 (븇 호출)]
+  // [5슬롯 일괄 자동 초안 및 임시저장 로직]
   // ===========================================
-  const publishToBlog = async () => {
-    if (!blogDraft) return;
-    setIsPublishingBlog(true);
+  const handleBatchImageUpload = (slotIndex, type, files) => {
+    const newSlots = [...batchSlots];
+    const fileArray = Array.from(files);
+    if (type === 'before') newSlots[slotIndex].beforeFiles = fileArray;
+    if (type === 'after') newSlots[slotIndex].afterFiles = fileArray;
+    setBatchSlots(newSlots);
+  };
+
+  const startBatchProcess = async () => {
+    // 1. 상태 변수가 아닌 실제 업로드할 활성 슬롯만 추출 (전/후 사진이 모두 있는 슬롯만)
+    const activeSlots = batchSlots.filter(slot => slot.beforeFiles.length > 0 && slot.afterFiles.length > 0);
+    
+    // 일부만 채운 경우 사용자에게 명확히 알려줌
+    const partiallyFilled = batchSlots.filter(
+      slot => (slot.beforeFiles.length > 0 && slot.afterFiles.length === 0) || (slot.beforeFiles.length === 0 && slot.afterFiles.length > 0)
+    );
+
+    if (partiallyFilled.length > 0) {
+      alert('일부 슬롯에 전/후 사진 중 하나만 등록되어 있습니다. 한 슬롯에는 전/후 사진이 모두 있어야 합니다.');
+      return;
+    }
+
+    if (activeSlots.length === 0) {
+      alert('최소 1개의 슬롯에 청소 전/후 사진을 모두 첨부해야 합니다.');
+      return;
+    }
+
+    if (blogQueue.length + activeSlots.length > 30) {
+      alert(`예약 대기열은 최대 30개까지만 유지할 수 있습니다. (현재 대기열 ${blogQueue.length}개 + 신규 등록 ${activeSlots.length}개 초과)`);
+      return;
+    }
+
+    setIsBatchProcessing(true);
+
     try {
-      const res = await fetch(`${BOT_URL}/publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: blogDraft.title,
-          body: blogDraft.body,
-          tags: blogDraft.tags,
-          photo_alt_texts: blogDraft.photoAltTexts || [],
-          image_urls: blogDraftImages,
-          category: blogDraftTarget?.category || manualDraftInfo.category,
-          product: blogDraftTarget?.product || manualDraftInfo.product,
-          address: blogDraftTarget?.address || manualDraftInfo.address,
-        }),
-      });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.detail || '발행 실패');
-      alert(`네이버 블로그에 성공적으로 발행되었습니다!\n\n포스팅 URL: ${result.published_url || '확인 불가'}`);
-      setShowBlogDraftModal(false);
-      setBlogDraft(null);
-    } catch (err) {
-      alert('만약 Python 봇이 실행중이지 않다면 http://localhost:8765 에서 naver_blog_bot.py를 먼저 실행해주세요.\n\n오류: ' + err.message);
-    } finally {
-      setIsPublishingBlog(false);
+      for (let i = 0; i < activeSlots.length; i++) {
+        setBatchProgressText(`${i + 1}/${activeSlots.length} 처리 중... (이미지 업로드)`);
+
+        const uploadOne = async (file, type) => {
+          const processed = await processImage(file);
+          const fileName = `${myBusinessId}/batch_blog/${type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.jpg`;
+          const { error: upErr } = await supabase.storage.from('receipts').upload(fileName, processed);
+          if (upErr) throw upErr;
+          const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
+          return data.publicUrl;
+        };
+
+        const [beforeUrls, afterUrls] = await Promise.all([
+          Promise.all(activeSlots[i].beforeFiles.map(f => uploadOne(f, 'before'))),
+          Promise.all(activeSlots[i].afterFiles.map(f => uploadOne(f, 'after'))),
+        ]);
+        const allUrls = [...beforeUrls, ...afterUrls];
+
+        setBatchProgressText(`${i + 1}/${activeSlots.length} AI 초안 작성 중...`);
+        
+        // 초안 작성용으로는 처리 속도를 위해 전/후 사진 각각 1장씩(최대 2장)만 Gemini에 전송하여 504 타임아웃 방지
+        const draftImageUrls = [];
+        if (beforeUrls.length > 0) draftImageUrls.push(beforeUrls[0]);
+        if (afterUrls.length > 0) draftImageUrls.push(afterUrls[0]);
+
+        const reqBody = {
+          image_urls: draftImageUrls,
+          promptContext: `카테고리: ${activeSlots[i].category}, 품목: ${activeSlots[i].product}`, 
+        };
+
+        const geminiRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-blog-draft`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify(reqBody),
+        });
+
+        const draftData = await geminiRes.json();
+        if (!geminiRes.ok) throw new Error(draftData.error || 'AI 초안 생성 오류');
+        const draft = draftData.draft;
+
+        if (draft.karrotText) {
+           try {
+              await supabase.from('social_posts').insert({
+                 blog_title: draft.title,
+                 karrot_content: draft.karrotText,
+                 image_url: allUrls[0] || null
+              });
+           } catch(e) {
+              console.error("당근 소식 배치 저장 실패:", e);
+           }
+        }
+
+        setBatchProgressText(`${i + 1}/${activeSlots.length} 스케줄러 큐 등록 중...`);
+        const botRes = await fetch(`${BOT_URL}/schedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: draft.title,
+            body: draft.body,
+            tags: draft.tags,
+            photo_alt_texts: draft.photoAltTexts || [],
+            image_urls: allUrls,
+            category: activeSlots[i].category,
+            product: activeSlots[i].product,
+            address: ''
+          }),
+        });
+        const botResult = await botRes.json();
+        if (!botRes.ok) throw new Error(botResult.detail || '파이썬 봇 스케줄링 실패');
+      }
+
+      setBatchProgressText(`✅ ${activeSlots.length}건 예약 발행 대기열 등록 완료!`);
+      // Update UI 큐 대시보드
+      fetchBlogQueue();
+      fetchSocialPosts(); // 당근소식 업데이트
+      
+      setTimeout(() => {
+        setIsBatchProcessing(false);
+        setBatchSlots([
+          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
+          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
+          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
+          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
+          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' }
+        ]);
+      }, 2000);
+
+    } catch (e) {
+      alert(`일괄 처리 중 오류 발생: ${e.message}\n\n※ 데이터가 그대로 보존되어 있습니다!\n절대로 창을 새로고침(F5)하지 마시고 '예약 발행 시작' 버튼만 다시 눌러주세요.`);
+      setIsBatchProcessing(false);
+      setBatchProgressText("");
     }
   };
 
@@ -919,13 +1043,13 @@ function App() {
             try {
               const { data: partners } = await supabase
                 .from('profiles')
-                .select('solapi_from_number')
+                .select('solapi_from_number, sender_number')
                 .eq('business_id', myBusinessId)
                 .neq('id', session.user.id);
 
               if (partners && partners.length > 0) {
                 const partnerMsg = `[클린브로] 새 예약: ${dateTimeStr}, ${entry.product} (앱 확인요망)`;
-                const pPhones = partners.map(p => p.solapi_from_number).filter(Boolean);
+                const pPhones = partners.map(p => p.solapi_from_number || p.sender_number).filter(Boolean);
 
                 for (const pPhone of pPhones) {
                   // 파트너 번호에는 '-'가 포함되어 있을 수 있으므로 숫자만 추출해서 보내거나, API가 알아서 처리하도록 함. solapi는 숫자만 받는것 권장
@@ -973,6 +1097,7 @@ function App() {
   const [editBusinessPhone, setEditBusinessPhone] = useState('');
   const [editLogoFile, setEditLogoFile] = useState(null);
   const [editNickname, setEditNickname] = useState(''); // 본인 닉네임 설정
+  const [editPersonalPhone, setEditPersonalPhone] = useState(''); // 개인 폰 번호 (파트너 노출용 추가)
   const [editTaxpayerType, setEditTaxpayerType] = useState('간이과세자'); // 과세자 유형
   const [editDefaultMessage, setEditDefaultMessage] = useState('');
   const [editNoticeTemplate, setEditNoticeTemplate] = useState('');
@@ -998,6 +1123,7 @@ function App() {
       setEditBusinessPhone(businessProfile.phone || '');
       setEditLogoFile(null);
       setEditNickname(myNickname || '');
+      setEditPersonalPhone(userProfile?.sender_number || '');
       setEditTaxpayerType(businessProfile.taxpayer_type || '간이과세자');
       setEditDefaultMessage(businessProfile.default_completion_message || `[클린브로] 청소 작업 완료 안내\n안녕하세요, 고객님! {customer_name}님 {memo} 작업이 완료되었습니다.\n\n📸 작업 사진 확인하기:\n{after_url}\n\n만족하셨다면 리뷰 부탁드립니다!\n[리뷰링크]`);
       setEditNoticeTemplate(businessProfile.notice_template || `[안내] 오늘 방문 예정입니다. 시간 맞춰 뵙겠습니다.\n- 클린브로 ([시간])`);
@@ -1083,6 +1209,7 @@ function App() {
       id: session.user.id,
       business_id: myBusinessId,
       nickname: editNickname,
+      sender_number: editPersonalPhone,
       solapi_api_key: editSolapiApiKey,
       solapi_api_secret: editSolapiApiSecret,
       solapi_from_number: editSolapiFromNumber
@@ -1093,7 +1220,7 @@ function App() {
     } else {
       setBusinessProfile(upsertData);
       setMyNickname(editNickname);
-      setUserProfile(prev => ({ ...prev, nickname: editNickname, solapi_api_key: editSolapiApiKey, solapi_api_secret: editSolapiApiSecret, solapi_from_number: editSolapiFromNumber }));
+      setUserProfile(prev => ({ ...prev, nickname: editNickname, sender_number: editPersonalPhone, solapi_api_key: editSolapiApiKey, solapi_api_secret: editSolapiApiSecret, solapi_from_number: editSolapiFromNumber }));
       alert('업체 정보 및 내 닉네임이 성공적으로 업데이트되었습니다.');
       fetchTeamMembers(); // 업데이트 후 팀원 목록 즉시 갱신
       fetchSolapiBalance(); // 설정 저장 직후 솔라피 잔액 재조회
@@ -1581,15 +1708,15 @@ function App() {
               <span className="text-slate-500 text-xs font-medium">{c.category} &gt; {c.product} ({c.quantity}대)</span>
             </div>
             <h4
-              onClick={(e) => { e.stopPropagation(); setMapPopupMemo(c.address || c.memo); }}
+              onClick={(e) => { e.stopPropagation(); setMapPopupMemo(c.address ? (c.address + ' ' + (c.address_detail || '')).trim() : c.memo); }}
               className={`font-bold text-base cursor-pointer hover:text-primary flex items-center transition-colors ${c.is_completed ? 'text-slate-500 line-through decoration-2' : 'text-slate-800 dark:text-slate-100'}`}
             >
               {c.customer_name || `${c.category || '기타'} (${c.product || '상세'})`}
-              {c.address && <span className="text-[13px] font-medium text-slate-500 ml-1.5">({c.address.split(' ').slice(0, 2).join(' ')})</span>}
+              {c.address && <span className="text-[13px] font-medium text-slate-500 ml-1.5">({c.address.split(' ').slice(0, 2).join(' ')} {c.address_detail || ''})</span>}
               <div className="flex items-center gap-1 ml-1.5">
                 <span className="material-symbols-outlined text-[16px] text-blue-500 bg-blue-50 p-0.5 rounded-full border border-blue-200">location_on</span>
                 <button
-                  onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.address); alert('주소가 복사되었습니다!'); }}
+                  onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.address ? (c.address + ' ' + (c.address_detail || '')).trim() : ''); alert('주소가 복사되었습니다!'); }}
                   className="p-1 hover:bg-slate-100 rounded-md transition-colors text-slate-300 hover:text-primary active:scale-90"
                   title="주소 복사"
                 >
@@ -1636,14 +1763,12 @@ function App() {
                 className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md border cursor-pointer active:scale-95 transition-all
                   ${c.sms_sent_reminder === true
                     ? 'bg-green-50 text-green-700 border-green-200 shadow-sm'
-                    : c.sms_sent_reminder === false
-                      ? 'bg-red-50 text-red-600 border-red-200 shadow-sm'
-                      : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'}`}
+                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
               >
                 <span className="material-symbols-outlined text-[14px]">
-                  {c.sms_sent_reminder === true ? 'check_circle' : c.sms_sent_reminder === false ? 'error' : 'wb_twilight'}
+                  {c.sms_sent_reminder === true ? 'check_circle' : 'schedule'}
                 </span>
-                {c.sms_sent_reminder === true ? '아침알림(발송완료)' : c.sms_sent_reminder === false ? '아침알림(발송실패)' : '아침알림(미발송)'}
+                {c.sms_sent_reminder === true ? '아침알림(발송완료)' : '아침알림(발송대기)'}
               </button>
             </div>
           </div>
@@ -2724,24 +2849,24 @@ function App() {
               </button>
 
               {isAdmin && (
-                <button
-                  onClick={() => {
-                    setBlogDraftTarget(null);
-                    setBlogDraftImages([]);
-                    setBlogDraft(null);
-                    setShowBlogDraftModal(true);
-                  }}
-                  className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
-                >
-                  <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center group-hover:bg-green-600 group-hover:text-white transition-colors">
-                    <span className="material-symbols-outlined">edit_document</span>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-bold text-slate-800 dark:text-slate-100">AI 블로그 자동 작성하기</h4>
-                    <p className="text-xs text-slate-400">사진만 올려도 찰떡같이 블로그 글을 써드려요</p>
-                  </div>
-                  <span className="material-symbols-outlined text-slate-300">chevron_right</span>
-                </button>
+                <>
+                  <button
+                    onClick={() => {
+                      setShowBatchBlogModal(true);
+                      // 모달 띄울 때 대기열 현황도 불러오기 
+                    }}
+                    className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-orange-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
+                  >
+                    <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                      <span className="material-symbols-outlined">auto_schedule</span>
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-slate-800 dark:text-slate-100">AI 블로그 5슬롯 예약 발행</h4>
+                      <p className="text-xs text-orange-500 font-medium overflow-hidden whitespace-nowrap text-ellipsis max-w-[200px] sm:max-w-none">12~24시간 간격으로 네이버 블로그 자동 예약 발행</p>
+                    </div>
+                    <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+                  </button>
+                </>
               )}
 
               <button
@@ -2842,6 +2967,10 @@ function App() {
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">내 닉네임 (작업 담당자 노출용)</label>
                 <input type="text" required value={editNickname} onChange={e => setEditNickname(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="예: 구로구점 김길동, 마스터" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 mb-1">개인 연락처 (선택, 팀원 상호 노출용)</label>
+                <input type="tel" value={editPersonalPhone} onChange={e => setEditPersonalPhone(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900 outline-none focus:ring-2 focus:ring-primary" placeholder="예: 010-0000-0000" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1">과세자 유형</label>
@@ -3077,9 +3206,9 @@ function App() {
                         <div>
                           <p className="text-xs font-bold text-slate-800 dark:text-white">{member.nickname || '파트너'}</p>
                           <p className="text-[9px] text-slate-400">
-                            전화: {member.solapi_from_number ? (
-                              <a href={`tel:${member.solapi_from_number.replace(/[^0-9]/g, '')}`} className="hover:text-primary transition-colors hover:underline">
-                                {member.solapi_from_number.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`)}
+                            전화: {(member.solapi_from_number || member.sender_number) ? (
+                              <a href={`tel:${(member.solapi_from_number || member.sender_number).replace(/[^0-9]/g, '')}`} className="hover:text-primary transition-colors hover:underline">
+                                {(member.solapi_from_number || member.sender_number).replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`)}
                               </a>
                             ) : '미등록'}
                           </p>
@@ -3589,12 +3718,99 @@ function App() {
             <p className={`text-[9px] ${currentTab === 'proshop' ? 'font-bold' : 'font-medium'}`}>프로샵</p>
           </button>
 
+          <button onClick={() => setCurrentTab('karrot')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'karrot' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
+            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'karrot' ? 'font-fill' : ''}`}>cruelty_free</span>
+            <p className={`text-[9px] ${currentTab === 'karrot' ? 'font-bold' : 'font-medium'}`}>당근소식</p>
+          </button>
+
           <button onClick={() => setCurrentTab('settings')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'settings' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
             <span className={`material-symbols-outlined text-[24px] ${currentTab === 'settings' ? 'font-fill' : ''}`}>manage_accounts</span>
             <p className={`text-[9px] ${currentTab === 'settings' ? 'font-bold' : 'font-medium'}`}>설정</p>
           </button>
         </div>
       </nav>
+
+      {/* ======================= [탭: 당근 소식 (Karrot News)] ======================= */}
+      {currentTab === 'karrot' && (
+        <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-5 animate-slide-up pb-32">
+          <div className="flex justify-between items-end mb-2 mt-4">
+            <div>
+              <h2 className="text-2xl font-black flex items-center gap-2 text-orange-600">
+                <span className="material-symbols-outlined text-orange-500">cruelty_free</span> 당근 소식
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">블로그 작성 시 자동 생성된 동네요정 말투의 소식글입니다.</p>
+            </div>
+            <button
+               onClick={fetchSocialPosts}
+               disabled={isFetchingSocialPosts}
+               className="p-2 bg-slate-100 rounded-xl text-slate-500 active:scale-95"
+            >
+               <span className={`material-symbols-outlined text-sm ${isFetchingSocialPosts ? 'animate-spin' : ''}`}>sync</span>
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {socialPosts.length === 0 && !isFetchingSocialPosts && (
+              <div className="py-10 text-center text-slate-400">
+                <span className="material-symbols-outlined text-[48px] opacity-20 mb-2">inbox</span>
+                <p className="text-sm">아직 생성된 당근 소식이 없습니다.</p>
+              </div>
+            )}
+            
+            {socialPosts.map(post => (
+              <div key={post.id} className="bg-white rounded-[20px] shadow-sm border border-orange-100/50 overflow-hidden flex flex-col">
+                {/* 썸네일 & 헤더 */}
+                <div className="flex bg-slate-50 p-3 gap-3">
+                  {post.image_url ? (
+                    <img src={post.image_url} alt="썸네일" className="w-16 h-16 rounded-xl object-cover bg-slate-200" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-xl bg-orange-50 flex items-center justify-center text-orange-300">
+                      <span className="material-symbols-outlined">image</span>
+                    </div>
+                  )}
+                  <div className="flex-1 flex flex-col justify-center">
+                    <p className="text-xs text-orange-500 font-bold">{new Date(post.created_at).toLocaleDateString()}</p>
+                    <h3 className="text-sm font-black text-slate-700 line-clamp-2 leading-tight mt-0.5">{post.blog_title || '연관 블로그 제목 없음'}</h3>
+                  </div>
+                </div>
+                
+                {/* 당근용 텍스트 컨텐츠 */}
+                <div className="p-4 bg-white">
+                  <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
+                    {post.karrot_content}
+                  </p>
+                </div>
+                
+                {/* 액션 버튼 */}
+                <div className="p-3 border-t border-slate-50 bg-slate-50/50 flex gap-2">
+                  <button
+                    onClick={() => {
+                       navigator.clipboard.writeText(post.karrot_content);
+                       alert('당근마켓용 본문이 복사되었습니다! 당근 앱에 붙여넣기 하세요.');
+                    }}
+                    className="flex-1 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 text-xs font-bold active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">content_copy</span> 내용 복사
+                  </button>
+                  <button
+                    onClick={() => markSocialPostAsDone(post.id, post.is_posted_karrot)}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold active:scale-95 flex items-center justify-center gap-1 shadow-sm transition-colors ${
+                      post.is_posted_karrot 
+                        ? 'bg-slate-200 text-slate-500' 
+                        : 'bg-orange-500 text-white shadow-orange-500/20'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">
+                      {post.is_posted_karrot ? 'check_circle' : 'publish'}
+                    </span> 
+                    {post.is_posted_karrot ? '발행 완료' : '발행하기'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </main>
+      )}
 
       {/* ======================= [탭 7: 프로 샵] ======================= */}
       {currentTab === 'proshop' && (
@@ -4094,153 +4310,149 @@ function App() {
           </div>
         </div>
       )}
-      {/* ========================= [블로그 초안 승인 모달] ========================= */}
-      {showBlogDraftModal && (
 
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-end sm:items-center justify-center p-3 sm:p-4 animate-fade-in">
-          <div className="bg-white dark:bg-slate-900 rounded-[2rem] w-full max-w-2xl shadow-2xl overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-5 flex items-center justify-between">
+      {/* 5슬롯 자동 블로그 임시저장 모달 */}
+      {showBatchBlogModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-slideUp">
+            
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-orange-50 to-amber-50">
               <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-white text-[28px]">article</span>
-                <div><h3 className="font-black text-white text-lg">AI 블로그 초안</h3><p className="text-blue-200 text-[11px]">Gemini AI가 작성했습니다 · 수정 후 발행 승인</p></div>
+                <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center shadow-sm">
+                  <span className="material-symbols-outlined">auto_awesome_motion</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-slate-800">5슬롯 AI 자동 임시저장 파이프라인</h3>
+                  <p className="text-xs font-medium text-orange-600">사진 5세트를 등록하고 일괄로 모두 초안을 뽑아 임시저장합니다.</p>
+                </div>
               </div>
-              <button onClick={() => { setShowBlogDraftModal(false); setBlogDraft(null); }} className="text-white/70 hover:text-white p-2 rounded-xl transition-colors"><span className="material-symbols-outlined">close</span></button>
+              {!isBatchProcessing && (
+                <button onClick={() => setShowBatchBlogModal(false)} className="text-slate-400 hover:text-slate-600 p-2 rounded-xl transition-colors bg-white/50 hover:bg-white">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              )}
             </div>
-            <div className="p-5 overflow-y-auto max-h-[70vh] space-y-4">
 
-              {/* ── 사진 첨부 섹션 (블로그 AI 분석용) ── */}
-              {!blogDraft && !isGeneratingBlog && (
-                <div className="space-y-4">
-                  {!blogDraftTarget && (
-                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-blue-100 dark:border-slate-700 space-y-3">
-                      <p className="text-xs font-bold text-slate-500">포스팅 기본 정보 (썸네일 제작에 활용됩니다)</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input type="text" placeholder="지역명 (예: 속초)" value={manualDraftInfo.address} onChange={e => setManualDraftInfo({ ...manualDraftInfo, address: e.target.value })} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none" />
-                        <select value={manualDraftInfo.category} onChange={e => setManualDraftInfo({ ...manualDraftInfo, category: e.target.value })} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none">
-                          {Object.keys(CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                        <select value={manualDraftInfo.product} onChange={e => setManualDraftInfo({ ...manualDraftInfo, product: e.target.value })} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none">
-                          {CATEGORIES[manualDraftInfo.category]?.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                        <input type="text" placeholder="특이사항 (선택)" value={manualDraftInfo.memo} onChange={e => setManualDraftInfo({ ...manualDraftInfo, memo: e.target.value })} className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 focus:ring-2 focus:ring-primary outline-none" />
-                      </div>
-                    </div>
-                  )}
-                  <p className="text-xs font-bold text-slate-500 text-center">사진을 첨부하면 Gemini AI가 분석하여 블로그 초안을 자동 작성합니다</p>
-
-                  {/* 전/후 사진 첨부 */}
-                  <div className="grid grid-cols-2 gap-3">
-                    {/* Before */}
-                    <div className="space-y-2">
-                      <h5 className="text-xs font-black text-blue-600 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">cleaning_services</span> 청소 전 사진
-                      </h5>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {beforeFiles.map((f, i) => (
-                          <div key={i} className="aspect-square rounded-lg bg-slate-100 relative overflow-hidden">
-                            <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" />
-                            <button onClick={() => setBeforeFiles(beforeFiles.filter((_, idx) => idx !== i))} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5">
-                              <span className="material-symbols-outlined text-[10px]">close</span>
-                            </button>
-                          </div>
-                        ))}
-                        {beforeFiles.length < 5 && (
-                          <label className="aspect-square rounded-lg border-2 border-dashed border-blue-200 flex flex-col items-center justify-center text-blue-400 cursor-pointer bg-blue-50">
-                            <span className="material-symbols-outlined text-lg">add_a_photo</span>
-                            <input type="file" multiple accept="image/*" onChange={e => setBeforeFiles([...beforeFiles, ...Array.from(e.target.files)].slice(0, 5))} className="hidden" />
-                          </label>
-                        )}
-                      </div>
-                    </div>
-                    {/* After */}
-                    <div className="space-y-2">
-                      <h5 className="text-xs font-black text-green-600 flex items-center gap-1">
-                        <span className="material-symbols-outlined text-xs">magic_button</span> 청소 후 사진
-                      </h5>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {afterFiles.map((f, i) => (
-                          <div key={i} className="aspect-square rounded-lg bg-slate-100 relative overflow-hidden">
-                            <img src={URL.createObjectURL(f)} className="w-full h-full object-cover" />
-                            <button onClick={() => setAfterFiles(afterFiles.filter((_, idx) => idx !== i))} className="absolute top-0.5 right-0.5 bg-black/60 text-white rounded-full p-0.5">
-                              <span className="material-symbols-outlined text-[10px]">close</span>
-                            </button>
-                          </div>
-                        ))}
-                        {afterFiles.length < 5 && (
-                          <label className="aspect-square rounded-lg border-2 border-dashed border-green-200 flex flex-col items-center justify-center text-green-400 cursor-pointer bg-green-50">
-                            <span className="material-symbols-outlined text-lg">add_a_photo</span>
-                            <input type="file" multiple accept="image/*" onChange={e => setAfterFiles([...afterFiles, ...Array.from(e.target.files)].slice(0, 5))} className="hidden" />
-                          </label>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* AI 초안 생성 버튼 */}
-                  <button
-                    onClick={async () => {
-                      if (beforeFiles.length === 0 && afterFiles.length === 0) return alert('사진을 최소 1장 첨부해주세요.');
-                      setIsUploadingPhotos(true);
-                      try {
-                        // 사진 업로드 (Supabase storage)
-                        const uploadOne = async (file, type) => {
-                          const processed = await processImage(file);
-                          const fileName = `${myBusinessId}/${blogDraftTarget?.id || 'blog'}/${type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.jpg`;
-                          const { error: upErr } = await supabase.storage.from('receipts').upload(fileName, processed);
-                          if (upErr) throw upErr;
-                          const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
-                          return data.publicUrl;
-                        };
-                        const [beforeUrls, afterUrls] = await Promise.all([
-                          Promise.all(beforeFiles.map(f => uploadOne(f, 'before'))),
-                          Promise.all(afterFiles.map(f => uploadOne(f, 'after'))),
-                        ]);
-                        const allUrls = [...beforeUrls, ...afterUrls];
-                        // DB에도 사진 저장
-                        if (blogDraftTarget?.id) {
-                          await supabase.from('bookings').update({ photo_before: beforeUrls, photo_after: afterUrls }).eq('id', blogDraftTarget.id);
-                        }
-                        setBlogDraftImages(allUrls);
-                        generateBlogDraft(allUrls, blogDraftTarget);
-                      } catch (e) {
-                        alert('업로드 오류: ' + e.message);
-                      } finally {
-                        setIsUploadingPhotos(false);
-                      }
-                    }}
-                    disabled={isUploadingPhotos}
-                    className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-lg active:scale-95 disabled:opacity-60"
-                  >
-                    {isUploadingPhotos ? (
-                      <><span className="material-symbols-outlined animate-spin text-sm">sync</span> 업로드 중...</>
-                    ) : (
-                      <><span className="material-symbols-outlined text-sm">auto_awesome</span> AI 블로그 초안 자동 생성</>
-                    )}
-                  </button>
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
+              {isBatchProcessing && (
+                <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl flex flex-col items-center justify-center gap-3 animate-pulse">
+                   <span className="material-symbols-outlined text-[32px] text-orange-500 animate-spin">sync</span>
+                   <p className="font-bold text-orange-700 text-sm">{batchProgressText}</p>
                 </div>
               )}
 
-              {isGeneratingBlog ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-4">
-                  <span className="material-symbols-outlined animate-spin text-primary text-[48px]">progress_activity</span>
-                  <p className="font-bold text-slate-600">AI가 사진을 분석하여 SEO 초안을 작성 중입니다...</p>
+              <div className={`space-y-4 ${isBatchProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                {batchSlots.map((slot, idx) => (
+                  <div key={idx} className="bg-white border-2 border-slate-100 rounded-2xl p-4 flex flex-col gap-4 shadow-sm">
+                    <div className="flex items-center gap-3 w-full border-b border-slate-100 pb-3">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-black text-sm flex items-center justify-center flex-shrink-0">
+                        {idx + 1}
+                      </div>
+                      <div className="flex flex-1 gap-3">
+                        <select 
+                          value={slot.category || '에어컨'} 
+                          onChange={e => {
+                            const newSlots = [...batchSlots];
+                            newSlots[idx].category = e.target.value;
+                            setBatchSlots(newSlots);
+                          }} 
+                          className="w-1/3 bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none font-bold text-slate-600 focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="에어컨">에어컨</option>
+                          <option value="세탁기">세탁기</option>
+                          <option value="입주청소">입주청소</option>
+                          <option value="기타">기타</option>
+                        </select>
+                        <input 
+                          type="text" 
+                          value={slot.product || ''} 
+                          onChange={e => {
+                            const newSlots = [...batchSlots];
+                            newSlots[idx].product = e.target.value;
+                            setBatchSlots(newSlots);
+                          }} 
+                          placeholder="품목 (예: 벽걸이, 스탠드)" 
+                          className="flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none font-bold text-slate-600 focus:ring-2 focus:ring-orange-500" 
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="flex w-full grid grid-cols-2 gap-3">
+                      <label className={`relative flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${slot.beforeFiles.length > 0 ? 'border-orange-300 bg-orange-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`}>
+                        <div className="text-center">
+                          <span className={`material-symbols-outlined ${slot.beforeFiles.length > 0 ? 'text-orange-500' : 'text-slate-400'}`}>{slot.beforeFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
+                          <p className={`text-xs font-bold mt-1 ${slot.beforeFiles.length > 0 ? 'text-orange-700' : 'text-slate-500'}`}>
+                            {slot.beforeFiles.length > 0 ? `작업 전 (${slot.beforeFiles.length})` : '작업 전 사진'}
+                          </p>
+                        </div>
+                        {slot.beforeFiles.length > 0 && (
+                          <div className="flex gap-2 mt-2 w-full overflow-x-auto pb-1 scrollbar-hide shrink-0 snap-x">
+                            {slot.beforeFiles.map((f, i) => (
+                              <img key={i} src={URL.createObjectURL(f)} className="w-8 h-8 rounded-md object-cover border border-orange-200 shrink-0 snap-center" title={f.name} />
+                            ))}
+                          </div>
+                        )}
+                        <input type="file" multiple accept="image/*" onChange={(e) => handleBatchImageUpload(idx, 'before', e.target.files)} className="hidden" />
+                      </label>
+                      <label className={`relative flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${slot.afterFiles.length > 0 ? 'border-orange-300 bg-orange-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`}>
+                        <div className="text-center">
+                          <span className={`material-symbols-outlined ${slot.afterFiles.length > 0 ? 'text-orange-500' : 'text-slate-400'}`}>{slot.afterFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
+                          <p className={`text-xs font-bold mt-1 ${slot.afterFiles.length > 0 ? 'text-orange-700' : 'text-slate-500'}`}>
+                            {slot.afterFiles.length > 0 ? `작업 후 (${slot.afterFiles.length})` : '작업 후 사진'}
+                          </p>
+                        </div>
+                        {slot.afterFiles.length > 0 && (
+                          <div className="flex gap-2 mt-2 w-full overflow-x-auto pb-1 scrollbar-hide shrink-0 snap-x">
+                            {slot.afterFiles.map((f, i) => (
+                              <img key={i} src={URL.createObjectURL(f)} className="w-8 h-8 rounded-md object-cover border border-orange-200 shrink-0 snap-center" title={f.name} />
+                            ))}
+                          </div>
+                        )}
+                        <input type="file" multiple accept="image/*" onChange={(e) => handleBatchImageUpload(idx, 'after', e.target.files)} className="hidden" />
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 큐(대기열) 대시보드 추가 */}
+              {blogQueue.length > 0 && (
+                <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl p-4">
+                  <h4 className="text-orange-800 font-bold text-sm mb-3 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm">schedule</span>현재 예약 발행 대기열 현황 ({blogQueue.length}/30)
+                  </h4>
+                  <div className="space-y-2">
+                    {blogQueue.map((item, idx) => (
+                      <div key={item.id} className="flex items-center justify-between text-xs bg-white p-3 rounded-lg border border-orange-100 shadow-sm">
+                        <div className="flex-1 min-w-0 pr-3">
+                          <div className="font-bold text-slate-700 truncate text-sm">{idx+1}. {item.title}</div>
+                          <div className="text-orange-600 font-medium mt-1 inline-flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">timer</span>{item.scheduled_for_text} 예정</div>
+                        </div>
+                        <button onClick={() => deleteFromQueue(item.id)} className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg whitespace-nowrap active:scale-95 font-bold transition-colors">취소</button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ) : blogDraft ? (
-                <>
-                  <div><label className="block text-xs font-bold text-slate-500 mb-1">📌 포스팅 제목</label><input type="text" value={blogDraft.title} onChange={e => setBlogDraft({ ...blogDraft, title: e.target.value })} className="w-full border-2 border-blue-100 rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-primary outline-none bg-slate-50" /></div>
-                  <div><label className="block text-xs font-bold text-slate-500 mb-1">📝 본문</label><textarea rows={10} value={blogDraft.body} onChange={e => setBlogDraft({ ...blogDraft, body: e.target.value })} className="w-full border-2 border-slate-100 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none bg-slate-50 font-medium leading-relaxed" /></div>
-                  <div><label className="block text-xs font-bold text-slate-500 mb-1">🏷 해시태그</label><div className="flex flex-wrap gap-2">{(blogDraft.tags || []).map((tag, i) => <span key={i} className="px-2 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold border border-blue-100">#{tag.replace(/^#/, '')}</span>)}</div></div>
-                  {blogDraftImages.length > 0 && <div><label className="block text-xs font-bold text-slate-500 mb-2">📸 첨부 사진 ({blogDraftImages.length}장)</label><div className="flex gap-2 overflow-x-auto pb-1">{blogDraftImages.map((url, i) => <img key={i} src={url} alt={`photo-${i}`} className="w-20 h-20 object-cover rounded-xl border flex-shrink-0 shadow-sm" />)}</div></div>}
-                </>
-              ) : null}
+              )}
 
             </div>
-            <div className="p-4 border-t border-slate-100 flex gap-3">
-              <button onClick={() => { setShowBlogDraftModal(false); setBlogDraft(null); }} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm active:scale-95">취소</button>
-              <button onClick={publishToBlog} disabled={!blogDraft || isPublishingBlog || isGeneratingBlog} className="flex-[2] py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-black text-sm shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2">
-                {isPublishingBlog ? (<><span className="material-symbols-outlined animate-spin text-sm">sync</span>발행 중...</>) : (<><span className="material-symbols-outlined text-sm">publish</span>네이버 블로그 발행 승인</>)}
+
+            <div className="p-4 border-t border-slate-100 flex gap-2 w-full">
+              <button onClick={() => setShowBatchBlogModal(false)} disabled={isBatchProcessing} className="flex-1 py-3.5 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm active:scale-95 disabled:opacity-50">닫기</button>
+              
+              <button 
+                onClick={startBatchProcess} 
+                disabled={isBatchProcessing || blogQueue.length >= 30 || !batchSlots.some(s => s.beforeFiles.length > 0 && s.afterFiles.length > 0)} 
+                className="flex-[2] py-3.5 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl font-black text-sm shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {isBatchProcessing ? (
+                  <><span className="material-symbols-outlined animate-spin text-sm">sync</span>예약 등록 중...</>
+                ) : (
+                  <><span className="material-symbols-outlined text-sm">rocket_launch</span>사진을 채운 슬롯 예약 발행 시작</>
+                )}
               </button>
             </div>
+
           </div>
         </div>
       )}
