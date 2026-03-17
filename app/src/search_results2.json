@@ -1,0 +1,6 @@
+[
+  "488: setAddressDetail(c.address_detail || '');",
+  "529: const [addressDetail, setAddressDetail] = useState('');",
+  "861: address_detail: addressDetail,",
+  "2426: <input type=\"text\" value={addressDetail} onChange={e => setAddressDetail(e.target.value)} placeholder=\"상세 주소 (동/호수)\" className=\"w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none\" />"
+]

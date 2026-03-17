@@ -1,0 +1,22 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+@layer base {
+  body {
+    min-height: max(884px, 100dvh);
+  }
+}
+
+@layer utilities {
+  .ai-bubble-tail {
+    clip-path: polygon(0 0, 100% 0, 100% 100%);
+  }
+
+  .user-bubble-tail {
+    clip-path: polygon(0 0, 100% 0, 0 100%);
+  }
+
+  .animate-pulse-slow {
+    animation: pulse 5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}

@@ -1,0 +1,12 @@
+[
+  "838: alert('전화번호와 주소를 모두 입력해주세요.');",
+  "901: .replace(/\\[파트너전화번호\\]/g, senderPhone);",
+  "1005: setEditConfirmedTemplate(businessProfile.confirmed_template || `[예약 확정] [일시]에 예약이 완료되었습니다. - 클린브로 ([파트너전화번호])`);",
+  "1006: setEditMorningReminderTemplate(businessProfile.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`);",
+  "1110: const testPhone = window.prompt(\"테스트 문자를 받을 전화번호를 입력하세요.\", editSolapiFromNumber);",
+  "1444: .replace(/\\[파트너전화번호\\]/g, senderPhone);",
+  "1610: onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.phone); alert('전화번호가 복사되었습니다!'); }}",
+  "2408: <label className=\"block text-xs font-semibold text-slate-500 mb-1\">전화번호</label>",
+  "2852: <label className=\"block text-xs font-bold text-slate-500 mb-1\">대표 연락처</label>",
+  "2924: <label className=\"block text-[10px] font-bold text-slate-500 mb-1\">예약 확정 자동 문자 (치환자: [고객명], [일시], [시간], [파트너전화번호])</label>"
+]

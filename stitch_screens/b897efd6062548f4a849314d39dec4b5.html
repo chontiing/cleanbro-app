@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html class="light" lang="ko"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>파트너 관리</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2463eb",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111621",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+<div class="flex items-center justify-between px-4 py-4 max-w-md mx-auto w-full">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">menu</span>
+<h1 class="text-lg font-bold">파트너 관리</h1>
+<div class="relative">
+<span class="material-symbols-outlined text-slate-600 dark:text-slate-400">notifications</span>
+<span class="absolute top-0 right-0 h-2 w-2 bg-primary rounded-full border-2 border-white dark:border-slate-900"></span>
+</div>
+</div>
+</header>
+<main class="flex-1 overflow-y-auto pb-24">
+<div class="max-w-md mx-auto w-full px-4 pt-6">
+<div class="bg-gradient-to-r from-primary to-blue-600 rounded-xl shadow-lg p-6 mb-8 text-white relative overflow-hidden">
+<div class="relative z-10">
+<h2 class="text-xl font-bold mb-2">새로운 파트너 초대</h2>
+<p class="text-blue-100 text-sm mb-4">동료들과 함께 일정을 공유하고 관리하세요.</p>
+<button class="bg-white text-primary px-4 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-blue-50 transition-colors">
+<span class="material-symbols-outlined text-xl">person_add</span>
+                        파트너 초대하기
+                    </button>
+</div>
+<div class="absolute right-[-20px] bottom-[-20px] opacity-20 transform rotate-12">
+<span class="material-symbols-outlined text-[120px]">handshake</span>
+</div>
+</div>
+<div class="mb-8">
+<div class="flex items-center justify-between mb-4">
+<h3 class="text-lg font-bold">연결된 파트너</h3>
+<button class="text-sm text-primary font-medium hover:underline">모두 보기</button>
+</div>
+<div class="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+<div class="flex flex-col items-center gap-2 min-w-[72px]">
+<div class="relative">
+<img alt="Partner Kim" class="h-16 w-16 rounded-full object-cover border-2 border-white dark:border-slate-800 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWpPY7W6MpBpoc8GOkWrh_gTrMznutd53kV9Ib0rs5O12QTu0DGjvEPb9uevJjwnt5LljIR7nWl_b255-gx4KRYi4UnoDPx-eKQ6anYeCxD5ZdOMjt4q2H3k5rdQv96--nFjLLdvMXXxmOKwYEMCwcsEMQ3fNhTEv5cRG-kSHMoMhx0aUHIo5gbQPGmEdIz4lPAWga3R-HPEV217HF8StSSTdlcRiDOytBb5wepSJd0baj14gm2_rSAQrzOnO7Z9FZMlhcjifehLo"/>
+<span class="absolute bottom-0 right-0 h-4 w-4 bg-green-500 rounded-full border-2 border-white dark:border-slate-800"></span>
+</div>
+<span class="text-xs font-medium text-center">김민수</span>
+</div>
+<div class="flex flex-col items-center gap-2 min-w-[72px]">
+<div class="relative">
+<img alt="Partner Lee" class="h-16 w-16 rounded-full object-cover border-2 border-white dark:border-slate-800 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAs8Yseo3K93Y1Mr3PUh5K31RW6rEs3YrH5J-jqS9OIf6TGc614VQ_cYNxLbALua3jXcHQDf7C1NRr-3pqv4AN0ux8iMFy_03f2iMLcY7jgc89wiDpmKnPzdeoUERWOoeH_mJErJW_cvndXHE1HgA7_rCsm8YiZ5uVt2JzzCd3VI5_CM5JjITTsRzZfv4KY-gPhtuIhW7fYlepgwjkJwhQCEP_L8cGJcX1YJTSaD2IZB68l_no4uMcnFGqr6nQx7zTNO-pi9_pBYaA"/>
+<span class="absolute bottom-0 right-0 h-4 w-4 bg-slate-400 rounded-full border-2 border-white dark:border-slate-800"></span>
+</div>
+<span class="text-xs font-medium text-center">이영호</span>
+</div>
+<div class="flex flex-col items-center gap-2 min-w-[72px]">
+<div class="relative">
+<img alt="Partner Choi" class="h-16 w-16 rounded-full object-cover border-2 border-white dark:border-slate-800 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_mMa-Hs3VMhluzVhW3cpNfWNuNfQttqk6xfpzyBaqnG7n258eCRJm3l1rg7oMvIGPZAIdZy8sL6k-oBQItXPo8zFfWeyXnhcrwf6pqW5UJfuQAXVVhw1fR0rrCb_Q20GKVd1j_gSp1zJf1O7Y3B08UyI_igO893YFHt7o8Zn6IC6_kLudtHv9tEWBJJKEd1doqOmDNoWFqsRTZgTPo2LL1jEy5dipAkHQtFXQ5-LOBlKrFat0XoQNokaMw4-zBcnUSxDBJ5uIs-A"/>
+<span class="absolute bottom-0 right-0 h-4 w-4 bg-green-500 rounded-full border-2 border-white dark:border-slate-800"></span>
+</div>
+<span class="text-xs font-medium text-center">최수진</span>
+</div>
+<button class="flex flex-col items-center gap-2 min-w-[72px]">
+<div class="h-16 w-16 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-400">add</span>
+</div>
+<span class="text-xs font-medium text-slate-400">추가</span>
+</button>
+</div>
+</div>
+<div>
+<h3 class="text-lg font-bold mb-4">최근 공유 활동</h3>
+<div class="space-y-4">
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex gap-4">
+<div class="relative shrink-0">
+<img alt="Kim profile" class="h-10 w-10 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWpPY7W6MpBpoc8GOkWrh_gTrMznutd53kV9Ib0rs5O12QTu0DGjvEPb9uevJjwnt5LljIR7nWl_b255-gx4KRYi4UnoDPx-eKQ6anYeCxD5ZdOMjt4q2H3k5rdQv96--nFjLLdvMXXxmOKwYEMCwcsEMQ3fNhTEv5cRG-kSHMoMhx0aUHIo5gbQPGmEdIz4lPAWga3R-HPEV217HF8StSSTdlcRiDOytBb5wepSJd0baj14gm2_rSAQrzOnO7Z9FZMlhcjifehLo"/>
+<div class="absolute -bottom-1 -right-1 bg-blue-100 dark:bg-blue-900 text-primary rounded-full p-0.5 border border-white dark:border-slate-900">
+<span class="material-symbols-outlined text-[10px] block">edit</span>
+</div>
+</div>
+<div class="flex-1">
+<p class="text-sm text-slate-900 dark:text-slate-100">
+<span class="font-bold">김민수</span>님이 <span class="font-bold">에어컨 세척</span> 예약 상태를 업데이트했습니다.
+                            </p>
+<p class="text-xs text-slate-400 mt-1">10분 전 • 예약 완료로 변경</p>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex gap-4">
+<div class="relative shrink-0">
+<img alt="Lee profile" class="h-10 w-10 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAs8Yseo3K93Y1Mr3PUh5K31RW6rEs3YrH5J-jqS9OIf6TGc614VQ_cYNxLbALua3jXcHQDf7C1NRr-3pqv4AN0ux8iMFy_03f2iMLcY7jgc89wiDpmKnPzdeoUERWOoeH_mJErJW_cvndXHE1HgA7_rCsm8YiZ5uVt2JzzCd3VI5_CM5JjITTsRzZfv4KY-gPhtuIhW7fYlepgwjkJwhQCEP_L8cGJcX1YJTSaD2IZB68l_no4uMcnFGqr6nQx7zTNO-pi9_pBYaA"/>
+<div class="absolute -bottom-1 -right-1 bg-yellow-100 dark:bg-yellow-900 text-yellow-600 rounded-full p-0.5 border border-white dark:border-slate-900">
+<span class="material-symbols-outlined text-[10px] block">sticky_note_2</span>
+</div>
+</div>
+<div class="flex-1">
+<p class="text-sm text-slate-900 dark:text-slate-100">
+<span class="font-bold">이영호</span>님이 <span class="font-bold">창문 청소</span> 예약에 메모를 남겼습니다.
+                            </p>
+<div class="mt-2 bg-slate-50 dark:bg-slate-800 p-2 rounded text-xs text-slate-600 dark:text-slate-300 border border-slate-100 dark:border-slate-700 italic">
+                                "고객님이 2시에 방문 요청하셨습니다. 도구 챙겨갈게요."
+                            </div>
+<p class="text-xs text-slate-400 mt-1">45분 전</p>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex gap-4">
+<div class="relative shrink-0">
+<img alt="Choi profile" class="h-10 w-10 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD_mMa-Hs3VMhluzVhW3cpNfWNuNfQttqk6xfpzyBaqnG7n258eCRJm3l1rg7oMvIGPZAIdZy8sL6k-oBQItXPo8zFfWeyXnhcrwf6pqW5UJfuQAXVVhw1fR0rrCb_Q20GKVd1j_gSp1zJf1O7Y3B08UyI_igO893YFHt7o8Zn6IC6_kLudtHv9tEWBJJKEd1doqOmDNoWFqsRTZgTPo2LL1jEy5dipAkHQtFXQ5-LOBlKrFat0XoQNokaMw4-zBcnUSxDBJ5uIs-A"/>
+<div class="absolute -bottom-1 -right-1 bg-green-100 dark:bg-green-900 text-green-600 rounded-full p-0.5 border border-white dark:border-slate-900">
+<span class="material-symbols-outlined text-[10px] block">check_circle</span>
+</div>
+</div>
+<div class="flex-1">
+<p class="text-sm text-slate-900 dark:text-slate-100">
+<span class="font-bold">최수진</span>님이 <span class="font-bold">전체 하우스 딥클리닝</span> 작업을 완료했습니다.
+                            </p>
+<p class="text-xs text-slate-400 mt-1">2시간 전</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<button class="fixed bottom-24 right-6 bg-primary text-white h-14 w-14 rounded-full shadow-lg shadow-primary/30 flex items-center justify-center hover:scale-105 transition-transform z-20">
+<span class="material-symbols-outlined text-2xl">person_add</span>
+</button>
+<nav class="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-30">
+<div class="max-w-md mx-auto flex h-20 items-center justify-between px-6">
+<a class="flex flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">calendar_month</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">일정</span>
+</a>
+<a class="flex flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">고객</span>
+</a>
+<a class="flex flex-col items-center justify-center gap-1 text-primary" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1">handshake</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">파트너</span>
+</a>
+<a class="flex flex-col items-center justify-center gap-1 text-slate-400 dark:text-slate-500 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-[10px] font-bold uppercase tracking-wider">설정</span>
+</a>
+</div>
+</nav>
+
+</body></html>

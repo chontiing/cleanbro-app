@@ -1,0 +1,18 @@
+[
+  "147: const [userProfile, setUserProfile] = useState({});",
+  "360: const activeApiKey = userProfile?.solapi_api_key || businessProfile?.solapi_api_key;",
+  "361: const activeApiSecret = userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret;",
+  "386: }, [currentTab, userProfile, businessProfile]);",
+  "630: const activeApiKey = userProfile?.solapi_api_key || businessProfile?.solapi_api_key;",
+  "631: const activeApiSecret = userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret;",
+  "632: const activeFromNumber = userProfile?.solapi_from_number || userProfile?.sender_number || businessProfile?.solapi_from_number || businessProfile?.phone;",
+  "893: const senderPhone = userProfile?.solapi_from_number || userProfile?.sender_number || businessProfile?.solapi_from_number || businessProfile?.phone || '';",
+  "896: if (senderPhone && (userProfile?.solapi_api_key || businessProfile?.solapi_api_key) && entry.phone) {",
+  "918: if (senderPhone && (userProfile?.solapi_api_key || businessProfile?.solapi_api_key)) {",
+  "1010: setEditSolapiApiKey(userProfile?.solapi_api_key || businessProfile?.solapi_api_key || '');",
+  "1011: setEditSolapiApiSecret(userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret || '');",
+  "1012: setEditSolapiFromNumber(userProfile?.solapi_from_number || businessProfile?.solapi_from_number || '');",
+  "1014: }, [currentTab, businessProfile, myNickname, userProfile]);",
+  "1438: const senderPhone = userProfile?.solapi_from_number || businessProfile?.solapi_from_number || businessProfile?.phone || '';",
+  "2089: const isAdmin = userProfile?.is_admin === true || userEmail === 'ccy6208@naver.com';"
+]

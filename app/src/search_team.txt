@@ -1,0 +1,9 @@
+121: const [teamMembers, setTeamMembers] = useState([]);
+388: const fetchTeamMembers = async () => {
+392: setTeamMembers(data);
+433: fetchTeamMembers();
+1098: fetchTeamMembers(); // 업데이트 후 팀원 목록 즉시 갱신
+2538: {[...new Set([myNickname, ...(teamMembers || []).map(m => m.nickname)])].filter(Boolean).map(nickname => (
+3065: <span className="material-symbols-outlined text-[18px]">groups</span> 현재 합류한 팀원 ({(teamMembers || []).length})
+3069: {(teamMembers || []).map(member => (
+3091: {(!teamMembers || teamMembers.length === 0) && <p className="text-center text-[10px] text-slate-400 py-4 italic">아직 합류한 팀원이 없습니다.</p>}

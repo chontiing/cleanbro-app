@@ -1,0 +1,5 @@
+Candidates with '제목': ['Text: 제목, Class: se-component se-documentTitle se-l-default', 'Text: 제목, Class: se-component-content', 'Text: 제목, Class: se-section se-section-documentTitle se-l-default se-section-align-left', 'Text: 제목, Class: se-module se-module-text __se-unit se-is-empty se-title-text se-module-fs32-min-height-for-ie', 'Text: 제목, Class: se-text-paragraph se-text-paragraph-align-left', 'Text: 제목, Class: se-placeholder __se_placeholder se-ff-nanumgothic se-fs32']
+Found existing selector: .se-title-text
+Found existing selector: span:has-text('제목')
+Found existing selector: .se-documentTitle
+Found existing selector: span:text-is('제목')
