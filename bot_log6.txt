@@ -1,0 +1,80 @@
+=======================================================
+  CleanBro 네이버 블로그 자동 발행 서버
+[스케줄러] Supabase 대기열 감시 시작 (60초 주기)  http://localhost:8765 에서 실행 중
+
+  네이버 아이디: ccw***
+  블로그 ID: carehome-
+=======================================================
+ * Serving Flask app 'naver_blog_bot'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8765
+ * Running on http://192.168.219.105:8765
+Press CTRL+C to quit
+
+[스케줄러] 네이버 블로그 발행 작업 시작 (ID: 0fd5f3de-2692-49d0-8df5-6c7811f48ce2) - 본격 여름 준비! 해당 지역 에어컨 청소는 클린브로에 맡기세요!
+[Bot] 네이버 로그인 중...
+[Bot] 로그인 완료: https://www.naver.com/
+[Bot] 에디터 접속: https://blog.naver.com/carehome-/postwrite
+[Bot] 팝업 체크 중...
+[Bot] 팝업 발견 (종류: se-popup-button-cancel). '취소' 클릭.
+[Bot] 팝업 처리 오류 (무시하고 계속): Locator.click: Timeout 2000ms exceeded.
+Call log:
+  - waiting for locator("button.se-popup-button-close").first
+
+[Bot] 제목 입력 중...
+[Bot] 제목 입력 완료 (selector: .se-title-text)
+[Bot] 이미지 다운로드 중...
+  [Bot] 이미지 1 다운로드 완료
+  [Bot] 이미지 2 다운로드 완료
+  [Bot] 이미지 3 다운로드 완료
+  [Bot] 이미지 4 다운로드 완료
+  [Bot] 이미지 5 다운로드 완료
+  [Bot] 이미지 6 다운로드 완료
+  [Bot] 이미지 7 다운로드 완료
+  [Bot] 이미지 8 다운로드 완료
+  [Bot] 이미지 9 다운로드 완료
+  [Bot] 이미지 10 다운로드 완료
+[Bot] 본문 영역 진입...
+[Bot] 본문 영역 진입 완료 (selector: .se-component-content .se-text-paragraph)
+[Bot] 본문 및 이미지 교차 입력 중...
+[Bot] 1번째 이미지 삽입 중...
+[Bot] 사진 버튼 클릭 (selector: .se-toolbar-item-image)
+[Bot] 이미지 1 업로드 완료
+[Bot] 2번째 이미지 삽입 중...
+[Bot] 사진 버튼 클릭 (selector: .se-toolbar-item-image)
+[Bot] 이미지 2 업로드 완료
+[Bot] 태그 입력 중...
+[경고] 태그 입력 실패 - 셀렉터를 찾지 못함
+[Bot] 발행 시도 중...
+[Bot] 1단계 발행 버튼 찾아냄: 발행
+[Bot] 2단계 최종 발행 버튼 찾아냄: 발행
+[Bot] 최종 URL 확인 결과: https://blog.naver.com/PostView.naver?blogId=carehome-&Redirect=View&logNo=224219977398&categoryNo=9&isAfterWrite=true&isMrblogPost=false&isHappyBeanLeverage=true&contentLength=15448
+[스케줄러] 발행 성공! URL: https://blog.naver.com/PostView.naver?blogId=carehome-&Redirect=View&logNo=224219977398&categoryNo=9&isAfterWrite=true&isMrblogPost=false&isHappyBeanLeverage=true&contentLength=15448
+[스케줄러] 60초간 대기합니다...
+
+[스케줄러] 네이버 블로그 발행 작업 시작 (ID: f3a069ed-f817-4db7-930c-a314ee8485ef) - 스마트폰 원격 연동 테스트 (Supabase 대기열)
+[Bot] 네이버 로그인 중...
+[Bot] 로그인 완료: https://www.naver.com/
+[Bot] 에디터 접속: https://blog.naver.com/carehome-/postwrite
+[Bot] 팝업 체크 중...
+[Bot] 팝업 처리 오류 (무시하고 계속): Locator.click: Timeout 2000ms exceeded.
+Call log:
+  - waiting for locator("button.se-popup-button-close").first
+
+[Bot] 제목 입력 중...
+[Bot] 제목 입력 완료 (selector: .se-title-text)
+[Bot] 이미지 다운로드 중...
+[Bot] 본문 영역 진입...
+[Bot] 본문 영역 진입 완료 (selector: .se-component-content .se-text-paragraph)
+[Bot] 본문 및 이미지 교차 입력 중...
+[Bot] 태그 입력 중...
+[경고] 태그 입력 실패 - 셀렉터를 찾지 못함
+[Bot] 임시저장 시도 중...
+[Bot] 임시저장 버튼 발견 시도: (selector: button:has-text('저장'))
+[Bot] 임시저장 완료!
+[스케줄러] 발행 성공! URL: [임시저장 완료] https://blog.naver.com/carehome-/postwrite
+[스케줄러] 60초간 대기합니다...
+[스케줄러] 작업 실패: 'cp949' codec can't encode character '\u0bb5' in position 19: illegal multibyte sequence
+[스케줄러] 60초간 대기합니다...

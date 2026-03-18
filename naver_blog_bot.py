@@ -32,6 +32,7 @@ import random
 from dotenv import load_dotenv
 load_dotenv()
 
+import pyperclip
 import requests
 from PIL import Image
 from io import BytesIO
@@ -83,7 +84,10 @@ def update_supabase_task(task_id, status, error_msg=None, published_url=None, ne
             memo_dict.update(new_memo_dict)
 
         if published_url: memo_dict['published_url'] = published_url
-        if error_msg: memo_dict['error'] = error_msg
+        if error_msg: 
+            memo_dict['error'] = error_msg
+        elif status == "작성 완료" or status == "completed":
+            memo_dict['error'] = None # 성공 시 에러 메시지 초기화
         
         payload = {
             "product": status,
@@ -103,21 +107,39 @@ def generate_draft_via_edge(memo_dict):
         "Authorization": f"Bearer {SUPABASE_KEY}"
     }
     req_body = {
-        "imageUrls": memo_dict.get("draft_image_urls", []),
+        "imageUrls": memo_dict.get("draft_image_urls", memo_dict.get("image_urls", [])),
         "category": memo_dict.get("category", "에어컨"),
-        "product": memo_dict.get("product", "벽걸이"),
+        "product": memo_dict.get("product", "범용"),
+        "address": memo_dict.get("address", ""),
         "memo": f"카테고리: {memo_dict.get('category')}, 품목: {memo_dict.get('product')}",
         "businessProfile": memo_dict.get("businessProfile", {})
     }
     
-    print("[Bot] AI 서버(Gemini)에 블로그 초안 생성 요청 중...")
-    res = requests.post(url, json=req_body, headers=headers)
-    if res.status_code == 200:
-        data = res.json()
-        draft = data.get("draft")
-        return draft
-    else:
-        raise Exception(f"AI 초안 생성 실패: {res.text}")
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        print(f"[Bot] AI 서버(Gemini)에 블로그 초안 생성 요청 중... (시도 {attempt}/{max_retries})")
+        res = requests.post(url, json=req_body, headers=headers)
+        if res.status_code == 200:
+            data = res.json()
+            if "error" in data:
+                err_msg = data["error"]
+                print(f"[Bot] AI 초안 생성 에러 응답: {err_msg}")
+                if attempt < max_retries and ("503" in err_msg or "UNAVAILABLE" in err_msg or "오류" in err_msg or "실패" in err_msg):
+                    print(f"[Bot] 10초 대기 후 재시도합니다...")
+                    time.sleep(10)
+                    continue
+                raise Exception(f"AI 초안 생성 실패: {err_msg}")
+                
+            draft = data.get("draft")
+            if not draft:
+                raise Exception("AI 초안 생성 실패: draft 필드가 없습니다.")
+            return draft
+        else:
+            if attempt < max_retries:
+                print(f"[Bot] 서버 에러 ({res.status_code}). 10초 후 재시도...")
+                time.sleep(10)
+                continue
+            raise Exception(f"AI 초안 생성 실패 (HTTP {res.status_code}): {res.text}")
 
 def post_karrot_news(draft, image_url):
     if not draft.get("karrotText"): return
@@ -151,7 +173,7 @@ def schedule_loop():
                     # 1. 모바일 앱에서 위임한 AI 초안 생성이 필요한 경우 처리
                     if memo_dict.get("needs_gemini"):
                         update_supabase_task(task_id, "processing")
-                        print(f"\n[스케줄러] 모바일 AI 초안 வி임 감지 (ID: {task_id}) - Gemini 요청 시작...")
+                        print(f"\n[스케줄러] 모바일 AI 초안 위임 감지 (ID: {task_id}) - Gemini 요청 시작...")
                         draft = generate_draft_via_edge(memo_dict)
                         
                         memo_dict["title"] = draft.get("title", "제목 없음")
@@ -168,7 +190,8 @@ def schedule_loop():
                         update_supabase_task(task_id, "processing", new_memo_dict=memo_dict)
 
                     req_data = PublishRequest(**memo_dict)
-                    print(f"\n[스케줄러] 네이버 블로그 발행 작업 시작 (ID: {task_id}) - {req_data.title}")
+                    req_data.save_as_draft = True # 사용자 요청: 항상 임시저장으로 처리
+                    print(f"\\n[스케줄러] 네이버 블로그 발행 작업 시작 (ID: {task_id}) - {req_data.title}")
                     
                     if not memo_dict.get("needs_gemini"):
                         update_supabase_task(task_id, "processing")
@@ -190,8 +213,8 @@ def schedule_loop():
         except Exception as e:
             print(f"[스케줄러] 메인 루프 에러: {e}")
             
-        # 30초마다 큐 상태 체크
-        time.sleep(30)
+        # 5초마다 큐 상태 체크 (더 빠르게 반응하도록 수정)
+        time.sleep(5)
 
 # ──────────────────────────────────────────────────
 # Flask 앱 및 CORS 설정
@@ -208,7 +231,7 @@ class PublishRequest(BaseModel):
     category: Optional[str] = "세탁기"
     product: Optional[str] = "범용"
     address: Optional[str] = ""
-    save_as_draft: Optional[bool] = False
+    save_as_draft: Optional[bool] = True
 
 
 def download_image(url: str, idx: int, tmpdir: str) -> str:
@@ -243,21 +266,20 @@ def post_to_naver(data: PublishRequest) -> str:
             page.goto("https://nid.naver.com/nidlogin.login", timeout=30000)
             page.wait_for_timeout(2000)
 
-            # JavaScript로 아이디/비밀번호 입력
-            page.evaluate(
-                f"""
-                document.querySelector('#id').value = '{NAVER_ID}';
-                document.querySelector('#pw').value = '{NAVER_PW}';
-                """
-            )
-            page.wait_for_timeout(500)
-            
-            # 입력 이벤트 트리거 (네이버가 JS 이벤트를 감지하므로)
-            page.evaluate("""
-                document.querySelector('#id').dispatchEvent(new Event('input', { bubbles: true }));
-                document.querySelector('#pw').dispatchEvent(new Event('input', { bubbles: true }));
-            """)
-            page.wait_for_timeout(500)
+            # JavaScript 주입 대신 사람이 직접 복사/붙여넣기 하는 방식으로 우회 (자동입력 방지 방어)
+            page.click('#id')
+            pyperclip.copy(NAVER_ID)
+            page.keyboard.down('Control')
+            page.keyboard.press('v')
+            page.keyboard.up('Control')
+            page.wait_for_timeout(1000)
+
+            page.click('#pw')
+            pyperclip.copy(NAVER_PW)
+            page.keyboard.down('Control')
+            page.keyboard.press('v')
+            page.keyboard.up('Control')
+            page.wait_for_timeout(1000)
             
             page.click("#log\\.login")
             page.wait_for_timeout(4000)
@@ -416,14 +438,15 @@ def post_to_naver(data: PublishRequest) -> str:
                                 ]
                                 
                                 # 먼저 숨겨진 file input 찾기 (가장 확실한 방법)
-                                file_input = page.query_selector("input[type='file'][accept*='image']")
-                                if not file_input:
-                                    file_input = page.query_selector("input[type='file']")
+                                file_inputs = page.query_selector_all("input[type='file'][accept*='image']")
+                                if not file_inputs:
+                                    file_inputs = page.query_selector_all("input[type='file']")
                                 
-                                if file_input:
-                                    file_input.set_input_files(img_paths[idx])
-                                    page.wait_for_timeout(5000)
-                                    print(f"[Bot] 이미지 {idx+1} 직접 file input으로 업로드 완료")
+                                if file_inputs:
+                                    # Naver Blog SE3는 업로드마다 새로운 input을 추가하거나 기존 것을 비활성화할 수 있으므로, 항상 마지막 요소를 사용하는 것이 안전
+                                    file_inputs[-1].set_input_files(img_paths[idx])
+                                    page.wait_for_timeout(8000) # 업로드 대기 시간
+                                    print(f"[Bot] 이미지 {idx+1} 직접 file input(마지막 요소)으로 업로드 완료")
                                 else:
                                     # file input이 없으면 사진 버튼 클릭
                                     for btn_sel in photo_selectors:
@@ -549,104 +572,77 @@ def post_to_naver(data: PublishRequest) -> str:
                 
                 published = False
                 
-                # 발행 버튼 클릭
-                publish_selectors = [
-                    # 네이버 블로그 에디터 상단 오른쪽 발행 버튼
-                    ".publish_btn__Y5mAP",
-                    "button.publish_btn",
-                    "[class*='publish_btn']",
-                    "button:has-text('발행')",
-                    # 저장/발행 영역
-                    ".btn_publish",
-                    ".se-publish-btn",
-                    "button.btn_ok",
-                ]
-                
-                for sel in publish_selectors:
-                    try:
-                        pub_btn = page.wait_for_selector(sel, timeout=3000)
-                        if pub_btn:
-                            # 버튼 텍스트 확인
-                            btn_text = pub_btn.inner_text()
-                            print(f"[Bot] 발행 버튼 발견: '{btn_text}' (selector: {sel})")
-                            pub_btn.click()
-                            page.wait_for_timeout(3000)
-                            published = True
-                            break
-                    except Exception:
-                        continue
+                try:
+                    main_btn = page.locator("button, a").filter(has_text="발행").locator("visible=true").first
+                    if main_btn.count() > 0:
+                        print(f"[Bot] 1단계 발행 버튼 찾아냄: {main_btn.inner_text()}")
+                        main_btn.evaluate("el => el.click()")
+                        page.wait_for_timeout(2000)
+                        
+                        try:
+                            # 1단계 누른 직후 모달 스크린샷 캡처
+                            page.screenshot(path="debug_panel.png")
+                        except: pass
+                    
+                    final_btn = page.locator("button, a").filter(has_text="발행").filter(has_not_text="0건").filter(has_not_text="예약").filter(has_not_text="취소").locator("visible=true").last
+                    if final_btn.count() > 0:
+                        print(f"[Bot] 2단계 최종 발행 버튼 찾아냄: {final_btn.inner_text()}")
+                        final_btn.evaluate("el => el.click()")
+                        page.wait_for_timeout(10000) # 발행 후 충분히 대기
+                        published = True
+
+                except Exception as e:
+                    print(f"[경고] 발행 단계 오류: {e}")
 
                 if not published:
-                    # 텍스트로 버튼 찾기
+                    print("[경고] 발행 버튼을 여러 번 탐색해도 실패하여 백업 클릭을 시도합니다.")
                     try:
-                        buttons = page.query_selector_all("button")
-                        for btn in buttons:
-                            text = btn.inner_text()
-                            if "발행" in text:
-                                print(f"[Bot] 발행 버튼 발견 (텍스트 검색): '{text}'")
-                                btn.click()
-                                page.wait_for_timeout(3000)
-                                published = True
-                                break
+                        blist = page.locator("text='발행'")
+                        count = blist.count()
+                        for i in range(count):
+                            print(f"[Bot] 백업 탐색 클릭 {i+1}번째: {blist.nth(i).inner_text()}")
+                            blist.nth(i).evaluate("el => el.click()")
+                            page.wait_for_timeout(2000)
                     except Exception as e:
-                        print(f"[경고] 버튼 검색 오류: {e}")
-
-                if published:
-                    # 발행 확인 팝업 처리
-                    print("[Bot] 발행 확인 팝업 확인 중...")
-                    page.wait_for_timeout(2000)
-                    
-                    confirm_selectors = [
-                        "button:has-text('발행')",
-                        "button:has-text('확인')",
-                        "button:has-text('발행하기')",
-                        ".btn_confirm",
-                        "button.confirm_btn",
-                        "[class*='confirm'] button",
-                        ".layer_popup button.btn_ok",
-                    ]
-                    
-                    for sel in confirm_selectors:
-                        try:
-                            confirm_btn = page.wait_for_selector(sel, timeout=2000)
-                            if confirm_btn:
-                                btn_text = confirm_btn.inner_text()
-                                print(f"[Bot] 확인 버튼 클릭: '{btn_text}'")
-                                confirm_btn.click()
-                                page.wait_for_timeout(5000)
-                                break
-                        except Exception:
-                            continue
-                else:
-                    print("[경고] 발행 버튼을 찾지 못함")
-                    # 스크린샷 저장 (디버깅용)
-                    try:
-                        page.screenshot(path=os.path.join(tmpdir, "debug_publish.png"))
-                        print("[Bot] 디버그 스크린샷 저장됨")
-                    except:
-                        pass
+                        print(f"[경고] 백업 탐색 실패: {e}")
+                
+                 # 무조건 최종 스크린샷 저장
+                try:
+                    page.screenshot(path="debug_final.png")
+                except: pass
 
                 # 최종 URL 확인
-                page.wait_for_timeout(3000)
+                page.wait_for_timeout(5000)
                 published_url = page.url
                 
-                # postwrite가 아직 URL에 있으면 발행 안 된 것
+                # SmartEditor ONE은 발행 후 보통 blog.naver.com/아이디/글번호 형태나 메인으로 이동함
+                # postwrite가 여전히 URL에 있으면 명백한 실패
                 if "postwrite" in published_url:
-                    print(f"[경고] 발행이 완료되지 않은 것 같습니다. 현재 URL: {published_url}")
-                    # 한번 더 발행 시도
+                    print(f"[경고] 1차 발행 시도 후 여전히 에디터에 머물러 있습니다. (URL: {published_url})")
+                    # 3단계: 아주 원시적인 방법으로 다시 시도
                     try:
-                        buttons = page.query_selector_all("button")
-                        for btn in buttons:
-                            text = (btn.inner_text()).strip()
-                            if text == "발행":
-                                btn.click()
+                        # 화면상의 모든 '발행' 글자를 가진 버튼/링크를 다 눌러봅니다.
+                        all_publish_btns = page.locator("button, a, span").filter(has_text="발행").locator("visible=true")
+                        btn_count = all_publish_btns.count()
+                        print(f"[Bot] '발행' 텍스트 포함 요소 {btn_count}개 발견. 순차 클릭 시도...")
+                        for i in range(btn_count):
+                            target = all_publish_btns.nth(i)
+                            txt = target.inner_text().strip()
+                            if txt == "발행":
+                                print(f"[Bot] ({i+1}/{btn_count}) 정확히 '발행' 버튼 클릭")
+                                target.evaluate("el => el.click()")
                                 page.wait_for_timeout(5000)
-                                published_url = page.url
-                                break
-                    except:
-                        pass
+                                if "postwrite" not in page.url:
+                                    print("[Bot] 발행 성공 감지!")
+                                    break
+                    except Exception as e:
+                        print(f"[경고] 최종 복구 시도 중 에러: {e}")
                 
-                print(f"[Bot] 최종 URL: {published_url}")
+                published_url = page.url
+                print(f"[Bot] 최종 URL 확인 결과: {published_url}")
+                
+                if "postwrite" in published_url:
+                    raise Exception(f"발행 버튼을 눌렀으나 페이지가 전환되지 않았습니다. (현재 URL: {published_url})")
 
         finally:
             context.close()

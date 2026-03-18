@@ -459,13 +459,13 @@ function App() {
       // 기존 데이터의 business_id 누락 고려한 폴백
       try {
         const { data: fallbackData, error: fbErr } = await supabase.from('bookings').select('*').eq('user_id', session?.user?.id).order('id', { ascending: false });
-        if (!fbErr && fallbackData) setCustomers(fallbackData);
+        if (!fbErr && fallbackData) setCustomers(fallbackData.filter(c => c.category !== '블로그자동화'));
         else setCustomers([]);
       } catch (e) {
         setCustomers([]);
       }
     } else {
-      setCustomers(data || []);
+      setCustomers((data || []).filter(c => c.category !== '블로그자동화'));
     }
     setLoadingData(false);
   };
@@ -544,6 +544,7 @@ function App() {
     setBookTimeCustom(c.book_time_custom || '');
     setAssignee(c.assignee || 'ccy6208');
     setIsCompleted(c.is_completed || false);
+    setIsSamsungCheck(c.is_samsung_check || false);
     setEditingId(c.id);
     setCurrentTab('add');
   };
@@ -590,6 +591,7 @@ function App() {
   const [assignee, setAssignee] = useState(() => localStorage.getItem('default_assignee') || '');
   const [isAssigneePinned, setIsAssigneePinned] = useState(() => localStorage.getItem('default_assignee') !== null);
   const [isCompleted, setIsCompleted] = useState(false); // 완료 상태 유지용
+  const [isSamsungCheck, setIsSamsungCheck] = useState(false); // 삼성 체크 여부
 
   useEffect(() => {
     if (!assignee && myNickname) {
@@ -739,6 +741,7 @@ function App() {
             status: d.product, // pending, processing, completed, failed
             error: memoObj.error || null,
             published_url: memoObj.published_url || null,
+            save_as_draft: memoObj.save_as_draft === true,
             scheduled_for: new Date(d.created_at).getTime() / 1000
           };
         });
@@ -1010,6 +1013,7 @@ function App() {
       book_time_custom: bookTimeType === '직접입력' ? bookTimeCustom : null,
       assignee: assignee || 'ccy6208',
       is_completed: isCompleted,
+      is_samsung_check: isSamsungCheck,
       date_created: getTodayStr(),
       applied_tax_type: businessProfile?.taxpayer_type || '간이과세자',
     };
@@ -1032,14 +1036,14 @@ function App() {
     await fetchCustomers();
     setEditingId(null);
     setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
-    setHasCashReceipt(false); setHasTaxInvoice(false);
+    setHasCashReceipt(false); setHasTaxInvoice(false); setIsSamsungCheck(false);
     setCurrentTab('calendar');
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
     setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
-    setHasCashReceipt(false); setHasTaxInvoice(false);
+    setHasCashReceipt(false); setHasTaxInvoice(false); setIsSamsungCheck(false);
     setCurrentTab('calendar');
   };
 
@@ -1484,6 +1488,7 @@ function App() {
   // ==========================================
   const [calDate, setCalDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(getTodayStr());
+  const [showAllSchedule, setShowAllSchedule] = useState(false); // 전체 일정 보기 토글 상태 추가
 
   const getCalendarDays = () => {
     const year = calDate.getFullYear();
@@ -1502,7 +1507,7 @@ function App() {
     return days;
   };
 
-  const todayTargetList = useMemo(() => customers.filter(c => c.book_date === getTodayStr()), [customers]);
+  const todayTargetList = useMemo(() => customers.filter(c => c.book_date === getTodayStr() && c.category !== '블로그자동화'), [customers]);
   const [batchSmsIdx, setBatchSmsIdx] = useState(-1);
 
   const handleSendSms = async (c, type = 'confirmed') => {
@@ -1634,120 +1639,178 @@ function App() {
       .sort((a, b) => a.book_date.localeCompare(b.book_date) || (a.book_time_type || '').localeCompare(b.book_time_type || ''));
   }, [customers, calDate]);
 
+  // --- 솔라피 문자 발송 로직 ---
+  const sendSolapiMessage = async (to, text, scheduledAt = null) => {
+    const apiKey = import.meta.env.VITE_SOLAPI_API_KEY || userProfile?.solapi_api_key || businessProfile?.solapi_api_key;
+    const apiSecret = import.meta.env.VITE_SOLAPI_API_SECRET || userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret;
+    const fromNumber = userProfile?.solapi_from_number || userProfile?.sender_number || businessProfile?.solapi_from_number || businessProfile?.phone;
+
+    if (!apiKey || !apiSecret || !fromNumber) throw new Error("솔라피 연동 정보가 없습니다. (설정 탭 확인)");
+
+    const cleanTo = to.replace(/[^0-9]/g, '');
+    const cleanFrom = fromNumber.replace(/[^0-9]/g, '');
+
+    console.log(`[디버그] 솔라피 발송 준비: 수신=${cleanTo}, 예약시간=${scheduledAt || '즉시 발송'}\n내용:\n${text}`);
+
+    const date = new Date().toISOString();
+    const salt = crypto.randomUUID().replace(/-/g, '');
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey('raw', encoder.encode(apiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    const signatureBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
+    const signature = Array.from(new Uint8Array(signatureBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const messagePayload = { to: cleanTo, from: cleanFrom, text };
+    const url = scheduledAt ? 'https://api.solapi.com/messages/v4/send-many' : 'https://api.solapi.com/messages/v4/send';
+    const body = scheduledAt ? { messages: [messagePayload], scheduledDate: scheduledAt } : { message: messagePayload };
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.errorMessage || result.message || '문자 발송 실패');
+    return result;
+  };
+
   // 아이템 컴포넌트
   const BookingItem = ({ c }) => {
+    const [sendingType, setSendingType] = useState(null); // 'confirm' | 'morning' | null
+
     const longPressHooks = useLongPress(() => {
       const action = window.prompt('수정하려면 1, 삭제하려면 2를 입력하세요.\n(취소는 빈칸)');
       if (action === '1') handleEdit(c);
       else if (action === '2') handleDelete(c.id);
     }, 600);
 
+    const handleSendConfirm = async () => {
+      if (c.is_samsung_check) {
+        console.log("삼성 체크 예약으로 문자가 발송되지 않았습니다.");
+        alert('삼성 체크건으로 문자 발송이 비활성화되었습니다.');
+        return;
+      }
+      if (!c.phone) return alert('고객 연락처가 없습니다.');
+      if (!confirm('확정 문자를 바로 발송하시겠습니까?')) return;
+      
+      setSendingType('confirm');
+      try {
+        const tpl = businessProfile?.confirmed_template || `[예약 확정] [일시]에 방문 예정입니다. - 클린브로 ([파트너전화번호])`;
+        const timeVal = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
+        const text = tpl
+          .replace(/\[고객명\]/g, c.customer_name || '고객')
+          .replace(/\[일시\]/g, `${c.book_date} ${timeVal}`)
+          .replace(/\[시간\]/g, timeVal || '')
+          .replace(/\[파트너전화번호\]/g, userProfile?.solapi_from_number || businessProfile?.phone || '');
+          
+        await sendSolapiMessage(c.phone, text);
+        const { error } = await supabase.from('bookings').update({ is_confirmed_sent: true }).eq('id', c.id);
+        if (error && error.message.includes('column')) {
+            await supabase.from('bookings').update({ sms_sent_initial: true }).eq('id', c.id);
+            c.sms_sent_initial = true;
+        } else if (!error) {
+            c.is_confirmed_sent = true;
+        }
+        alert('확정 문자가 발송되었습니다.');
+      } catch (e) {
+        alert('발송 실패: ' + e.message);
+      } finally {
+        setSendingType(null);
+      }
+    };
+
+    const handleSendMorning = async () => {
+      if (c.is_samsung_check) {
+        console.log("삼성 체크 예약으로 문자가 발송되지 않았습니다.");
+        alert('삼성 체크건으로 문자 발송이 비활성화되었습니다.');
+        return;
+      }
+      if (!c.phone) return alert('고객 연락처가 없습니다.');
+      if (!confirm('예약 당일 아침 8시로 알림 문자를 예약 발송하시겠습니까?')) return;
+      
+      setSendingType('morning');
+      try {
+        const tpl = businessProfile?.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`;
+        const timeVal = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
+        const text = tpl
+          .replace(/\[고객명\]/g, c.customer_name || '고객')
+          .replace(/\[시간\]/g, timeVal || '')
+          .replace(/\[파트너전화번호\]/g, userProfile?.solapi_from_number || businessProfile?.phone || '');
+          
+        // KST 기준 08:00
+        const d = new Date(c.book_date);
+        d.setHours(8, 0, 0, 0);
+        const scheduledUtc = d.toISOString();
+        
+        await sendSolapiMessage(c.phone, text, scheduledUtc);
+        const { error } = await supabase.from('bookings').update({ is_morning_alert_sent: true }).eq('id', c.id);
+        if (error && error.message.includes('column')) {
+            await supabase.from('bookings').update({ sms_sent_reminder: true }).eq('id', c.id);
+            c.sms_sent_reminder = true;
+        } else if (!error) {
+            c.is_morning_alert_sent = true;
+        }
+        alert('아침 알림 예약이 완료되었습니다.');
+      } catch (e) {
+        alert('발송 실패: ' + e.message);
+      } finally {
+        setSendingType(null);
+      }
+    };
+
     return (
-      <div {...longPressHooks} className={`relative p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 transition-all active:scale-[0.98] ${c.is_completed ? 'bg-slate-50 dark:bg-slate-800/50 opacity-60' : 'bg-white dark:bg-slate-800'}`}>
+      <div {...longPressHooks} className={`relative p-4 rounded-2xl shadow-sm border-0 transition-all active:scale-[0.98] ${c.is_completed ? 'bg-gray-50/50 opacity-80' : 'bg-white'}`}>
 
-        {/* 완료 상태 뱃지 및 안개 효과 */}
-        {c.is_completed && (
-          <div className="absolute top-0 right-0 p-2 text-green-600 font-bold flex items-center gap-1 bg-green-50 rounded-bl-[1.5rem] rounded-tr-[1.5rem]">
-            <span className="material-symbols-outlined text-sm">task_alt</span> 완료됨
-          </div>
-        )}
+        {/* 더보기 버튼 (삭제 등 메뉴) */}
+        <div className="absolute top-3 right-3">
+          <button onClick={(e) => { e.stopPropagation(); if(confirm('정말 삭제하시겠습니까?')) handleDelete(c.id); }} className="p-1 hover:bg-gray-100 rounded-full transition-colors text-gray-400">
+            <span className="material-symbols-outlined text-[18px]">more_horiz</span>
+          </button>
+        </div>
 
-        <div className="flex justify-between items-start mb-2 mt-1">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${c.assignee?.includes('2인') ? 'bg-purple-50 text-purple-600 border-purple-200' : c.assignee === '파트너' ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
-                👤 {c.assignee}
+        <div className="flex justify-between items-start mb-2">
+          <div className="flex-1 pr-8">
+            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${c.assignee?.includes('2인') ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
+                {c.assignee}
               </span>
-              <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded">
+              <span className="bg-gray-100 text-gray-500 text-[9px] font-bold px-1.5 py-0.5 rounded">
                 {c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type}
               </span>
-              <span className="text-slate-500 text-xs font-medium">{c.category} &gt; {c.product} ({c.quantity}대)</span>
+              <span className="text-gray-400 text-[10px] font-bold">{c.category} · {c.product}</span>
             </div>
+
             <h4
               onClick={(e) => { e.stopPropagation(); setMapPopupMemo(c.address ? (c.address + ' ' + (c.address_detail || '')).trim() : c.memo); }}
-              className={`font-bold text-base cursor-pointer hover:text-primary flex items-center transition-colors ${c.is_completed ? 'text-slate-500 line-through decoration-2' : 'text-slate-800 dark:text-slate-100'}`}
+              className={`font-black text-base cursor-pointer hover:text-blue-600 flex items-center transition-colors ${c.is_completed ? 'text-[#10B981]' : 'text-slate-800'}`}
             >
-              {c.customer_name || `${c.category || '기타'} (${c.product || '상세'})`}
-              {c.address && <span className="text-[13px] font-medium text-slate-500 ml-1.5">({c.address.split(' ').slice(0, 2).join(' ')} {c.address_detail || ''})</span>}
-              <div className="flex items-center gap-1 ml-1.5">
-                <span className="material-symbols-outlined text-[16px] text-blue-500 bg-blue-50 p-0.5 rounded-full border border-blue-200">location_on</span>
-                <button
-                  onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.address ? (c.address + ' ' + (c.address_detail || '')).trim() : ''); alert('주소가 복사되었습니다!'); }}
-                  className="p-1 hover:bg-slate-100 rounded-md transition-colors text-slate-300 hover:text-primary active:scale-90"
-                  title="주소 복사"
-                >
-                  <span className="material-symbols-outlined text-[14px]">content_copy</span>
-                </button>
-              </div>
+              {c.customer_name || '이름 없음'}
+              {c.is_completed && <span className="material-symbols-outlined text-[#10B981] text-[18px] ml-1">check_circle</span>}
+              {c.address && <span className="text-[10px] font-bold text-gray-400 ml-1.5 truncate max-w-[130px]">({c.address.split(' ').slice(0, 2).join(' ')})</span>}
             </h4>
-            <div className="flex items-center gap-2">
-              <p className="text-slate-400 font-mono text-sm">
-                {c.phone ? (
-                  <a href={`tel:${c.phone}`} className="hover:text-primary transition-colors hover:underline">
-                    {c.phone.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`)}
-                  </a>
-                ) : '번호 없음'}
+
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <p className="text-gray-400 font-bold text-xs">
+                {c.phone ? c.phone.replace(/^(\d{2,3})(\d{3,4})(\d{4})$/, `$1-$2-$3`) : '번호 없음'}
               </p>
               {c.phone && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(c.phone); alert('전화번호가 복사되었습니다!'); }}
-                  className="p-1 hover:bg-slate-100 rounded-md transition-colors text-slate-300 hover:text-primary active:scale-90"
-                  title="번호 복사"
-                >
-                  <span className="material-symbols-outlined text-[14px]">content_copy</span>
-                </button>
+                <a href={`tel:${c.phone}`} className="p-0.5 hover:bg-blue-50 rounded-full text-blue-500 transition-colors">
+                  <span className="material-symbols-outlined text-[16px]">call</span>
+                </a>
               )}
             </div>
-            {c.memo && <p className="text-xs text-slate-500 mt-1 line-clamp-1">{c.memo}</p>}
-            <div className="flex items-center gap-2 mt-2">
-              <button
-                onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'confirmed'); }}
-                className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md border cursor-pointer active:scale-95 transition-all
-                  ${c.sms_sent_initial === true
-                    ? 'bg-green-50 text-green-700 border-green-200 shadow-sm'
-                    : c.sms_sent_initial === false
-                      ? 'bg-red-50 text-red-600 border-red-200 shadow-sm'
-                      : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'}`}
-              >
-                <span className="material-symbols-outlined text-[14px]">
-                  {c.sms_sent_initial === true ? 'check_circle' : c.sms_sent_initial === false ? 'error' : 'pending_actions'}
-                </span>
-                {c.sms_sent_initial === true ? '확정문자(발송완료)' : c.sms_sent_initial === false ? '확정문자(발송실패)' : '확정문자(미발송)'}
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); handleSendSms(c, 'morning'); }}
-                className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md border cursor-pointer active:scale-95 transition-all
-                  ${c.sms_sent_reminder === true
-                    ? 'bg-green-50 text-green-700 border-green-200 shadow-sm'
-                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
-              >
-                <span className="material-symbols-outlined text-[14px]">
-                  {c.sms_sent_reminder === true ? 'check_circle' : 'schedule'}
-                </span>
-                {c.sms_sent_reminder === true ? '아침알림(발송완료)' : '아침알림(발송대기)'}
-              </button>
-            </div>
           </div>
-          <div className="text-right pt-6">
-            <p className="font-bold text-primary text-lg">{fmtNum(c.final_price)}원</p>
-            <div className="flex flex-col items-end gap-1 mt-1">
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${c.payment_method === '현금' ? 'text-green-600 bg-green-50 border-green-200' : c.payment_method === '카드' ? 'text-blue-600 bg-blue-50 border-blue-200' : 'text-slate-600 bg-slate-50 border-slate-200'}`}>
-                {c.payment_method || '미결제'}
-              </span>
-              {c.has_cash_receipt && <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded border border-slate-200">현금영수증</span>}
-              {c.has_tax_invoice && <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded border border-slate-200">세금계산서</span>}
-            </div>
+          <div className="text-right">
+            <p className="font-black text-blue-600 text-lg leading-tight">{fmtNum(c.final_price)}원</p>
+            <p className="text-[9px] font-bold text-gray-400 mt-0.5">{c.payment_method || '미결제'}</p>
           </div>
         </div>
 
-        {/* 하단 액션 버튼들 */}
-        <div className="mt-3 flex justify-end gap-2">
-          <button onClick={() => handleDelete(c.id)} className="text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors bg-red-50 text-red-600 border-red-200 hover:bg-red-100 shadow-sm">
-            🗑️ 삭제하기
-          </button>
-          <button onClick={() => handleEdit(c)} className="text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors bg-white text-slate-500 border-slate-300 hover:bg-slate-50 shadow-sm">
-            ✏️ 수정하기
-          </button>
+        {/* 액션 버튼 그룹 */}
+        <div className="mt-3 flex gap-1.5 flex-wrap">
           <button onClick={() => {
             if (c.is_completed) {
               toggleCompletion(c);
@@ -1755,8 +1818,44 @@ function App() {
               setCompletionTarget(c);
               setShowCompletionModal(true);
             }
-          }} className={`text-xs px-3 py-1.5 rounded-lg border font-bold transition-colors shadow-sm ${c.is_completed ? 'bg-slate-50 text-slate-500 border-slate-300 hover:bg-slate-100' : 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'}`}>
-            {c.is_completed ? '작업 취소 (미완료로 변경)' : '✨ 작업 완료 체크하기'}
+          }} className={`flex-1 min-w-[25%] py-1.5 rounded-lg text-[11px] font-bold transition-all border ${c.is_completed ? 'bg-white border-gray-200 text-gray-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 active:scale-[0.98]'}`}>
+            {c.is_completed ? '작업 취소' : '작업 완료'}
+          </button>
+          
+          <button 
+            disabled={c.is_samsung_check || c.is_confirmed_sent || c.sms_sent_initial || sendingType === 'confirm'}
+            onClick={(e) => { e.stopPropagation(); handleSendConfirm(); }}
+            title={c.is_samsung_check ? "삼성 체크 건은 문자 발송 제외 대상입니다." : ""}
+            className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
+              c.is_samsung_check 
+                ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-50 pointer-events-none'
+                : (c.is_confirmed_sent || c.sms_sent_initial) 
+                  ? 'bg-gray-50 text-gray-400 border-gray-200 disabled:opacity-80' 
+                  : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 active:scale-[0.98] disabled:opacity-80'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[12px]">done_all</span>
+            {sendingType === 'confirm' ? '처리중' : ((c.is_confirmed_sent || c.sms_sent_initial) ? '발송완료' : '확정문자')}
+          </button>
+
+          <button 
+            disabled={c.is_samsung_check || c.is_morning_alert_sent || c.sms_sent_reminder || sendingType === 'morning'}
+            onClick={(e) => { e.stopPropagation(); handleSendMorning(); }}
+            title={c.is_samsung_check ? "삼성 체크 건은 문자 발송 제외 대상입니다." : ""}
+            className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
+              c.is_samsung_check 
+                ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-50 pointer-events-none'
+                : (c.is_morning_alert_sent || c.sms_sent_reminder) 
+                  ? 'bg-gray-50 text-gray-400 border-gray-200 disabled:opacity-80' 
+                  : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100 active:scale-[0.98] disabled:opacity-80'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[12px]">wb_twilight</span>
+            {sendingType === 'morning' ? '처리중' : ((c.is_morning_alert_sent || c.sms_sent_reminder) ? '예약완료' : '아침알림')}
+          </button>
+
+          <button onClick={(e) => { e.stopPropagation(); handleEdit(c); }} className="flex-none px-3 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all">
+            수정
           </button>
         </div>
       </div>
@@ -2194,7 +2293,7 @@ function App() {
   const roleName = isCeo ? '대표님' : '파트너님';
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900 pb-24 text-slate-900 dark:text-slate-100 font-display">
+    <div className="flex flex-col min-h-screen bg-[#F4F6FA] dark:bg-slate-900 pb-24 text-slate-900 dark:text-slate-100 font-display">
 
       {/* 솔라피 잔액 부족 경고 배너 */}
       {solapiBalance !== null && solapiBalance < 2000 && (
@@ -2241,61 +2340,27 @@ function App() {
 
       {/* ======================= [탭 1: 일정 / 달력] ======================= */}
       {currentTab === 'calendar' && (
-        <main className="flex-1 max-w-5xl mx-auto w-full flex flex-col space-y-4 pt-4 px-4 overflow-x-hidden">
+        <main className="flex-1 max-w-7xl mx-auto w-full flex flex-col gap-3 pt-4 px-4 overflow-x-hidden">
 
-          {/* 아침 알림 리스트 */}
-          {todayTargetList.length > 0 && selectedDate === getTodayStr() && (
-            <div className="max-w-lg mx-auto w-full bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-700 p-5 rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 animate-fade-in">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="font-bold text-primary flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[18px]">notifications_active</span>오늘 방문 예정 ({todayTargetList.length})
-                </h3>
-                <button onClick={handleBatchSmsNext} className="text-xs bg-primary text-white px-3 py-1.5 rounded-lg font-bold shadow-sm active:scale-95 transition-all">
-                  {batchSmsIdx >= 0 ? '다음 문자 준비 ➔' : '문자 일괄 준비 시작'}
-                </button>
-              </div>
-              <div className="space-y-2">
-                {todayTargetList.map((c, i) => (
-                  <div key={c.id} className={`flex items-center justify-between bg-white dark:bg-slate-900/50 p-2.5 rounded-xl border ${i === batchSmsIdx ? 'border-primary ring-2 ring-primary/20' : 'border-slate-200 dark:border-slate-700'}`}>
-                    <div className="flex items-center gap-3">
-                      <span className="bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded text-xs font-bold text-slate-600 dark:text-slate-300">
-                        {c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type}
-                      </span>
-                      <p className="font-semibold text-sm truncate max-w-[120px]">{c.memo}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button onClick={() => handleSendSms(c, 'confirmed')} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border active:scale-95 transition-all ${c.sms_sent_initial ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
-                        <span className="material-symbols-outlined text-[12px]">check_circle</span> {c.sms_sent_initial ? '확정됨' : '확정문자'}
-                      </button>
-                      <button onClick={() => handleSendSms(c, 'morning')} className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg border active:scale-95 transition-all ${c.sms_sent_reminder ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
-                        <span className="material-symbols-outlined text-[12px]">wb_twilight</span> {c.sms_sent_reminder ? '알림됨' : '아침알림'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* 대시보드 */}
-          <div className="max-w-lg mx-auto w-full bg-white dark:bg-slate-800 p-5 rounded-[2.2rem] shadow-[0_10px_30px_-5px_rgba(0,0,0,0.05)] border-0">
+          {/* 최상단: 상세 매출 및 목표 달성 카드 (1단계 고도화 버전) */}
+          <div className="max-w-lg mx-auto w-full bg-white dark:bg-slate-800 p-4 sm:p-5 rounded-2xl shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0">
             <div className="flex items-center justify-between px-1">
               <div className="cursor-pointer transition-transform active:scale-95 flex-1" onClick={() => setCurrentTab('stats')}>
                 <p className="text-[10px] font-bold text-slate-400 mb-0.5 leading-none">오늘의 합계 매출</p>
                 <div className="text-xl font-black text-slate-800 dark:text-white flex items-baseline truncate">
-                  {fmtNum(revenueStats.todaySales)}<span className="text-[11px] text-slate-400 font-bold ml-0.5">원</span>
+                  {fmtNum(revenueStats.todaySales)}<span className="text-[10px] text-slate-400 font-bold ml-0.5">원</span>
                 </div>
               </div>
 
-              <div className="h-8 w-[1px] bg-slate-100 dark:bg-slate-700 mx-3"></div>
+              <div className="h-6 w-[1px] bg-slate-100 dark:bg-slate-700 mx-3"></div>
 
               <div className="cursor-pointer transition-transform active:scale-95 flex-1 text-right" onClick={() => setCurrentTab('stats')}>
                 <p className="text-[10px] font-bold text-slate-400 mb-0.5 leading-none">이번 달 총 매출</p>
                 <div className="flex flex-col items-end">
                   <div className="text-xl font-black text-primary flex items-baseline truncate">
-                    {fmtNum(revenueStats.monthSales)}<span className="text-[11px] text-slate-400 font-bold ml-0.5">원</span>
+                    {fmtNum(revenueStats.monthSales)}<span className="text-[10px] text-slate-400 font-bold ml-0.5">원</span>
                   </div>
-                  <div className={`text-[9px] font-bold mt-0.5 flex items-center gap-0.5 ${revenueStats.growth >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                  <div className={`text-[9px] font-bold mt-0 flex items-center gap-0.5 ${revenueStats.growth >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
                     {revenueStats.growth >= 0 ? '▲' : '▼'} {Math.abs(revenueStats.growth)}% <span className="text-slate-400 font-medium ml-0.5">전월대비</span>
                   </div>
                 </div>
@@ -2303,17 +2368,17 @@ function App() {
             </div>
 
             {/* 목표 달성 게이지 */}
-            <div className="mt-4 pt-4 border-t border-slate-50 dark:border-slate-700">
-              <div className="flex justify-between items-center mb-2">
-                <p className="text-xs font-bold text-slate-500 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px] text-amber-500">military_tech</span>
+            <div className="mt-3 pt-3 border-t border-slate-50 dark:border-slate-700">
+              <div className="flex justify-between items-center mb-1.5">
+                <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px] text-amber-500">military_tech</span>
                   목표 달성률 <span className="text-slate-900 dark:text-white">{revenueStats.achieveRate}%</span>
                 </p>
-                <button onClick={() => { setNewTargetRevenue(revenueStats.target.toString()); setShowTargetEdit(true); }} className="p-1 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors text-slate-400 flex items-center">
-                  <span className="material-symbols-outlined text-[16px]">settings</span>
+                <button onClick={() => { setNewTargetRevenue(revenueStats.target.toString()); setShowTargetEdit(true); }} className="p-0.5 px-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors text-slate-400 flex items-center">
+                  <span className="material-symbols-outlined text-[14px]">settings</span>
                 </button>
               </div>
-              <div className="w-full h-3 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden flex p-0.5 border border-slate-50">
+              <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden flex p-0 border border-slate-50">
                 <div
                   className={`h-full rounded-full transition-all duration-1000 ease-out shadow-sm relative ${revenueStats.achieveRate < 50 ? 'bg-orange-500' :
                     revenueStats.achieveRate < 80 ? 'bg-yellow-400' :
@@ -2322,21 +2387,19 @@ function App() {
                     }`}
                   style={{ width: `${revenueStats.achieveRate}%` }}
                 >
-                  {revenueStats.achieveRate >= 100 && <span className="absolute inset-0 bg-white/30 animate-pulse"></span>}
                 </div>
               </div>
-              <div className="flex justify-between mt-2 px-0.5">
-                <span className="text-[10px] text-slate-400 font-bold">이번 달 목표액</span>
-                <span className="text-[11px] text-slate-600 font-black">{fmtNum(revenueStats.target)}원</span>
+              <div className="flex justify-between mt-1.5 px-0.5">
+                <span className="text-[9px] text-slate-400 font-bold tracking-tight">이번 달 목표액</span>
+                <span className="text-[10px] text-slate-600 font-black">{fmtNum(revenueStats.target)}원</span>
               </div>
             </div>
           </div>
 
           {/* 캘린더 및 통합 리스트 구역 */}
-          {/* 캘린더 및 통합 리스트 구역 */}
-          <div className="flex gap-1.5 sm:gap-6 items-start">
+          <div className={`flex gap-1.5 sm:gap-6 items-start transition-all duration-300 ${!showAllSchedule ? 'justify-center' : ''}`}>
             {/* 왼쪽: 캘린더 */}
-            <div className="flex-1 bg-white dark:bg-slate-800 p-1.5 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 mb-0">
+            <div className={`bg-white dark:bg-slate-800 p-1.5 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 mb-0 relative transition-all duration-300 ${!showAllSchedule ? 'flex-none w-full max-w-lg' : 'flex-1 min-w-0'}`}>
               <div className="flex justify-between items-center mb-4">
                 <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1))} className="p-0.5 text-slate-400 hover:text-primary">
                   <span className="material-symbols-outlined text-base sm:text-xl">chevron_left</span>
@@ -2353,98 +2416,138 @@ function App() {
 
               <div className="grid grid-cols-7 gap-1">
                 {getCalendarDays().map((dStr, idx) => {
-                  if (!dStr) return <div key={`empty-${idx}`} className="h-10 sm:h-14"></div>;
+                  if (!dStr) return <div key={`empty-${idx}`} className="h-12 sm:h-16"></div>;
 
                   const dList = customers.filter(c => c.book_date === dStr);
-                  const hasMorning = dList.some(c => c.book_time_type === '오전' || (parseInt((c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type)?.split(':')[0]) < 12));
-                  const hasAfternoon = dList.some(c => c.book_time_type === '오후' || (parseInt((c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type)?.split(':')[0]) >= 12));
                   const dObj = new Date(dStr);
                   const isToday = dStr === getTodayStr();
                   const isSelected = dStr === selectedDate;
+                  const count = dList.length;
 
                   return (
                     <div
                       key={dStr}
                       onClick={() => setSelectedDate(dStr)}
-                      className={`h-10 sm:h-14 flex flex-col items-center pt-0.5 sm:pt-1 border relative cursor-pointer transition-colors rounded-lg sm:rounded-xl
-                        ${isSelected ? 'bg-primary/10 border-primary ring-1 ring-primary' : 'bg-slate-50 dark:bg-slate-900 border-transparent hover:bg-slate-100'}
+                      className={`h-12 sm:h-16 flex flex-col items-center justify-start pt-1 border relative cursor-pointer transition-all rounded-xl
+                        ${isSelected ? 'bg-blue-50 border-blue-200' : 'bg-white border-transparent hover:bg-gray-50'}
                       `}
                     >
-                      <span className={`text-[10px] sm:text-sm font-semibold ${dObj.getDay() === 0 ? 'text-red-500' : dObj.getDay() === 6 ? 'text-blue-500' : 'text-slate-700 dark:text-slate-300'} ${isToday && !isSelected ? 'underline decoration-primary decoration-2 underline-offset-4' : ''}`}>
+                      <div className={`w-7 h-7 flex items-center justify-center rounded-full text-xs sm:text-sm font-bold transition-colors
+                        ${isToday ? 'bg-[#3B82F6] text-white shadow-sm' : (isSelected ? 'text-blue-600' : 'text-slate-700')}
+                      `}>
                         {dObj.getDate()}
-                      </span>
-                      <div className="flex gap-0.5 mt-0.5 sm:mt-1 flex-wrap justify-center px-0.5">
-                        {hasMorning && <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-orange-400"></span>}
-                        {hasAfternoon && <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-indigo-400"></span>}
-                        {dList.length > 0 && !hasMorning && !hasAfternoon && <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 rounded-full bg-slate-400"></span>}
+                      </div>
+                      
+                      <div className="flex items-center justify-center mt-1 h-4">
+                        {count === 1 && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#3B82F6]"></div>
+                        )}
+                        {count >= 2 && count <= 3 && (
+                          <div className="w-4 h-4 rounded-full bg-[#3B82F6] text-white text-[9px] flex items-center justify-center font-black">
+                            {count}
+                          </div>
+                        )}
+                        {count >= 4 && (
+                          <div className="w-4 h-4 rounded-full bg-[#1E3A8A] text-white text-[9px] flex items-center justify-center font-black">
+                            {count}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
                 })}
               </div>
+
+              {/* 전체 일정 보기 버튼 (상태 연결) */}
+              {!showAllSchedule && (
+                <button 
+                  onClick={() => setShowAllSchedule(true)}
+                  className="absolute bottom-4 right-4 z-10 p-2 pl-4 pr-3 rounded-full bg-blue-50 text-blue-700 text-[10px] font-semibold shadow-md flex items-center gap-1 hover:bg-blue-100 transition-all active:scale-95 animate-fade-in"
+                >
+                  전체 일정 보기
+                  <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+                </button>
+              )}
             </div>
 
-            {/* 오른쪽: 이달의 전체 리스트 */}
-            <div className="flex-1 bg-white dark:bg-slate-800 p-2 sm:p-5 rounded-[1.2rem] sm:rounded-[1.5rem] shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0 h-[300px] sm:h-[430px] flex flex-col min-w-0">
-              <h3 className="font-black text-[10px] sm:text-sm text-slate-700 dark:text-slate-300 mb-2 sm:mb-4 flex items-center justify-between px-0.5">
-                <span className="flex items-center gap-1 sm:gap-1.5 truncate">
-                  <span className="material-symbols-outlined text-[14px] sm:text-[18px] text-primary">event_note</span>
-                  {calDate.getMonth() + 1}월 일정
-                </span>
-                <span className="text-[8px] sm:text-[10px] bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-full font-bold">{monthlyCalendarList.length}건</span>
-              </h3>
+            {/* 오른쪽: 이달의 전체 리스트 (조건부 렌더링) */}
+            {showAllSchedule && (
+              <div className="flex-1 bg-white dark:bg-slate-800 p-4 sm:p-6 rounded-2xl shadow-sm border-0 h-[400px] flex flex-col min-w-0 animate-slide-left relative">
+                <h3 className="font-bold text-sm text-slate-700 dark:text-slate-300 mb-4 flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-blue-600 text-[20px]">calendar_month</span>
+                    {calDate.getMonth() + 1}월 전체 일정
+                    <span className="text-xs bg-gray-100 dark:bg-slate-700 px-2.5 py-1 rounded-full text-gray-500 font-bold ml-1">{monthlyCalendarList.length}건</span>
+                  </span>
+                  <button 
+                    onClick={() => setShowAllSchedule(false)}
+                    className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-slate-400 transition-colors"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">close</span>
+                  </button>
+                </h3>
 
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                {monthlyCalendarList.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-400 py-10">
-                    <span className="material-symbols-outlined text-[40px] opacity-20 mb-2">event_busy</span>
-                    <p className="text-xs font-bold">일정이 없습니다.</p>
-                  </div>
-                ) : (
-                  monthlyCalendarList.map(c => (
-                    <div
-                      key={c.id}
-                      onClick={() => {
-                        setSelectedDate(c.book_date);
-                        setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-                      }}
-                      className={`flex items-center gap-1 sm:gap-3 p-1 sm:p-3 rounded-xl sm:rounded-2xl cursor-pointer transition-all border group ${selectedDate === c.book_date ? 'bg-primary/5 border-primary/20 ring-1 ring-primary/10 shadow-sm scale-[1.02]' : 'bg-slate-50 dark:bg-slate-900/50 border-transparent hover:border-slate-200 dark:hover:border-slate-700'}`}
-                    >
-                      <div className={`min-w-[28px] sm:min-w-[40px] h-7 sm:h-10 rounded-lg sm:rounded-xl flex flex-col items-center justify-center text-[6px] sm:text-[10px] font-black transition-colors ${selectedDate === c.book_date ? 'bg-primary text-white' : 'bg-white dark:bg-slate-800 text-slate-500 shadow-sm'}`}>
-                        <span className="opacity-60">{c.book_date.split('-')[1]}월</span>
-                        <span className="text-[9px] sm:text-sm mt-[-2px]">{c.book_date.split('-')[2]}일</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1 mb-0 sm:mb-0.5">
-                          <p className={`text-[9px] sm:text-xs font-black truncate ${c.is_completed ? 'text-slate-400 line-through decoration-1' : 'text-slate-800 dark:text-slate-100'}`}>
-                            {c.customer_name || `${c.category || '기타'} (${c.product || '상세'})`}
-                          </p>
-                          {c.is_completed && <span className="material-symbols-outlined text-green-500 text-[12px] sm:text-[14px]">check_circle</span>}
-                        </div>
-                        <div className="flex items-center gap-1.5 overflow-hidden">
-                          <p className="text-[7px] sm:text-[10px] text-slate-400 font-bold truncate flex-1">
-                            <span className="text-primary/70">{c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type}</span>
-                          </p>
-                          {c.sms_sent_initial && (
-                            <span className="flex-shrink-0 flex items-center gap-0.5 px-1 py-0.5 bg-blue-50 text-blue-600 rounded-sm text-[6px] sm:text-[8px] font-black border border-blue-100">
-                              <span className="material-symbols-outlined text-[8px] sm:text-[10px]">send</span>
-                              확정
-                            </span>
-                          )}
-                          {c.sms_sent_reminder && (
-                            <span className="flex-shrink-0 flex items-center gap-0.5 px-1 py-0.5 bg-orange-50 text-orange-600 rounded-sm text-[6px] sm:text-[8px] font-black border border-orange-100 ml-0.5">
-                              <span className="material-symbols-outlined text-[8px] sm:text-[10px]">wb_twilight</span>
-                              아침
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <span className="material-symbols-outlined text-slate-300 text-[12px] sm:text-sm group-hover:translate-x-0.5 transition-transform">chevron_right</span>
+                <div className="flex-1 overflow-y-auto space-y-6 pr-1 custom-scrollbar">
+                  {monthlyCalendarList.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 py-10">
+                      <span className="material-symbols-outlined text-[40px] opacity-20 mb-2">event_busy</span>
+                      <p className="text-xs font-bold">일정이 없습니다.</p>
                     </div>
-                  ))
-                )}
+                  ) : (
+                    // 날짜별 그룹화 로직
+                    Object.entries(
+                      monthlyCalendarList.reduce((acc, c) => {
+                        if (!acc[c.book_date]) acc[c.book_date] = [];
+                        acc[c.book_date].push(c);
+                        return acc;
+                      }, {})
+                    ).sort(([a], [b]) => a.localeCompare(b)).map(([dateStr, items]) => {
+                      const d = new Date(dateStr);
+                      const weekDay = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+                      return (
+                        <div key={dateStr} className="space-y-2">
+                          <div className="sticky top-0 bg-white dark:bg-slate-800 z-10 py-1">
+                            <p className="text-[11px] font-black text-blue-600/80 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded inline-block">
+                              {d.getMonth() + 1}월 {d.getDate()}일 ({weekDay})
+                            </p>
+                          </div>
+                          {items.map(c => {
+                            let statusColor = 'bg-blue-500'; // 예정
+                            if (c.is_completed) statusColor = 'bg-[#10B981]'; // 완료
+                            return (
+                              <div
+                                key={c.id}
+                                onClick={() => {
+                                  setSelectedDate(c.book_date);
+                                  setTimeout(() => detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+                                }}
+                                className="relative flex items-center justify-between p-3 pl-5 bg-gray-50 dark:bg-slate-900/50 rounded-xl cursor-pointer hover:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
+                              >
+                                <div className={`absolute left-0 top-3 bottom-3 w-[4px] rounded-r-full ${statusColor}`}></div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <p className={`text-xs font-bold truncate ${c.is_completed ? 'text-gray-400' : 'text-slate-800 dark:text-slate-100'}`}>
+                                      {c.customer_name || '이름 없음'}
+                                    </p>
+                                    {c.is_completed && <span className="material-symbols-outlined text-[#10B981] text-[14px]">check_circle</span>}
+                                  </div>
+                                  <p className="text-[10px] text-gray-400 font-medium">
+                                    {c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type} · {c.product}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-[10px] font-black text-slate-700">{fmtNum(c.final_price)}원</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* 선택된 날짜의 리스트 상세 */}
@@ -2565,6 +2668,19 @@ function App() {
                     <input type="number" value={basePrice} onChange={e => setBasePrice(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-right focus:ring-2 focus:ring-primary pr-8" />
                     <span className="absolute right-3 top-3 text-xs text-slate-400 font-bold">원</span>
                   </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">삼성 체크 (문자 발송 제외)</span>
+                    {isSamsungCheck && <span className="text-xs font-bold text-red-500">문자 발송이 비활성화되었습니다</span>}
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={isSamsungCheck} onChange={e => setIsSamsungCheck(e.target.checked)} />
+                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
                 </div>
               </div>
 
@@ -4402,27 +4518,33 @@ function App() {
               {blogQueue.length > 0 && (
                 <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl p-4">
                   <h4 className="text-orange-800 font-bold text-sm mb-3 flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">schedule</span>현재 예약 발행 대기열 현황 ({blogQueue.length}/30)
+                    <span className="material-symbols-outlined text-sm">rocket_launch</span>블로그 자동 발행 현황 ({blogQueue.length}/30)
                   </h4>
                   <div className="space-y-2">
                     {blogQueue.map((item, idx) => (
-                      <div key={item.id} className="flex items-center justify-between text-xs bg-white p-3 rounded-lg border border-orange-100 shadow-sm">
-                        <div className="flex-1 min-w-0 pr-3">
-                          <div className="font-bold text-slate-700 truncate text-sm flex items-center gap-2">
-                            {idx+1}. {item.title}
+                      <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between text-xs bg-white p-3 rounded-lg border border-orange-100 shadow-sm gap-2 sm:gap-0">
+                        <div className="flex-1 min-w-0 sm:pr-3">
+                          <div className="font-bold text-slate-700 text-sm flex flex-wrap items-center gap-1.5 mb-1 sm:mb-0">
+                            <span className="line-clamp-2 w-full sm:w-auto">{idx+1}. {item.title}</span>
                             {item.status === 'processing' && <span className="px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-[10px] whitespace-nowrap"><span className="material-symbols-outlined text-[10px] animate-spin align-middle mr-0.5">sync</span>작성 중</span>}
                             {item.status === '작성 완료' && <span className="px-1.5 py-0.5 bg-green-100 text-green-600 rounded text-[10px] whitespace-nowrap"><span className="material-symbols-outlined text-[10px] align-middle mr-0.5">check_circle</span>발행 완료</span>}
                             {item.status === 'completed' && <span className="px-1.5 py-0.5 bg-green-100 text-green-600 rounded text-[10px] whitespace-nowrap"><span className="material-symbols-outlined text-[10px] align-middle mr-0.5">check_circle</span>발행 완료</span>}
                             {item.status === 'failed' && <span className="px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[10px] whitespace-nowrap"><span className="material-symbols-outlined text-[10px] align-middle mr-0.5">error</span>실패</span>}
-                            {item.status === 'pending' && <span className="px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded text-[10px] whitespace-nowrap">대기중</span>}
+                            {item.status === 'pending' && (
+                              <span className={`px-1.5 py-0.5 ${item.save_as_draft ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'} rounded text-[10px] font-bold whitespace-nowrap`}>
+                                {item.save_as_draft ? '임시저장 대기' : '즉시발행 대기'}
+                              </span>
+                            )}
                           </div>
                           <div className="text-orange-600 font-medium mt-1 inline-flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">timer</span>{item.scheduled_for_text} 예정</div>
                         </div>
-                        {item.status !== 'processing' ? (
-                          <button onClick={() => deleteFromQueue(item.id)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg whitespace-nowrap active:scale-95 font-bold transition-colors">기록 삭제</button>
-                        ) : (
-                          <span className="text-[10px] font-bold text-blue-500 whitespace-nowrap">진행 중</span>
-                        )}
+                        <div className="flex justify-end mt-1 sm:mt-0">
+                          {item.status !== 'processing' ? (
+                            <button onClick={() => deleteFromQueue(item.id)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg whitespace-nowrap active:scale-95 font-bold transition-colors">기록 삭제</button>
+                          ) : (
+                            <span className="text-[10px] font-bold text-blue-500 whitespace-nowrap py-1.5">진행 중</span>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

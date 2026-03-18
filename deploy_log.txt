@@ -1,0 +1,4 @@
+WARNING: Docker is not running
+Uploading asset (generate-blog-draft): supabase/functions/generate-blog-draft/index.ts
+unexpected deploy status 400: {"message":"Failed to bundle the function (reason: The module's source code could not be parsed: Expected ',', got '?뱀떊?' at file:///tmp/user_fn_rrkxktqduiqgyydcfumr_f198100d-1617-460e-ad3b-f16f71451dec_53/source/supabase/functions/generate-blog-draft/index.ts:85:1\n\n  ?뱀떊? 援?궡 泥?냼 ?꾨Ц ?낆껜 '${companyName}'??理쒓퀬??怨듭떇 釉붾줈洹??먮뵒?곗씠??留덉??곗엯?덈떎. (二쇱쓽: 蹂몃Ц??\"?덈뀞?섏꽭??", \"?대┛...\n  ~~~)."}
+Try rerunning the command with --debug to troubleshoot the error.

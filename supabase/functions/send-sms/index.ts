@@ -113,7 +113,12 @@ Deno.serve(async (req: any) => {
     }
 
     try {
-        const payload = await req.json()
+        let payload: any = {}
+        try {
+            payload = await req.json()
+        } catch (e) {
+            console.log('Empty or invalid request body.')
+        }
         console.log('Received payload action:', payload.action || payload.type || 'unknown')
 
         // Supabase Admin Client
@@ -124,9 +129,17 @@ Deno.serve(async (req: any) => {
 
         // 1. Webhook (insert) 모드: 예약 즉시 안내 문자 발송 및 파트너 알림
         if (payload.type === 'INSERT' && payload.table === 'bookings' && payload.record) {
-            const { id, customer_name, book_date, book_time_type, book_time_custom, phone, business_id, user_id, product } = payload.record
+            const { id, customer_name, book_date, book_time_type, book_time_custom, phone, business_id, user_id, product, is_samsung_check } = payload.record
 
             console.log(`[Webhook:INSERT] New booking ${id} for business ${business_id}`);
+
+            if (is_samsung_check) {
+                console.log(`[Webhook:INSERT] Skipping all SMS for booking ${id} because is_samsung_check is true.`);
+                return new Response(JSON.stringify({ message: 'Insert Webhook processed but SMS skipped (Samsung check)' }), {
+                    status: 200,
+                    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+                });
+            }
 
             if (!phone || phone.length < 10) {
                 console.warn(`[Webhook:INSERT] Invalid customer phone: ${phone}`);
@@ -134,8 +147,8 @@ Deno.serve(async (req: any) => {
             }
 
             // DB에서 업체 정보 및 템플릿 가져오기
-            const { data: business } = await supabase.from('businesses').select('*').eq('id', business_id).single()
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', user_id).single()
+            const { data: business } = await supabase.from('businesses').select('*').eq('id', business_id).maybeSingle()
+            const { data: profile } = await supabase.from('profiles').select('*').eq('id', user_id).maybeSingle()
 
             const timeVal = book_time_type === '직접입력' ? book_time_custom : book_time_type
             const dateTimeStr = `${book_date} ${timeVal}`
@@ -238,11 +251,15 @@ Deno.serve(async (req: any) => {
 
             let sentCount = 0
             for (const b of bookings) {
+                if (b.is_samsung_check) {
+                    console.log(`[Cron:Morning] Skipping booking ${b.id} because is_samsung_check is true.`);
+                    continue;
+                }
                 if (!b.phone || b.phone.length < 10) continue
 
                 // 해당 업체의 템플릿 및 파트너(담당자) 정보 획득
-                const { data: business } = await supabase.from('businesses').select('*').eq('id', b.business_id).single()
-                const { data: profile } = await supabase.from('profiles').select('*').eq('id', b.user_id).single()
+                const { data: business } = await supabase.from('businesses').select('*').eq('id', b.business_id).maybeSingle()
+                const { data: profile } = await supabase.from('profiles').select('*').eq('id', b.user_id).maybeSingle()
 
                 const reminderTpl = business?.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`
                 const timeVal = b.book_time_type === '직접입력' ? b.book_time_custom : b.book_time_type
