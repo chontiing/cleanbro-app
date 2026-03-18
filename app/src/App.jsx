@@ -144,11 +144,11 @@ function App() {
   // 블로그 5슬롯 자동화 상태
   const [showBatchBlogModal, setShowBatchBlogModal] = useState(false);
   const [batchSlots, setBatchSlots] = useState([
-    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
-    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
-    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
-    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
-    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' }
+    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' }
   ]);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgressText, setBatchProgressText] = useState("");
@@ -865,6 +865,8 @@ function App() {
             draft_image_urls: draftImageUrls, // AI 분석용 2장
             category: activeSlots[i].category,
             product: activeSlots[i].product,
+            customer_name: activeSlots[i].customer_name || '고객명',
+            address: activeSlots[i].address || '',
             save_as_draft: !isImmediatePublish,
             needs_gemini: true, // PC 파이썬 봇에게 AI 작성을 지시
             businessProfile: businessProfile
@@ -883,11 +885,11 @@ function App() {
       setTimeout(() => {
         setIsBatchProcessing(false);
         setBatchSlots([
-          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
-          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
-          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
-          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' },
-          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이' }
+          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' }
         ]);
       }, 2000);
 
@@ -4447,7 +4449,7 @@ function App() {
                       <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 font-black text-sm flex items-center justify-center flex-shrink-0">
                         {idx + 1}
                       </div>
-                      <div className="flex flex-1 gap-3">
+                      <div className="flex flex-1 flex-wrap gap-2">
                         <select 
                           value={slot.category || '에어컨'} 
                           onChange={e => {
@@ -4455,7 +4457,7 @@ function App() {
                             newSlots[idx].category = e.target.value;
                             setBatchSlots(newSlots);
                           }} 
-                          className="w-1/3 bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none font-bold text-slate-600 focus:ring-2 focus:ring-orange-500"
+                          className="w-1/4 min-w-[80px] bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none font-bold text-slate-600 focus:ring-2 focus:ring-orange-500"
                         >
                           <option value="에어컨">에어컨</option>
                           <option value="세탁기">세탁기</option>
@@ -4470,8 +4472,30 @@ function App() {
                             newSlots[idx].product = e.target.value;
                             setBatchSlots(newSlots);
                           }} 
-                          placeholder="품목 (예: 벽걸이, 스탠드)" 
-                          className="flex-1 bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none font-bold text-slate-600 focus:ring-2 focus:ring-orange-500" 
+                          placeholder="품목" 
+                          className="flex-1 min-w-[60px] bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none font-bold text-slate-600 focus:ring-2 focus:ring-orange-500" 
+                        />
+                        <input 
+                          type="text" 
+                          value={slot.customer_name || ''} 
+                          onChange={e => {
+                            const newSlots = [...batchSlots];
+                            newSlots[idx].customer_name = e.target.value;
+                            setBatchSlots(newSlots);
+                          }} 
+                          placeholder="고객명" 
+                          className="flex-[0.8] min-w-[70px] bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none font-bold text-slate-600 focus:ring-2 focus:ring-orange-500" 
+                        />
+                        <input 
+                          type="text" 
+                          value={slot.address || ''} 
+                          onChange={e => {
+                            const newSlots = [...batchSlots];
+                            newSlots[idx].address = e.target.value;
+                            setBatchSlots(newSlots);
+                          }} 
+                          placeholder="지역명" 
+                          className="flex-[1.2] min-w-[80px] bg-slate-50 border border-slate-200 rounded-lg p-2 text-sm outline-none font-bold text-slate-600 focus:ring-2 focus:ring-orange-500" 
                         />
                       </div>
                     </div>

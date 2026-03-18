@@ -107,10 +107,11 @@ def generate_draft_via_edge(memo_dict):
         "Authorization": f"Bearer {SUPABASE_KEY}"
     }
     req_body = {
-        "imageUrls": memo_dict.get("draft_image_urls", memo_dict.get("image_urls", [])),
+        "imageUrls": memo_dict.get("image_urls", [])[:10],
         "category": memo_dict.get("category", "에어컨"),
         "product": memo_dict.get("product", "범용"),
         "address": memo_dict.get("address", ""),
+        "customerName": memo_dict.get("customer_name", ""),
         "memo": f"카테고리: {memo_dict.get('category')}, 품목: {memo_dict.get('product')}",
         "businessProfile": memo_dict.get("businessProfile", {})
     }
@@ -422,57 +423,48 @@ def post_to_naver(data: PublishRequest) -> str:
                         if 0 <= idx < len(img_paths):
                             print(f"[Bot] {idx+1}번째 이미지 삽입 중...")
                             try:
-                                # 방법 1: 사진 버튼 클릭 후 파일 업로드
+                                # 방법 1: Playwright file_chooser 활용 (가장 안정적이고 추천되는 방식)
                                 photo_btn_clicked = False
                                 photo_selectors = [
-                                    # 상단 툴바의 사진 버튼
+                                    ".se-toolbar-item-image button",
                                     ".se-toolbar-item-image",
                                     "button.se-image-toolbar-button",
                                     "[data-name='image']",
                                     "button[data-type='image']",
-                                    # 좌측 + 버튼 → 사진
                                     ".se-toolbar .se-toolbar-item:first-child",
-                                    # 상단 메뉴의 사진
                                     ".blog_toolbar button:first-child",
                                     "a.se-oglink-toolbar-button",
                                 ]
                                 
-                                # 먼저 숨겨진 file input 찾기 (가장 확실한 방법)
-                                file_inputs = page.query_selector_all("input[type='file'][accept*='image']")
-                                if not file_inputs:
-                                    file_inputs = page.query_selector_all("input[type='file']")
-                                
-                                if file_inputs:
-                                    # Naver Blog SE3는 업로드마다 새로운 input을 추가하거나 기존 것을 비활성화할 수 있으므로, 항상 마지막 요소를 사용하는 것이 안전
-                                    file_inputs[-1].set_input_files(img_paths[idx])
-                                    page.wait_for_timeout(8000) # 업로드 대기 시간
-                                    print(f"[Bot] 이미지 {idx+1} 직접 file input(마지막 요소)으로 업로드 완료")
-                                else:
-                                    # file input이 없으면 사진 버튼 클릭
-                                    for btn_sel in photo_selectors:
-                                        try:
-                                            btn = page.wait_for_selector(btn_sel, timeout=2000)
-                                            if btn:
+                                for btn_sel in photo_selectors:
+                                    try:
+                                        btn = page.query_selector(btn_sel)
+                                        if btn and btn.is_visible():
+                                            with page.expect_file_chooser(timeout=3000) as fc_info:
                                                 btn.click()
-                                                page.wait_for_timeout(1500)
-                                                photo_btn_clicked = True
-                                                print(f"[Bot] 사진 버튼 클릭 (selector: {btn_sel})")
-                                                break
-                                        except Exception:
-                                            continue
-                                    
-                                    if photo_btn_clicked:
-                                        # 파일 선택 다이얼로그에 파일 설정
-                                        page.wait_for_timeout(1000)
+                                            file_chooser = fc_info.value
+                                            file_chooser.set_files(img_paths[idx])
+                                            page.wait_for_timeout(7000) # 업로드 대기 시간
+                                            photo_btn_clicked = True
+                                            print(f"[Bot] 이미지 {idx+1} 업로드 완료 (filechooser 기반)")
+                                            break
+                                    except Exception as e:
+                                        continue
+                                
+                                if not photo_btn_clicked:
+                                    # 방법 2: 숨겨진 file input 찾기 (Fallback)
+                                    file_inputs = page.query_selector_all("input[type='file'][accept*='image']")
+                                    if not file_inputs:
                                         file_inputs = page.query_selector_all("input[type='file']")
-                                        if file_inputs:
-                                            file_inputs[-1].set_input_files(img_paths[idx])
-                                            page.wait_for_timeout(5000)
-                                            print(f"[Bot] 이미지 {idx+1} 업로드 완료")
-                                        else:
-                                            print(f"[경고] file input을 찾지 못함")
+                                    
+                                    if file_inputs:
+                                        file_inputs[-1].set_input_files(img_paths[idx])
+                                        page.wait_for_timeout(7000)
+                                        print(f"[Bot] 이미지 {idx+1} 직접 file input(마지막 요소)으로 업로드 완료 (Fallback)")
                                     else:
-                                        print(f"[경고] 사진 버튼을 찾지 못함")
+                                        print(f"[경고] 사진 버튼 및 file input을 찾지 못함")
+                                        
+                                page.wait_for_timeout(1000)
                                 
                                 # 이미지 삽입 후 커서를 다음 줄로 이동
                                 page.keyboard.press("End")
