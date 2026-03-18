@@ -142,7 +142,7 @@ def generate_draft_via_edge(memo_dict):
                 continue
             raise Exception(f"AI 초안 생성 실패 (HTTP {res.status_code}): {res.text}")
 
-def post_karrot_news(draft, image_url):
+def post_karrot_news(draft, image_url, business_id=None):
     if not draft.get("karrotText"): return
     try:
         url = f"{SUPABASE_URL}/rest/v1/social_posts"
@@ -152,6 +152,7 @@ def post_karrot_news(draft, image_url):
             "Content-Type": "application/json"
         }
         payload = {
+            "business_id": business_id,
             "blog_title": draft.get("title", ""),
             "karrot_content": draft.get("karrotText", ""),
             "image_url": image_url
@@ -185,11 +186,13 @@ def schedule_loop():
                         
                         # 당근 소식 DB 저장
                         img_urls = memo_dict.get("image_urls", [])
-                        post_karrot_news(draft, img_urls[0] if img_urls else None)
+                        post_karrot_news(draft, img_urls[0] if img_urls else None, task.get("business_id"))
                         
                         # 생성된 텍스트를 DB로 한 번 안전하게 저장해 둡니다
                         update_supabase_task(task_id, "processing", new_memo_dict=memo_dict)
 
+                    memo_dict["service_type"] = task.get("service_type") or memo_dict.get("category", "에어컨")
+                    memo_dict["model_name"] = task.get("model_name") or memo_dict.get("product", "범용")
                     req_data = PublishRequest(**memo_dict)
                     req_data.save_as_draft = True # 사용자 요청: 항상 임시저장으로 처리
                     print(f"\\n[스케줄러] 네이버 블로그 발행 작업 시작 (ID: {task_id}) - {req_data.title}")
@@ -233,14 +236,16 @@ class PublishRequest(BaseModel):
     product: Optional[str] = "범용"
     address: Optional[str] = ""
     save_as_draft: Optional[bool] = True
+    service_type: Optional[str] = "에어컨"
+    model_name: Optional[str] = "LG 듀얼"
 
 
-def download_image(url: str, idx: int, tmpdir: str) -> str:
+def download_image(url: str, idx: int, tmpdir: str, prefix: str = "sokcho-aircon-clean-cleanbro") -> str:
     """이미지 URL을 다운로드해 임시 파일로 저장하고 경로 반환."""
     res = requests.get(url, timeout=30)
     res.raise_for_status()
     img = Image.open(BytesIO(res.content)).convert("RGB")
-    out_path = os.path.join(tmpdir, f"photo_{idx:02d}.jpg")
+    out_path = os.path.join(tmpdir, f"{prefix}-{idx+1}.jpg")
     img.save(out_path, "JPEG", quality=90)
     return out_path
 
@@ -369,11 +374,18 @@ def post_to_naver(data: PublishRequest) -> str:
             print("[Bot] 이미지 다운로드 중...")
             with tempfile.TemporaryDirectory() as tmpdir:
                 img_paths = []
+                # 제목에서 지역명 추출하여 영문 접두사 생성 (이미지 OCR 검색 최적화)
+                region_eng = "sokcho"
+                if "고성" in data.title: region_eng = "goseong"
+                elif "양양" in data.title: region_eng = "yangyang"
+                elif "강릉" in data.title: region_eng = "gangneung"
+                prefix = f"{region_eng}-aircon-clean-cleanbro"
+                
                 for i, url in enumerate(data.image_urls[:10]):
                     try:
-                        path = download_image(url, i, tmpdir)
+                        path = download_image(url, i, tmpdir, prefix)
                         img_paths.append(path)
-                        print(f"  [Bot] 이미지 {i+1} 다운로드 완료")
+                        print(f"  [Bot] 이미지 {i+1} 다운로드 완료 ({prefix}-{i+1}.jpg)")
                     except Exception as e:
                         print(f"  [경고] 이미지 {i} 다운로드 실패: {e}")
 
@@ -408,6 +420,47 @@ def post_to_naver(data: PublishRequest) -> str:
                     print("[Bot] Tab키로 본문 이동 시도")
 
                 page.wait_for_timeout(1000)
+
+                # ── 5.5 대표 썸네일 자동 생성 및 업로드 ──────────────────
+                print("[Bot] 대표 썸네일 생성 및 업로드 시도 중...")
+                try:
+                    from thumbnail_generator import create_thumbnail
+                    thumb_path = create_thumbnail(
+                        service_type=data.service_type, 
+                        model_name=data.model_name,
+                        output_path=os.path.join(tmpdir, f"main-thumb-{prefix}.jpg")
+                    )
+                    if thumb_path and os.path.exists(thumb_path):
+                        # 파일 업로드 (1번째 이미지이므로 에디터가 자동 대표 지정함)
+                        with page.expect_file_chooser() as fc_info:
+                            photo_btn = page.locator("button[data-type='image'], button.se-image-toolbar-button").first
+                            photo_btn.click(timeout=3000)
+                        file_chooser = fc_info.value
+                        file_chooser.set_files(thumb_path)
+                        print("[Bot] 대표 썸네일 업로드 성공!")
+                        page.wait_for_timeout(3000) # 업로드 대기
+                        
+                        # 썸네일을 대표사진으로 명시적 클릭 시도 (선택 사항)
+                        try:
+                            # 방금 추가된 이미지를 클릭
+                            img_el = page.locator(".se-image-resource").last
+                            if img_el.count() > 0:
+                                img_el.click(timeout=1000)
+                                page.wait_for_timeout(500)
+                                # '대표' 버튼 클릭
+                                rep_btn = page.locator("button.se-inline-image-button-represent, button:has-text('대표')").first
+                                if rep_btn.count() > 0:
+                                    rep_btn.click(timeout=1000)
+                                    print("[Bot] 대표 사진 뱃지 명시적 활성화 성공")
+                        except Exception as e_rep:
+                            print(f"[경고] 대표 사진 강제 클릭 실패(무시): {e_rep}")
+                        
+                        # 사진 밑으로 커서 이동 후 한 줄 띄우기
+                        page.keyboard.press("End")
+                        page.keyboard.press("Enter")
+                        page.wait_for_timeout(500)
+                except Exception as e_thumb:
+                    print(f"[경고] 썸네일 생성/업로드 중 오류: {e_thumb}")
 
                 # ── 6. 본문 및 이미지 교차 입력 ───────────
                 print("[Bot] 본문 및 이미지 교차 입력 중...")
@@ -478,9 +531,48 @@ def post_to_naver(data: PublishRequest) -> str:
                         paragraphs = token.split("\n")
                         for para in paragraphs:
                             if para.strip():
-                                page.keyboard.type(para.strip(), delay=5)
+                                page.keyboard.type(para.strip(), delay=15)
                             page.keyboard.press("Enter")
-                        page.wait_for_timeout(300)
+                            page.wait_for_timeout(500)
+                        page.wait_for_timeout(500)
+
+                # ── 6.5 장소(Map) 추가 로직 ──────────────────────────
+                print("[Bot] 장소(Map) 컴포넌트 맨 밑에 추가 중...")
+                try:
+                    # 커서를 맨 끝으로 완벽히 이동
+                    page.keyboard.press("PageDown")
+                    page.keyboard.press("PageDown")
+                    page.keyboard.press("End")
+                    page.keyboard.press("Enter")
+                    page.wait_for_timeout(1000)
+
+                    # 1. 툴바에서 '장소' 버튼 클릭
+                    place_btn = page.locator("button[data-type='place'], button.se-place-toolbar-button").first
+                    if place_btn.count() > 0:
+                        place_btn.click(timeout=3000)
+                        page.wait_for_timeout(2000)
+                        
+                        # 2. 장소 검색 팝업 내부 인풋
+                        search_input = page.locator("input.se-popup-place-search-input, .se-place-search-input, input[placeholder*='장소']").first
+                        if search_input.count() > 0:
+                            search_input.fill("클린브로")
+                            search_input.press("Enter")
+                            page.wait_for_timeout(2000)
+                            
+                            # 3. 추가 버튼 클릭 (.se-place-search-add-button 등)
+                            add_btn = page.locator("button:has-text('추가'), .se-place-search-add-button, .se-place-list-item button").first
+                            if add_btn.count() > 0:
+                                add_btn.click()
+                                page.wait_for_timeout(1000)
+                                
+                                # 4. 완료/확인 버튼 클릭
+                                confirm_btn = page.locator("button:has-text('확인'), .se-place-confirm-button, button:has-text('완료')").first
+                                if confirm_btn.count() > 0:
+                                    confirm_btn.click()
+                                    page.wait_for_timeout(2000)
+                                    print("[Bot] 장소(Map) 컴포넌트 성공적으로 추가됨.")
+                except Exception as e:
+                    print(f"[경고] 장소 컴포넌트 추가 실패: {e}")
 
                 # ── 7. 태그 입력 ──────────────────────────
                 print("[Bot] 태그 입력 중...")
@@ -495,7 +587,7 @@ def post_to_naver(data: PublishRequest) -> str:
                 ]
                 for sel in tag_selectors:
                     try:
-                        tag_input = page.wait_for_selector(sel, timeout=3000)
+                        tag_input = page.wait_for_selector(sel, timeout=1000)
                         if tag_input:
                             for tag in data.tags[:10]:
                                 tag_input.click()
@@ -514,6 +606,8 @@ def post_to_naver(data: PublishRequest) -> str:
                     print("[경고] 태그 입력 실패 - 셀렉터를 찾지 못함")
 
                 if data.save_as_draft:
+                    print("[Bot] 임시저장/발행 전 이미지 업로드 안정화 대기 (10초)...")
+                    page.wait_for_timeout(10000)
                     print("[Bot] 임시저장 시도 중...")
                     page.wait_for_timeout(1000)
                     draft_saved = False

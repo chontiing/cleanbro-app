@@ -592,6 +592,8 @@ function App() {
   const [isAssigneePinned, setIsAssigneePinned] = useState(() => localStorage.getItem('default_assignee') !== null);
   const [isCompleted, setIsCompleted] = useState(false); // 완료 상태 유지용
   const [isSamsungCheck, setIsSamsungCheck] = useState(false); // 삼성 체크 여부
+  const [serviceType, setServiceType] = useState('에어컨'); // 썸네일용 서비스 종류
+  const [modelName, setModelName] = useState(''); // 썸네일용 모델명
 
   useEffect(() => {
     if (!assignee && myNickname) {
@@ -1016,6 +1018,8 @@ function App() {
       assignee: assignee || 'ccy6208',
       is_completed: isCompleted,
       is_samsung_check: isSamsungCheck,
+      service_type: serviceType,
+      model_name: modelName,
       date_created: getTodayStr(),
       applied_tax_type: businessProfile?.taxpayer_type || '간이과세자',
     };
@@ -2656,7 +2660,21 @@ function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">서비스 카테고리 (썸네일용)</label>
+                  <select value={serviceType} onChange={e => setServiceType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none">
+                    <option value="에어컨">에어컨</option>
+                    <option value="세탁기">세탁기</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">상세 모델명 (썸네일용)</label>
+                  <input type="text" value={modelName} onChange={e => setModelName(e.target.value)} placeholder="예: 무풍 2구 스탠드" className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mt-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1">대수</label>
                   <div className="relative">

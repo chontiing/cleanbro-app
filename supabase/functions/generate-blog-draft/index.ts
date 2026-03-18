@@ -103,27 +103,35 @@ serve(async (req: Request) => {
 
 [블로그 퀄리티 및 SEO 최적화 필수 조건 (매우 중요)]
 - 제목 최적화: 제목은 반드시 지정된 형식을 엄격히 따르세요. 느낌표(!) 외의 불필요한 특수문자는 배제하세요. 지역명과 모델명이 앞부분에 오도록 검색 노출을 극대화해야 합니다.
-  * 제목 포맷: ${seoRegion} ${product} 청소! [10자 이내의 AI 후킹문구]
-  * 작성 예시: ${seoRegion} ${product} 청소! 새것처럼 완벽 변신
+  * 제목 포맷: ${seoRegion} ${category} 청소! ${product} [10자 이내의 AI 후킹문구]
+  * 작성 예시: ${seoRegion} 에어컨 청소! 무풍 2구 묵은 때까지 싹 ✨
 - 브랜드 안심 약속 (필수 삽입): 본문 어딘가(주로 하단부)에 아래의 '클린브로 3단계 프리미엄 케어' 섹션을 기호와 함께 똑같은 텍스트로 반드시 삽입하세요.
   ✅ [STEP 01. 고압 스팀] 100도 이상의 강력한 스팀으로 곰팡이 뿌리까지 완벽 박멸
   ✅ [STEP 02. UV 살균] 보이지 않는 세균과 바이러스까지 잡아내는 2중 UV 살균 케어
   ✅ [STEP 03. 항균 탈취] 항균 인증 받은 친환경 탈취제로 쾌적하고 맑은 공기 선사
 - AI 사진 분석 & 프리미엄 케어 연계: 첨부된 사진들을 보면서 단지 "청소했습니다"가 아니라, "**고객님의 건강을 위해 프리미엄 장비로 정성껏 케어해드렸다**"는 톤앤매너로 서술하세요. 사진 설명 사이에 위의 "스팀", "UV 살균", "친환경 탈취" 과정을 자연스럽게 녹여주세요. (예: "스팀 살균 중인 사진입니다. 좁은 틈새 보이지 않는 곳까지 100도 고압 스팀으로 꼼꼼히 신경 씁니다.")
-- 모바일 SEO 줄바꿈 & 강조: 문단은 최대 1~2문장으로 유지하고 빈 줄(엔터 2번)을 넣어 시원하게 띄어쓰세요. 또한 핵심 단어는 대괄호([])나 볼드체(**텍스트**)로 묶어 시각적으로 강조하세요.
+- 모바일 SEO 줄바꿈 & 강조: 문단은 최대 1~2문장으로 유지하고 빈 줄(엔터 2번)을 넣어 시원하게 띄어쓰세요. 대괄호([ ]) 기호 사용은 스팸 지수를 높이므로 절대 금지합니다. 소제목이나 강조가 필요한 부분은 볼드체(**텍스트**)나 '작은따옴표'를 사용하여 시각적으로 깔끔하게 강조하세요.
+- 에디터/앱 UI 텍스트 차단 (매우 중요): 첨부된 사진에 스크린샷 캡처로 인한 '대표사진 삭제', 'AI 활용 설정', '스마트렌즈 분석' 등의 휴대폰 앱이나 에디터 UI 문구가 포함되어 있더라도, 절대 본문 생성을 위해 사용하지 마세요. 기기 청소 상태 묘사만 집중하세요.
 - 이모지 활용: 각 문맥과 어울리는 다양한 이모지(✨, 🦠, 💦, 🔧, 🔍 등)를 문단 사이에 적절히 사용하여 시각적 즐거움을 더하세요.
-- 키워드 자연스러운 배치: 본문 안에 "${seoRegion} ${category} 청소", "클린브로" 키워드를 가장 자연스럽게 2~3회 정도 녹여내세요. (어색한 키워드 남발 금지)
+- 방문자 리뷰 스타일 도입부: 글 첫머리는 마치 맘카페나 블로그 실제 방문자 리뷰처럼 진정성 있고 따뜻한 만족감(예: "정말 꼼꼼하게 작업해주셔서 감동받았어요!")을 표현하는 내레이션으로 시작하세요.
+- 키워드 집중 배치 (SEO 핵심): 본문과 사진 설명(캡션) 전체를 통틀어 "${seoRegion} ${category} 청소", "클린브로" 라는 키워드가 아주 자연스러운 문맥으로 각각 **5회 이상** 강하게 반복되도록 작성하세요.
 - 첫 문단 구성: 첫 문장의 서두는 무조건 "${seoRegion} ${category} 청소"를 포함시켜 자연스럽게 시작하세요.
 - 스마트플레이스 연동: 문서 중간에 업체명+지역명 조합(예: 클린브로 \${locationHint})을 언급하세요.
-- 하단 고정 문구: 본문 제일 마지막에는 반드시 아래의 형식을 똑같이 텍스트로 넣어주세요!
+- 문장 완성도 검증: AI의 생성이 중간에 끊기지 않고 문단이 모두 완전한 마침표(.)나 느낌표(!), 혹은 이모지로 완벽히 종료되도록 주의하세요. 문장이 꼬이거나 미완성으로 남으면 절대 안 됩니다.
+- 하단 고정 문구: 본문 제일 마지막에는 반드시 아래의 형식을 똑같이 텍스트로 넣어주세요! (볼드체, 이모지 포함 그대로)
 
 =========================
-📞 전화 문의 : 010-2716-8635
-📍 마이플레이스 위치 : https://naver.me/xAFO9mgm
+📞 **[클린브로 문의전화]** 010-2716-8635
+📍 **[마이플레이스 바로가기]** https://naver.me/xAFO9mgm
 
-✅ 서비스 가능 지역 : 속초, 고성, 양양, 강릉 전 지역 가능
-💡 ${companyName}의 약속 : "${qualifications}"
+🎁 **[클린브로만의 프리미엄 혜택]**
+✅ 초강력 고압세척으로 찌든 때 완벽 제거
+✅ 보이지 않는 세균까지 잡아내는 UV 살균 케어
+✅ 곰팡이 뿌리까지 사멸시키는 고압스팀 살균세척
+✅ 항균 인증 탈취제로 맑고 쾌적한 공기 선사
 =========================
+
+- 오타 및 문맥 주의: '에어컨적함'처럼 어법에 맞지 않는 억지 조어(네오로지즘)나 찌꺼기 글을 절대 생성하지 마세요. AI가 쓴 기계적인 단어가 없는지 스스로 엄격히 검증하세요.
 
 [당근마켓 소식글 작성 조건]
 - 200~300자 이내. 동네 주민들에게 따뜻하게 말하는 이웃 말투 (예: 당근 이웃님들~).
@@ -143,7 +151,7 @@ serve(async (req: Request) => {
 [태그]
 #${locationHint}${category}청소 #${locationHint}청소업체 #클린브로 #${category}분해청소 (이외 2~3개 더)
 [설명]
-(각 사진에 대한 한 줄 설명 작성, 줄바꿈으로 구분)
+(각 사진에 대한 한 줄 설명 작성. 이때 반드시 "${seoRegion} ${category} 청소" 또는 "클린브로" 라는 키워드를 설명 안에도 몇 번 섞어주세요. 줄바꿈으로 구분)
 `;
 
         const userPrompt = `
@@ -169,7 +177,7 @@ serve(async (req: Request) => {
             ],
             generationConfig: {
                 temperature: 0.8,
-                maxOutputTokens: 4096,
+                maxOutputTokens: 8192,
             },
         };
 
@@ -205,8 +213,38 @@ serve(async (req: Request) => {
             const tagsMatch = rawText.match(/\[태그\]([\s\S]*?)(?:\[설명\]|$)/i);
             const descMatch = rawText.match(/\[설명\]([\s\S]*)$/i);
 
-            if (titleMatch) draft.title = titleMatch[1].trim();
-            if (bodyMatch) draft.body = bodyMatch[1].trim();
+            let extraBodyText = "";
+            if (titleMatch) {
+                let fullTitle = titleMatch[1].trim();
+                
+                // 1) 무조건 첫 줄바꿈 기준으로 분리 (첫 줄만 제목으로 취급)
+                const firstNewline = fullTitle.indexOf('\n');
+                if (firstNewline !== -1) {
+                     draft.title = fullTitle.substring(0, firstNewline).trim();
+                     extraBodyText = fullTitle.substring(firstNewline).trim();
+                } else {
+                     draft.title = fullTitle;
+                }
+                
+                // 특수문자나 괄호 등 잔여물 제거 (이모지는 살림)
+                draft.title = draft.title.replace(/^["'\[]/, '').replace(/["'\]]$/, '').trim();
+                
+                // 2) 36자 초과 시 강제 절단 및 본문으로 합치기 (찌꺼기 방지용)
+                if (draft.title.length > 36) {
+                    const extra = draft.title.substring(36);
+                    draft.title = draft.title.substring(0, 36).trim();
+                    if (extra.trim()) {
+                        extraBodyText = extra + (extraBodyText ? "\n" + extraBodyText : "");
+                    }
+                }
+            }
+
+            if (bodyMatch) {
+                draft.body = extraBodyText + (extraBodyText ? "\n\n" : "") + bodyMatch[1].trim();
+            } else if (extraBodyText) {
+                draft.body = extraBodyText;
+            }
+
             if (karrotMatch) draft.karrotText = karrotMatch[1].trim();
 
             const tagsText = tagsMatch ? tagsMatch[1] : null;
