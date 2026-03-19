@@ -539,10 +539,9 @@ def post_to_naver(data: PublishRequest) -> str:
                 # ── 6.5 장소(Map) 추가 로직 ──────────────────────────
                 print("[Bot] 장소(Map) 컴포넌트 맨 밑에 추가 중...")
                 try:
-                    # 커서를 맨 끝으로 완벽히 이동
-                    page.keyboard.press("PageDown")
-                    page.keyboard.press("PageDown")
-                    page.keyboard.press("End")
+                    # 커서를 문서 맨 끝으로 완벽히 이동 (Windows 환경: Ctrl+End)
+                    page.keyboard.press("Control+End")
+                    page.keyboard.press("Enter")
                     page.keyboard.press("Enter")
                     page.wait_for_timeout(1000)
 

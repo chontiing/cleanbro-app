@@ -1,4 +1,4 @@
 [Debug] 썸네일 생성 시작. C:\Users\hoyeo\OneDrive\바탕 화면\클린브로앱\app\server\assets 탐색 중...
 [Debug] 폴더 내부 파일 목록: ['clean_template.png.png', 'fonts']
-[Thumbnail] 썸네일 생성 완료: temp_thumbnail.jpg
-Result: temp_thumbnail.jpg
+[Thumbnail] 썸네일 생성 완료: temp_thumbnail_test.jpg
+Result: temp_thumbnail_test.jpg

@@ -409,7 +409,7 @@ function App() {
         .from('expenses')
         .select('*')
         .eq('business_id', myBusinessId)
-        .order('date', { ascending: false });
+        .order('date_created', { ascending: false });
       if (error) throw error;
       setExpenses(data || []);
     } catch (err) {
@@ -1270,6 +1270,8 @@ function App() {
   const [exCategory, setExCategory] = useState('자재/장비');
   const [exMemo, setExMemo] = useState('');
   const [exReceiptFile, setExReceiptFile] = useState(null);
+  const [exHasCashReceipt, setExHasCashReceipt] = useState(false);
+  const [exHasTaxInvoice, setExHasTaxInvoice] = useState(false);
   const [isSavingExpense, setIsSavingExpense] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState(null);
 
@@ -1304,6 +1306,8 @@ function App() {
       category: exCategory,
       memo: exMemo,
       receipt_url: receiptUrl,
+      has_cash_receipt: exHasCashReceipt,
+      has_tax_invoice: exHasTaxInvoice,
     };
 
     let error;
@@ -1322,6 +1326,7 @@ function App() {
     } else {
       alert(editingExpenseId ? '지출이 수정되었습니다.' : '지출이 성공적으로 등록되었습니다!');
       setExAmount(''); setExMemo(''); setExReceiptFile(null);
+      setExHasCashReceipt(false); setExHasTaxInvoice(false);
       setEditingExpenseId(null);
       fetchExpenses();
     }
@@ -1333,6 +1338,8 @@ function App() {
     setExAmount(fmtNum(exp.amount.toString()));
     setExCategory(exp.category);
     setExMemo(exp.memo || '');
+    setExHasCashReceipt(exp.has_cash_receipt || false);
+    setExHasTaxInvoice(exp.has_tax_invoice || false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -3595,6 +3602,17 @@ function App() {
                   <input type="text" value={exMemo} onChange={e => setExMemo(e.target.value)} className="w-full p-3 rounded-xl border bg-slate-50 dark:bg-slate-900/50 dark:border-slate-700 outline-none focus:ring-2" placeholder="예: 철물점 마스킹 테이프" />
                 </div>
 
+                <div className="flex gap-4 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={exHasTaxInvoice} onChange={e => { setExHasTaxInvoice(e.target.checked); if(e.target.checked) setExHasCashReceipt(false); }} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">세금계산서 발행</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={exHasCashReceipt} onChange={e => { setExHasCashReceipt(e.target.checked); if(e.target.checked) setExHasTaxInvoice(false); }} className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary" />
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">지출증빙(현금영수증) 발행</span>
+                  </label>
+                </div>
+
                 <div className="flex gap-2">
                   <button disabled={isSavingExpense} type="submit" className="flex-1 py-3.5 bg-primary text-white font-bold rounded-xl active:scale-95 transition-transform flex justify-center gap-2 items-center">
                     <span className="material-symbols-outlined">{isSavingExpense ? 'sync' : editingExpenseId ? 'save' : 'add_circle'}</span>
@@ -3603,7 +3621,7 @@ function App() {
                   {editingExpenseId && (
                     <button
                       type="button"
-                      onClick={() => { setEditingExpenseId(null); setExAmount(''); setExMemo(''); setExReceiptFile(null); }}
+                      onClick={() => { setEditingExpenseId(null); setExAmount(''); setExMemo(''); setExReceiptFile(null); setExHasCashReceipt(false); setExHasTaxInvoice(false); }}
                       className="px-4 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl active:scale-95 transition-all"
                     >
                       취소
@@ -3622,7 +3640,11 @@ function App() {
                           {e.memo || e.category}
                           {e.receipt_url && <a href={e.receipt_url} target="_blank" rel="noopener noreferrer" className="text-[10px] bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded ml-1 font-bold">영수증 보기</a>}
                         </span>
-                        <span className="text-xs text-slate-400 block mt-1">{e.date_created} · {e.category}</span>
+                        <span className="text-xs text-slate-400 block mt-1 flex flex-wrap gap-1 items-center">
+                          {e.date_created} · {e.category}
+                          {e.has_tax_invoice && <span className="bg-blue-100 text-blue-600 text-[10px] font-black px-1.5 py-0.5 rounded ml-1">세금계산서</span>}
+                          {e.has_cash_receipt && <span className="bg-purple-100 text-purple-600 text-[10px] font-black px-1.5 py-0.5 rounded ml-1">지출증빙</span>}
+                        </span>
                         <div className="flex gap-2 mt-2">
                           <button onClick={() => handleEditExpense(e)} className="text-[10px] font-bold text-slate-400 hover:text-primary flex items-center gap-0.5">
                             <span className="material-symbols-outlined text-[12px]">edit</span> 수정
