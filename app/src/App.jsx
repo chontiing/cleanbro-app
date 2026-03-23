@@ -2688,6 +2688,7 @@ function App() {
                   <select value={serviceType} onChange={e => setServiceType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none">
                     <option value="에어컨">에어컨</option>
                     <option value="세탁기">세탁기</option>
+                    <option value="인스턴티">인스턴티</option>
                   </select>
                 </div>
                 <div>
@@ -4614,6 +4615,7 @@ function App() {
                         >
                           <option value="에어컨">에어컨</option>
                           <option value="세탁기">세탁기</option>
+                          <option value="인스턴티">인스턴티</option>
                           <option value="입주청소">입주청소</option>
                           <option value="기타">기타</option>
                         </select>
