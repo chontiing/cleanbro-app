@@ -183,6 +183,12 @@ function App() {
   const [shortsScript, setShortsScript] = useState("");
   const [shortsError, setShortsError] = useState("");
   const SHORTS_CATEGORIES = ["감동/힐링", "반전/충격", "정보/교육", "유머", "동기부여"];
+  
+  // AI 피드백 회의 관련 상태
+  const [aiMeetingIssue, setAiMeetingIssue] = useState('');
+  const [aiMeetingCategory, setAiMeetingCategory] = useState('인스턴티');
+  const [isGeneratingMeeting, setIsGeneratingMeeting] = useState(false);
+  const [aiGuidelines, setAiGuidelines] = useState(() => localStorage.getItem('ai_blog_guidelines') || '');
 
   // 인증 및 모드 관련 상태
   const [isResetMode, setIsResetMode] = useState(false);
@@ -876,7 +882,8 @@ function App() {
             address: activeSlots[i].address || '',
             save_as_draft: !isImmediatePublish,
             needs_gemini: true, // PC 파이썬 봇에게 AI 작성을 지시
-            businessProfile: businessProfile
+            businessProfile: businessProfile,
+            aiGuidelines: aiGuidelines
           }),
           is_completed: false
         });
@@ -2993,6 +3000,24 @@ function App() {
                 </>
               )}
 
+              {isAdmin && (
+                <>
+                  <button
+                    onClick={() => setSettingsActiveMenu('ai_meeting')}
+                    className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-orange-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
+                  >
+                    <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                      <span className="material-symbols-outlined">psychology_alt</span>
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-slate-800 dark:text-slate-100">AI 블로그 오답 노트 (전략 회의)</h4>
+                      <p className="text-xs text-purple-500 font-medium overflow-hidden whitespace-nowrap text-ellipsis">성과 저조 원인을 분석하고 다음 포스팅 퀄리티 업그레이드</p>
+                    </div>
+                    <span className="material-symbols-outlined text-slate-300">chevron_right</span>
+                  </button>
+                </>
+              )}
+
               <button
                 onClick={() => setSettingsActiveMenu('invite')}
                 className="bg-white dark:bg-slate-800 p-5 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4 active:scale-95 transition-all text-left group"
@@ -3230,6 +3255,86 @@ function App() {
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* --- 상세 메뉴 3.5: AI 오답 노트 (전략 회의) --- */}
+          {settingsActiveMenu === 'ai_meeting' && (
+            <div className="space-y-6 animate-slide-up">
+              <div className="bg-gradient-to-br from-purple-800 to-indigo-900 rounded-[2rem] p-7 shadow-xl relative overflow-hidden text-white">
+                <span className="material-symbols-outlined absolute -right-6 -top-6 text-[120px] text-white/5 rotate-12">psychology</span>
+                <div className="relative z-10">
+                  <span className="inline-block px-2.5 py-1 bg-white/20 rounded-full text-[10px] font-black tracking-widest mb-3 backdrop-blur-sm">AI MASTER AI</span>
+                  <h3 className="font-black text-2xl leading-tight mb-2">블로그 조회수가<br/>떨어졌나요?</h3>
+                  <p className="text-xs text-white/70 font-medium leading-relaxed">
+                    최고의 마케터, 카피라이터, 데이터 분석가 AI 로 구성된<br/>
+                    가상의 전략팀을 소집하여 원인을 분석하고,<br/>
+                    다음 블로그 자동 발행 시 적용될 핵심 지침을 도출합니다.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-5">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">어떤 점이 문제인가요?</label>
+                  <textarea
+                    value={aiMeetingIssue}
+                    onChange={e => setAiMeetingIssue(e.target.value)}
+                    placeholder="(예: 조회수가 10회 미만으로 저조함, 검색 노출이 전혀 안 됨, 이탈률이 높음 등)"
+                    className="w-full h-24 p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-2xl focus:ring-2 focus:ring-purple-500 outline-none resize-none transition-all"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-2">대상 브랜드 / 카테고리</label>
+                  <select
+                    value={aiMeetingCategory}
+                    onChange={e => setAiMeetingCategory(e.target.value)}
+                    className="w-full p-4 text-sm bg-slate-50 dark:bg-slate-900 border rounded-2xl focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+                  >
+                    <option value="인스턴티">인스턴티 (InstanT)</option>
+                    <option value="에어컨">에어컨 청소</option>
+                    <option value="세탁기">세탁기 청소</option>
+                    <option value="입주/이사">입주/이사 청소</option>
+                  </select>
+                </div>
+
+                <button
+                  onClick={handleGenerateAiMeeting}
+                  disabled={isGeneratingMeeting}
+                  className="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-black rounded-2xl shadow-lg shadow-purple-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isGeneratingMeeting ? (
+                    <><span className="material-symbols-outlined animate-spin">sync</span> 회의 진행 중...</>
+                  ) : (
+                    <><span className="material-symbols-outlined">forum</span> AI 전략 회의 소집하기</>
+                  )}
+                </button>
+              </div>
+
+              {aiGuidelines && (
+                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-[2rem] p-6 border border-purple-100 dark:border-purple-800/50 space-y-4 animate-fade-in shadow-inner">
+                  <h4 className="font-black text-purple-800 dark:text-purple-300 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-purple-600 dark:text-purple-400">verified</span>
+                    도출된 업그레이드 가이드라인
+                  </h4>
+                  <p className="text-[10px] text-purple-600/70 font-bold mb-2">이 지침은 다음 [블로그 예약 발행] 생성 시 AI 에디터에게 전달됩니다.</p>
+                  <div className="p-5 bg-white dark:bg-slate-800 rounded-2xl border border-purple-100 dark:border-purple-700/50 text-sm leading-relaxed whitespace-pre-wrap text-slate-700 dark:text-slate-300 font-medium shadow-sm">
+                    {aiGuidelines}
+                  </div>
+                  <button
+                    onClick={() => {
+                       if (window.confirm("가이드라인을 초기화하시겠습니까? (이후 발행글은 기본 지침으로 작성됩니다)")) {
+                           setAiGuidelines('');
+                           localStorage.removeItem('ai_blog_guidelines');
+                       }
+                    }}
+                    className="w-full py-3 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-bold text-xs rounded-xl border hover:bg-slate-50 transition-colors"
+                  >
+                    목표 달성 완료 (초기화)
+                  </button>
                 </div>
               )}
             </div>
