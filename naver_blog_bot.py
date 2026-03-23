@@ -297,6 +297,11 @@ def post_to_naver(data: PublishRequest) -> str:
 
             # ── 2. 블로그 글쓰기 에디터 접속 ──────────────
             editor_url = f"https://blog.naver.com/{blog_id}/postwrite"
+            
+            # 카테고리 식별 (인스턴티는 categoryNo=22)
+            if getattr(data, 'category', '') == '인스턴티':
+                editor_url += "?categoryNo=22"
+
             print(f"[Bot] 에디터 접속: {editor_url}")
             page.goto(editor_url, timeout=30000)
             page.wait_for_timeout(5000)
@@ -554,7 +559,8 @@ def post_to_naver(data: PublishRequest) -> str:
                         # 2. 장소 검색 팝업 내부 인풋
                         search_input = page.locator("input.se-popup-place-search-input, .se-place-search-input, input[placeholder*='장소']").first
                         if search_input.count() > 0:
-                            search_input.fill("클린브로")
+                            place_keyword = "인스턴티" if getattr(data, 'category', '') == '인스턴티' else "클린브로"
+                            search_input.fill(place_keyword)
                             search_input.press("Enter")
                             page.wait_for_timeout(2000)
                             
