@@ -1406,11 +1406,14 @@ function App() {
     expenses.filter(e => e.date_created?.startsWith(targetMonthStr)).forEach(e => {
       thisMonthExpenses += e.amount;
       const taxType = e.applied_tax_type || '간이과세자';
+      const isRecognizedPurchase = e.has_tax_invoice || e.has_cash_receipt;
 
-      if (taxType === '일반과세자') {
-        totalPurchaseTax += Math.floor(e.amount * 0.1);
-      } else {
-        totalPurchaseTax += Math.floor(e.amount * 0.005);
+      if (isRecognizedPurchase) {
+        if (taxType === '일반과세자') {
+          totalPurchaseTax += Math.floor(e.amount * 0.1);
+        } else {
+          totalPurchaseTax += Math.floor(e.amount * 0.005);
+        }
       }
     });
 
