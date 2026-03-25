@@ -128,7 +128,8 @@ Deno.serve(async (req: any) => {
         )
 
         // 1. Webhook (insert) 모드: 예약 즉시 안내 문자 발송 및 파트너 알림
-        if (payload.type === 'INSERT' && payload.table === 'bookings' && payload.record) {
+        if ((payload.type === 'INSERT' && payload.table === 'bookings' && payload.record) || 
+            (payload.action === 'send_webhook_manual' && payload.record)) {
             const { id, customer_name, book_date, book_time_type, book_time_custom, phone, business_id, user_id, product, is_samsung_check } = payload.record
 
             console.log(`[Webhook:INSERT] New booking ${id} for business ${business_id}`);

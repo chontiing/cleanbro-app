@@ -1051,6 +1051,12 @@ function App() {
       return;
     }
 
+    if (!editingId && data && data.length > 0) {
+      supabase.functions.invoke('send-sms', {
+        body: { action: 'send_webhook_manual', record: data[0] }
+      }).catch(err => console.error("SMS Invoke Error:", err));
+    }
+
     await fetchCustomers();
     setEditingId(null);
     setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');

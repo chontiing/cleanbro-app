@@ -113,7 +113,8 @@ def generate_draft_via_edge(memo_dict):
         "address": memo_dict.get("address", ""),
         "customerName": memo_dict.get("customer_name", ""),
         "memo": f"카테고리: {memo_dict.get('category')}, 품목: {memo_dict.get('product')}",
-        "businessProfile": memo_dict.get("businessProfile", {})
+        "businessProfile": memo_dict.get("businessProfile", {}),
+        "aiGuidelines": memo_dict.get("aiGuidelines", "")
     }
     
     max_retries = 3
@@ -217,6 +218,24 @@ def schedule_loop():
         except Exception as e:
             print(f"[스케줄러] 메인 루프 에러: {e}")
             
+        # 매일 아침 8시경 (8시 0분 ~ 8시 30분 사이) 오늘 일정 알림(Morning SMS) 트리거
+        now = datetime.now()
+        if now.hour == 8 and now.minute < 30:
+            if not getattr(schedule_loop, "morning_sms_sent_today", False):
+                print(f"[스케줄러/시스템] ☀️ 아침 8시가 넘어 고객 모닝 알림 문자를 일괄 트리거합니다.")
+                try:
+                    m_res = requests.post(
+                        f"{SUPABASE_URL}/functions/v1/send-sms",
+                        json={"action": "send_morning_reminders"},
+                        headers={"Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json"}
+                    )
+                    print(f"[스케줄러/시스템] 모닝 트리거 완료: {m_res.status_code}")
+                    schedule_loop.morning_sms_sent_today = True
+                except Exception as e:
+                    print(f"[스케줄러/오류] 모닝 알림 트리거 실패: {e}")
+        elif now.hour >= 9:
+            schedule_loop.morning_sms_sent_today = False
+            
         # 5초마다 큐 상태 체크 (더 빠르게 반응하도록 수정)
         time.sleep(5)
 
@@ -238,6 +257,7 @@ class PublishRequest(BaseModel):
     save_as_draft: Optional[bool] = True
     service_type: Optional[str] = "에어컨"
     model_name: Optional[str] = "LG 듀얼"
+    aiGuidelines: Optional[str] = ""
 
 
 def download_image(url: str, idx: int, tmpdir: str, prefix: str = "sokcho-aircon-clean-cleanbro") -> str:
@@ -832,6 +852,43 @@ def schedule_publish():
             "expected_time": dt_str,
             "item_id": queue_item["id"]
         })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"detail": str(e)}), 500
+
+@app.route("/ai_meeting", methods=["POST"])
+def ai_meeting():
+    try:
+        req_data = request.json
+        issue = req_data.get("issue", "검색 노출 누락 또는 조회수 저조")
+        category = req_data.get("category", "일반")
+        
+        system_prompt = f"""당신은 블로그 성과 개선을 위한 'AI 최고 전략 회의'의 마스터 AI입니다.
+현재 우리 업체의 블로그(주력 카테고리: {category}) 최신 포스팅이 '{issue}' 문제로 인해 스탯이 저조하다는 현장 보고가 들어왔습니다.
+SEO 마케터, 카피라이터, 데이터 분석가 AI 3명이 내부적으로 치열하게 원인을 분석하고 토론한 결과라고 가정하십시오.
+
+글을 작성하는 하위 AI 에디터가 다음 포스팅을 생성할 때 **절대적으로 따라야만 하는 가장 강력하고 혁신적인 업그레이드 지침 3가지**를 도출하여 알려주세요.
+*주의사항: 장황한 서론 없이, 하위 AI 에디터의 시스템 프롬프트에 바로 붙여넣기 좋게 "명령조"의 텍스트로만 300~500자 이내로 작성하세요. (예: "1. 서론에 자극적인 숫자 훅을 배치하라. 2. ...")
+"""
+
+        GEMINI_KEY = os.getenv("VITE_GEMINI_API_KEY", "")
+        if not GEMINI_KEY:
+            return jsonify({"detail": "Gemini API 키가 없습니다."}), 500
+
+        res = requests.post(
+            f"https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key={{GEMINI_KEY}}",
+            json={
+                "contents": [{"role": "user", "parts": [{"text": system_prompt}]}],
+                "generationConfig": {"temperature": 0.8, "maxOutputTokens": 800}
+            }
+        )
+        if res.status_code == 200:
+            data = res.json()
+            guidelines = data["candidates"][0]["content"]["parts"][0]["text"]
+            return jsonify({"success": True, "guidelines": guidelines.strip()})
+        else:
+            return jsonify({"detail": f"AI 전략 회의 에러: {res.text}"}), 500
     except Exception as e:
         import traceback
         traceback.print_exc()
