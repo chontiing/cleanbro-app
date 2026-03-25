@@ -1094,7 +1094,17 @@ function App() {
       }).catch(err => console.error("SMS Invoke Error:", err));
     }
 
-    await fetchCustomers();
+    // 🌟 속도 최적화: 수백 개의 데이터를 다시 불러오지 않고(fetchCustomers) 방금 저장/수정된 데이터만 화면에 바로 꽂아줍니다!
+    if (data && data.length > 0) {
+      if (editingId) {
+        setCustomers(prev => prev.map(c => (c.id === editingId ? data[0] : c)));
+      } else {
+        setCustomers(prev => [...prev, data[0]]);
+      }
+    } else {
+      fetchCustomers(); // 예상치 못한 에러 시에만 백그라운드 재조회
+    }
+
     setEditingId(null);
     setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
     setHasCashReceipt(false); setHasTaxInvoice(false); setIsSamsungCheck(false);
