@@ -605,6 +605,7 @@ function App() {
   const [isSamsungCheck, setIsSamsungCheck] = useState(false); // 삼성 체크 여부
   const [serviceType, setServiceType] = useState('에어컨'); // 썸네일용 서비스 종류
   const [modelName, setModelName] = useState(''); // 썸네일용 모델명
+  const [isSavingBooking, setIsSavingBooking] = useState(false);
 
   useEffect(() => {
     if (!assignee && myNickname) {
@@ -989,11 +990,45 @@ function App() {
 
 
 
+  const handleBulkDeleteDuplicates = async (dateStr) => {
+    if (!window.confirm(`${dateStr}일자의 중복된 예약들을 깔끔하게 정리할까요?\n(고객명과 시간, 상품이 완전히 일치하는 쌍둥이 예약들 중 1개만 남기고 싹 다 지웁니다!)`)) return;
+    
+    const list = customers.filter(c => c.book_date === dateStr);
+    const seen = new Set();
+    const toDelete = [];
+    
+    for (const c of list) {
+        const key = `${c.customer_name}_${c.phone}_${c.book_time_type}_${c.product}`;
+        if (seen.has(key)) {
+            toDelete.push(c.id);
+        } else {
+            seen.add(key);
+        }
+    }
+    
+    if (toDelete.length === 0) {
+        alert('삭제할 찌꺼기 중복 데이터가 없습니다.');
+        return;
+    }
+    
+    const { error } = await supabase.from('bookings').delete().in('id', toDelete);
+    if (!error) {
+        alert(`사장님, ${toDelete.length}개의 중복 찌꺼기를 시원하게 쳐냈습니다!`);
+        fetchCustomers();
+    } else {
+        alert('삭제 중 오류 발생: ' + error.message);
+    }
+  };
+
   const handleSaveBooking = async () => {
+    if (isSavingBooking) return;
+    
     if (!newPhone.trim() || !address.trim()) {
       alert('전화번호와 주소를 모두 입력해주세요.');
       return;
     }
+
+    setIsSavingBooking(true);
 
     if (!editingId) {
       const isDuplicate = customers.some(c =>
@@ -1003,6 +1038,7 @@ function App() {
       );
       if (isDuplicate) {
         if (!window.confirm('⚠️ 선택하신 날짜/시간에 이미 다른 예약이 있습니다. 계속 저장하시겠습니까?')) {
+          setIsSavingBooking(false);
           return;
         }
       }
@@ -1048,6 +1084,7 @@ function App() {
 
     if (error) {
       alert('저장 실패: ' + error.message);
+      setIsSavingBooking(false);
       return;
     }
 
@@ -1062,6 +1099,7 @@ function App() {
     setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
     setHasCashReceipt(false); setHasTaxInvoice(false); setIsSamsungCheck(false);
     setCurrentTab('calendar');
+    setIsSavingBooking(false);
   };
 
   const handleCancelEdit = () => {
@@ -2591,7 +2629,12 @@ function App() {
                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
                 {selectedDate.split('-')[2]}일 예약 상세 리스트
               </span>
-              <span className="font-normal text-[10px] opacity-70">(길게 눌러 수정/삭제)</span>
+              <div className="flex gap-2 items-center">
+                <button onClick={() => handleBulkDeleteDuplicates(selectedDate)} className="text-[10px] bg-red-50 text-red-500 px-2 py-0.5 rounded border border-red-100 hover:bg-red-100 transition-colors font-bold active:scale-95">
+                  중복 싹 지우기
+                </button>
+                <span className="font-normal text-[10px] opacity-70">(길게 눌러 수정/삭제)</span>
+              </div>
             </h3>
             {calcDashboard(selectedDate).list.length === 0 ? (
               <div className="text-center py-12 text-slate-400 text-sm bg-white dark:bg-slate-800/50 rounded-[2rem] border-2 border-dashed border-slate-100 dark:border-slate-700 shadow-inner">
