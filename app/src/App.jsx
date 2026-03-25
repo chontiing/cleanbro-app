@@ -2883,12 +2883,25 @@ function App() {
             </div>
 
           </div>
-
-          <button onClick={handleSaveBooking} className="w-full py-4 bg-primary text-white text-lg font-black rounded-2xl shadow-lg shadow-primary/30 active:scale-95 transition-transform flex justify-center gap-2 items-center">
-            <span className="material-symbols-outlined">cloud_upload</span>
-            {editingId ? '클라우드에 예약 수정 완료' : '클라우드에 예약 저장하기'}
+          <button 
+            onClick={handleSaveBooking} 
+            disabled={isSavingBooking}
+            className={`w-full py-4 text-white text-lg font-black rounded-2xl shadow-lg flex justify-center gap-2 items-center transition-all ${
+              isSavingBooking ? 'bg-slate-400 shadow-none cursor-not-allowed' : 'bg-primary shadow-primary/30 active:scale-95'
+            }`}
+          >
+            {isSavingBooking ? (
+              <>
+                <span className="material-symbols-outlined animate-spin inline-block">sync</span>
+                <span className="animate-pulse">안전하게 저장 중...</span>
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined">cloud_upload</span>
+                {editingId ? '클라우드에 예약 수정 완료' : '클라우드에 예약 저장하기'}
+              </>
+            )}
           </button>
-
         </main>
       )}
 
