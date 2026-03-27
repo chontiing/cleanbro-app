@@ -779,6 +779,18 @@ function App() {
     }
   };
 
+  const retryQueueTask = async (id) => {
+    if (!window.confirm('에러가 발생한 블로그 자동발행 작업을 재시도하시겠습니까?\n사진이나 데이터를 다시 넣을 필요 없이 즉시 로봇이 다시 가동됩니다.')) return;
+    try {
+      const { error } = await supabase.from('bookings').update({ product: 'pending' }).eq('id', id);
+      if (error) throw error;
+      fetchBlogQueue();
+      alert('재시도 대기열에 진입했습니다! 까만 창(로봇)이 반응하는지 확인해보세요 🚀');
+    } catch (err) {
+      alert('재시도 설정 실패: ' + err.message);
+    }
+  };
+
   // ===========================================
   // [5슬롯 일괄 자동 초안 및 임시저장 로직]
   // ===========================================
@@ -4802,7 +4814,12 @@ function App() {
                           </div>
                           <div className="text-orange-600 font-medium mt-1 inline-flex items-center gap-1"><span className="material-symbols-outlined text-[14px]">timer</span>{item.scheduled_for_text} 예정</div>
                         </div>
-                        <div className="flex justify-end mt-1 sm:mt-0">
+                        <div className="flex justify-end gap-2 mt-2 sm:mt-0">
+                          {item.status === 'failed' && (
+                            <button onClick={() => retryQueueTask(item.id)} className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-600 rounded-lg whitespace-nowrap active:scale-95 font-bold transition-colors">
+                              <span className="material-symbols-outlined text-[12px] align-middle mr-1">refresh</span>재시도
+                            </button>
+                          )}
                           {item.status !== 'processing' ? (
                             <button onClick={() => deleteFromQueue(item.id)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg whitespace-nowrap active:scale-95 font-bold transition-colors">기록 삭제</button>
                           ) : (
