@@ -2018,7 +2018,7 @@ function App() {
   };
 
   // --- 작업 완료 처리 (사진 첨부 없이 빠른 완료 + 메시지앱 열기 + 블로그 모달) ---
-  const handleFinalComplete = async () => {
+  const handleFinalComplete = async (withSms = true) => {
     setIsUploadingPhotos(true);
     try {
       // DB 완료 처리
@@ -2027,18 +2027,20 @@ function App() {
       }).eq('id', completionTarget.id);
       if (dbErr) throw dbErr;
 
-      // 완료 안내문구 준비
-      let completionText = businessProfile.default_completion_message ||
-        `[클린브로] 안녕하세요, 고객님!\n{customer_name}님 {memo} 작업이 완료되었습니다.\n깨끗하게 청소해 드렸으니 확인해 주세요. 감사합니다! 😊`;
-      completionText = completionText
-        .replace(/{customer_name}/g, completionTarget.customer_name || '고객')
-        .replace(/{memo}/g, completionTarget.memo || '')
-        .replace(/{after_url}/g, '');
+      if (withSms) {
+        // 완료 안내문구 준비
+        let completionText = businessProfile.default_completion_message ||
+          `[클린브로] 안녕하세요, 고객님!\n{customer_name}님 {memo} 작업이 완료되었습니다.\n깨끗하게 청소해 드렸으니 확인해 주세요. 감사합니다! 😊`;
+        completionText = completionText
+          .replace(/{customer_name}/g, completionTarget.customer_name || '고객')
+          .replace(/{memo}/g, completionTarget.memo || '')
+          .replace(/{after_url}/g, '');
 
-      // 메시지앱 열기 (완료 안내문구 pre-fill)
-      const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
-      const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
-      window.location.href = `sms:${cleanPhone}${sep}body=${encodeURIComponent(completionText)}`;
+        // 메시지앱 열기 (완료 안내문구 pre-fill)
+        const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
+        const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
+        window.location.href = `sms:${cleanPhone}${sep}body=${encodeURIComponent(completionText)}`;
+      }
 
       setShowCompletionModal(false);
       fetchCustomers();
@@ -4416,16 +4418,24 @@ function App() {
               </p>
             </div>
 
-            <div className="p-6 shrink-0 border-t bg-white dark:bg-slate-900 pb-10">
+            <div className="p-6 shrink-0 border-t bg-white dark:bg-slate-900 pb-10 flex gap-3">
               <button
                 disabled={isUploadingPhotos}
-                onClick={handleFinalComplete}
-                className="w-full py-4 bg-primary text-white font-black rounded-[1.5rem] shadow-xl shadow-primary/30 flex items-center justify-center gap-2 active:scale-95 transition-all text-lg"
+                onClick={() => handleFinalComplete(false)}
+                className="flex-1 py-4 bg-slate-100 text-slate-500 font-bold rounded-[1.5rem] active:scale-95 transition-all text-sm flex items-center justify-center gap-1 leading-tight"
+              >
+                문자 없이<br/>조용히 완료
+              </button>
+
+              <button
+                disabled={isUploadingPhotos}
+                onClick={() => handleFinalComplete(true)}
+                className="flex-[2] py-4 bg-primary text-white font-black rounded-[1.5rem] shadow-xl shadow-primary/30 flex items-center justify-center gap-2 active:scale-95 transition-all text-[15px]"
               >
                 {isUploadingPhotos ? (
                   <><span className="material-symbols-outlined animate-spin">sync</span> 처리 중...</>
                 ) : (
-                  <><span className="material-symbols-outlined">send</span> 완료 & 메시지 앱 열기</>
+                  <><span className="material-symbols-outlined text-[18px]">send</span> 완료 & 안내문자앱 열기</>
                 )}
               </button>
             </div>

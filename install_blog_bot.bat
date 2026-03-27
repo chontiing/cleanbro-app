@@ -41,6 +41,6 @@ echo.
 echo ══════════════════════════════════════════
 echo  [완료] 설치가 완료되었습니다!
 echo  다음 명령어로 서버를 실행하세요:
-echo    python blog_publisher\blog_server.py
+echo    start_blog_server.bat 를 더블클릭 하세요!
 echo ══════════════════════════════════════════
 pause

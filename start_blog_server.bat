@@ -10,6 +10,6 @@ echo.
 "C:\Users\hoyeo\AppData\Local\Programs\Python\Python313\python.exe" -m pip install "greenlet==3.1.1" -q --force-reinstall 2>nul
 
 :: 서버 실행
-"C:\Users\hoyeo\AppData\Local\Programs\Python\Python313\python.exe" blog_publisher\blog_server.py
+"C:\Users\hoyeo\AppData\Local\Programs\Python\Python313\python.exe" naver_blog_bot.py
 
 pause

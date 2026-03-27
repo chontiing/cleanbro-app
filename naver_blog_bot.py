@@ -558,9 +558,24 @@ def post_to_naver(data: PublishRequest) -> str:
                             if para.strip():
                                 page.keyboard.type(para.strip(), delay=15)
                             page.keyboard.press("Enter")
-                            page.wait_for_timeout(500)
                         page.wait_for_timeout(500)
-
+                        
+                # ── 6.4 추가 링크 (인스턴티 전용 플레이스 등) ─────────────────────────
+                if data.category == "인스턴티" or data.service_type == "인스턴티":
+                    print("[Bot] 인스턴티 전용 플레이스 주소 링크 추가 중...")
+                    try:
+                        page.keyboard.press("Control+End")
+                        page.keyboard.press("Enter")
+                        page.keyboard.press("Enter")
+                        # 텍스트 + 링크 주소를 함께 기입
+                        link_text = "📍 인스턴티 매장 오시는 길 및 안내 📍\nhttps://naver.me/F1ap5TAh\n"
+                        page.keyboard.type(link_text, delay=20)
+                        # 엔터 여러 번 눌러서 OG 링크 박스가 확실히 생성되게 유도
+                        page.keyboard.press("Enter")
+                        page.wait_for_timeout(2000)
+                    except Exception as e:
+                        print(f"[경고] 인스턴티 링크 추가 실패: {e}")
+                        
                 # ── 6.5 장소(Map) 추가 로직 ──────────────────────────
                 print("[Bot] 장소(Map) 컴포넌트 맨 밑에 추가 중...")
                 try:
@@ -579,7 +594,7 @@ def post_to_naver(data: PublishRequest) -> str:
                         # 2. 장소 검색 팝업 내부 인풋
                         search_input = page.locator("input.se-popup-place-search-input, .se-place-search-input, input[placeholder*='장소']").first
                         if search_input.count() > 0:
-                            place_keyword = "인스턴티" if getattr(data, 'category', '') == '인스턴티' else "클린브로"
+                            place_keyword = "인스턴티" if getattr(data, 'category', '') == '인스턴티' or getattr(data, 'service_type', '') == '인스턴티' else "클린브로"
                             search_input.fill(place_keyword)
                             search_input.press("Enter")
                             page.wait_for_timeout(2000)
