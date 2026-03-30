@@ -1826,7 +1826,19 @@ function App() {
         return;
       }
       if (!c.phone) return alert('고객 연락처가 없습니다.');
-      if (!confirm('예약 당일 아침 8시로 알림 문자를 예약 발송하시겠습니까?')) return;
+      
+      // KST 기준 08:00 계산
+      const d = new Date(c.book_date);
+      d.setHours(8, 0, 0, 0);
+      let scheduledUtc = d.toISOString();
+      const isPast = d.getTime() <= Date.now();
+
+      if (isPast) {
+        if (!confirm('예약 당일 아침 8시가 이미 지났습니다. 지금 즉시 아침 알림 문자를 발송하시겠습니까?')) return;
+        scheduledUtc = null; // 과거 시간이면 즉시 발송
+      } else {
+        if (!confirm('예약 당일 아침 8시로 알림 문자를 예약 발송하시겠습니까?')) return;
+      }
       
       setSendingType('morning');
       try {
@@ -1837,11 +1849,6 @@ function App() {
           .replace(/\[시간\]/g, timeVal || '')
           .replace(/\[파트너전화번호\]/g, userProfile?.solapi_from_number || businessProfile?.phone || '');
           
-        // KST 기준 08:00
-        const d = new Date(c.book_date);
-        d.setHours(8, 0, 0, 0);
-        const scheduledUtc = d.toISOString();
-        
         await sendSolapiMessage(c.phone, text, scheduledUtc);
         const { error } = await supabase.from('bookings').update({ is_morning_alert_sent: true }).eq('id', c.id);
         if (error && error.message.includes('column')) {
@@ -1850,7 +1857,7 @@ function App() {
         } else if (!error) {
             c.is_morning_alert_sent = true;
         }
-        alert('아침 알림 예약이 완료되었습니다.');
+        alert(scheduledUtc ? '아침 알림 예약이 완료되었습니다.' : '아침 알림 문자가 즉시 발송되었습니다.');
       } catch (e) {
         alert('발송 실패: ' + e.message);
       } finally {
