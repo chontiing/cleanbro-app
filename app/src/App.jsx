@@ -1577,6 +1577,14 @@ function App() {
       if (c.payment_method === '현금') cash += c.final_price;
       if (c.payment_method === '카드') card += c.final_price;
     });
+    
+    // 예약 시간을 기준으로 정렬 (빈 문자열이 앞으로 오지 않고, 정상적으로 비교되게 처리)
+    list.sort((a, b) => {
+      const timeA = (a.book_time_type === '직접입력' ? a.book_time_custom : a.book_time_type) || '';
+      const timeB = (b.book_time_type === '직접입력' ? b.book_time_custom : b.book_time_type) || '';
+      return timeA.localeCompare(timeB);
+    });
+
     return { total, cash, card, list };
   };
 
@@ -1604,7 +1612,15 @@ function App() {
     return days;
   };
 
-  const todayTargetList = useMemo(() => customers.filter(c => c.book_date === getTodayStr() && c.category !== '블로그자동화'), [customers]);
+  const todayTargetList = useMemo(() => {
+    const arr = customers.filter(c => c.book_date === getTodayStr() && c.category !== '블로그자동화');
+    arr.sort((a, b) => {
+      const timeA = (a.book_time_type === '직접입력' ? a.book_time_custom : a.book_time_type) || '';
+      const timeB = (b.book_time_type === '직접입력' ? b.book_time_custom : b.book_time_type) || '';
+      return timeA.localeCompare(timeB);
+    });
+    return arr;
+  }, [customers]);
   const [batchSmsIdx, setBatchSmsIdx] = useState(-1);
 
   const handleSendSms = async (c, type = 'confirmed') => {
@@ -1733,7 +1749,13 @@ function App() {
         const d = new Date(c.book_date);
         return d.getFullYear() === calDate.getFullYear() && d.getMonth() === calDate.getMonth();
       })
-      .sort((a, b) => a.book_date.localeCompare(b.book_date) || (a.book_time_type || '').localeCompare(b.book_time_type || ''));
+      .sort((a, b) => {
+        const diff = a.book_date.localeCompare(b.book_date);
+        if (diff !== 0) return diff;
+        const timeA = (a.book_time_type === '직접입력' ? a.book_time_custom : a.book_time_type) || '';
+        const timeB = (b.book_time_type === '직접입력' ? b.book_time_custom : b.book_time_type) || '';
+        return timeA.localeCompare(timeB);
+      });
   }, [customers, calDate]);
 
   // --- 솔라피 문자 발송 로직 ---
