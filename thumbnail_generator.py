@@ -44,7 +44,7 @@ def create_thumbnail(service_type: str, model_name: str, output_path: str = "tem
         
         # 제목이 박스를 넘지 않도록 크기 조절
         font1_size = int(img_w * 0.08) # 넓이의 8% 정도 크기
-        font2_size = int(img_w * 0.06)
+        font2_size = int(img_w * 0.08) # 두 번째 줄도 같은 크기로 맞춤
         try:
             font1 = ImageFont.truetype(font_path, font1_size)
             font2 = ImageFont.truetype(font_path, font2_size)

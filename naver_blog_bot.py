@@ -308,12 +308,17 @@ def post_to_naver(data: PublishRequest) -> str:
             page.wait_for_timeout(1000)
             
             page.click("#log\\.login")
-            page.wait_for_timeout(4000)
+            print("[Bot] 로그인 버튼 클릭 완료. (2단계 인증이나 캡차(보안문자)가 뜬 경우 화면에서 직접 해결해 주세요. 최대 30초 기다립니다...)")
+            
+            for _ in range(30):
+                if "nid.naver.com" not in page.url or "login" not in page.url:
+                    break
+                page.wait_for_timeout(1000)
 
             # 로그인 성공 여부 확인
             if "nid.naver.com" in page.url and "login" in page.url:
-                raise Exception("네이버 로그인 실패. 아이디/비밀번호를 확인하세요.")
-            print("[Bot] 로그인 완료:", page.url)
+                raise Exception("네이버 로그인 실패. 아이디/비밀번호를 확인하시거나, 2단계 인증을 타이밍 내에 승인해주세요.")
+            print("[Bot] 로그인 (또는 2단계 인증) 완료:", page.url)
 
             # ── 2. 블로그 글쓰기 에디터 접속 ──────────────
             editor_url = f"https://blog.naver.com/{blog_id}/postwrite"
@@ -577,42 +582,74 @@ def post_to_naver(data: PublishRequest) -> str:
                         print(f"[경고] 인스턴티 링크 추가 실패: {e}")
                         
                 # ── 6.5 장소(Map) 추가 로직 ──────────────────────────
-                print("[Bot] 장소(Map) 컴포넌트 맨 밑에 추가 중...")
+                print("[Bot] 편집기 상단의 장소(Map) 추가 기능 실행 중...")
                 try:
-                    # 커서를 문서 맨 끝으로 완벽히 이동 (Windows 환경: Ctrl+End)
+                    # 커서를 맨 밑으로 이동
                     page.keyboard.press("Control+End")
+                    page.wait_for_timeout(500)
                     page.keyboard.press("Enter")
-                    page.keyboard.press("Enter")
-                    page.wait_for_timeout(1000)
+                    page.wait_for_timeout(500)
 
-                    # 1. 툴바에서 '장소' 버튼 클릭
-                    place_btn = page.locator("button[data-type='place'], button.se-place-toolbar-button").first
-                    if place_btn.count() > 0:
-                        place_btn.click(timeout=3000)
-                        page.wait_for_timeout(2000)
+                    # 1. 툴바에서 '장소' 버튼 강제 클릭 (Javascript 기반으로 가려져 있어도 클릭 강제 수행)
+                    clicked_place = page.evaluate('''() => {
+                        const btn = document.querySelector(".se-place-button, button[data-type='place'], button:has(span.se-icon-toolbar-place)");
+                        if(btn) { btn.click(); return true; }
+                        return false;
+                    }''')
+                    
+                    if not clicked_place:
+                        # JS로 못 찾았다면 Playwright locator로 마지막 시도
+                        fallback_btn = page.locator("button:has-text('장소'), .se-place-button").first
+                        if fallback_btn.is_visible(timeout=3000):
+                            fallback_btn.click()
+                            clicked_place = True
+
+                    if clicked_place:
+                        page.wait_for_timeout(2500)
                         
-                        # 2. 장소 검색 팝업 내부 인풋
-                        search_input = page.locator("input.se-popup-place-search-input, .se-place-search-input, input[placeholder*='장소']").first
-                        if search_input.count() > 0:
+                        # 2. 검색창 입력
+                        search_input = page.locator("input[placeholder*='장소'], input[title*='장소'], .se-place-search-input, .search_input").first
+                        if search_input.is_visible(timeout=3000):
                             place_keyword = "인스턴티" if getattr(data, 'category', '') == '인스턴티' or getattr(data, 'service_type', '') == '인스턴티' else "클린브로"
                             search_input.fill(place_keyword)
+                            page.wait_for_timeout(500)
                             search_input.press("Enter")
-                            page.wait_for_timeout(2000)
+                            page.wait_for_timeout(2500)
                             
-                            # 3. 추가 버튼 클릭 (.se-place-search-add-button 등)
-                            add_btn = page.locator("button:has-text('추가'), .se-place-search-add-button, .se-place-list-item button").first
-                            if add_btn.count() > 0:
+                            # 3. '추가' 버튼 클릭 (결과 리스트의 첫번째)
+                            add_btn = page.locator("button:has-text('추가'), a:has-text('추가'), .btn_add").first
+                            if add_btn.is_visible(timeout=3000):
                                 add_btn.click()
                                 page.wait_for_timeout(1000)
                                 
-                                # 4. 완료/확인 버튼 클릭
-                                confirm_btn = page.locator("button:has-text('확인'), .se-place-confirm-button, button:has-text('완료')").first
-                                if confirm_btn.count() > 0:
-                                    confirm_btn.click()
-                                    page.wait_for_timeout(2000)
-                                    print("[Bot] 장소(Map) 컴포넌트 성공적으로 추가됨.")
+                                # 4. 하단 '확인' 또는 '완료' 버튼 클릭하여 에디터로 최종 삽입
+                                confirm_btn_clicked = page.evaluate('''() => {
+                                    const cBtn = document.querySelector("button.se-place-confirm-button, button.btn_confirm");
+                                    if(cBtn) { cBtn.click(); return true; }
+                                    // 텍스트 기반 탐색
+                                    for(const btn of document.querySelectorAll('button')) {
+                                        if(btn.innerText.includes('확인') || btn.innerText.includes('완료')) {
+                                            btn.click(); return true;
+                                        }
+                                    }
+                                    return false;
+                                }''')
+                                
+                                if not confirm_btn_clicked:
+                                    confirm_fallback = page.locator("button:has-text('확인'), button:has-text('완료'), .btn_confirm").first
+                                    if confirm_fallback.is_visible(timeout=3000):
+                                        confirm_fallback.click()
+                                        
+                                page.wait_for_timeout(2000)
+                                print("[Bot] 장소(Map) 컴포넌트 성공적으로 쾅 찍어 넣었습니다! 🗺️")
+                            else:
+                                print(f"[경고] '{place_keyword}' 검색 결과에서 '추가' 버튼을 못 찾았습니다.")
+                        else:
+                            print("[경고] 장소 검색 팝업창(input)이 열리지 않았습니다.")
+                    else:
+                        print("[경고] 상단 툴바에서 '장소' 버튼을 찾지 못해 클릭에 실패했습니다.")
                 except Exception as e:
-                    print(f"[경고] 장소 컴포넌트 추가 실패: {e}")
+                    print(f"[경고] 장소 컴포넌트 첨부 중 알 수 없는 에러: {e}")
 
                 # ── 7. 태그 입력 ──────────────────────────
                 print("[Bot] 태그 입력 중...")

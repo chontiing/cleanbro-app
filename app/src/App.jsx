@@ -204,7 +204,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.1.1"; // 현재 버전
+  const APP_VERSION = "v1.1.2"; // 현재 버전
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -1087,19 +1087,47 @@ function App() {
 
     let error;
     let responseData = null;
+
+    let durationDays = 1;
+    if (endDate) {
+      const start = new Date(bookDate);
+      const end = new Date(endDate);
+      if (end >= start) durationDays = Math.min(30, Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1);
+    }
+
     if (editingId) {
-      const { error: updErr, data } = await supabase.from('bookings').update(entry).eq('id', editingId).select();
+      const firstDayEntry = {
+        ...entry,
+        book_date: bookDate,
+        final_price: finalPrice,
+        memo: durationDays > 1 ? `${newMemo} [${durationDays}일의 일정 중 1일차]` : newMemo
+      };
+      
+      const { error: updErr, data } = await supabase.from('bookings').update(firstDayEntry).eq('id', editingId).select();
       error = updErr;
       responseData = data;
-      if (!error) alert('예약이 수정되었습니다.');
-    } else {
-      let durationDays = 1;
-      if (endDate) {
-        const start = new Date(bookDate);
-        const end = new Date(endDate);
-        if (end >= start) durationDays = Math.min(30, Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1);
+
+      if (!error && durationDays > 1) {
+        const entriesToInsert = [];
+        for (let i = 1; i < durationDays; i++) {
+          const d = new Date(bookDate);
+          d.setDate(d.getDate() + i);
+          const nextDateStr = d.toISOString().split('T')[0];
+          entriesToInsert.push({
+            ...entry,
+            book_date: nextDateStr,
+            final_price: 0, // 첫 날에만 매출액 합산
+            memo: `${newMemo} [${durationDays}일의 일정 중 ${i+1}일차]`
+          });
+        }
+        const { error: insErr, data: insData } = await supabase.from('bookings').insert(entriesToInsert).select();
+        if (!insErr && responseData && insData) {
+          responseData = [...responseData, ...insData];
+        }
       }
 
+      if (!error) alert('예약이 수정되었습니다.');
+    } else {
       const entriesToInsert = [];
       for (let i = 0; i < durationDays; i++) {
         const d = new Date(bookDate);
@@ -1132,9 +1160,15 @@ function App() {
     // 🌟 속도 최적화: 수백 개의 데이터를 다시 불러오지 않고(fetchCustomers) 방금 저장/수정된 데이터만 화면에 바로 꽂아줍니다!
     if (responseData && responseData.length > 0) {
       if (editingId) {
-        setCustomers(prev => prev.map(c => (c.id === editingId ? responseData[0] : c)));
+        setCustomers(prev => {
+          let updated = prev.map(c => (c.id === editingId ? responseData[0] : c));
+          if (responseData.length > 1) {
+            updated = [...updated, ...responseData.slice(1)];
+          }
+          return updated;
+        });
       } else {
-        setCustomers(prev => [...prev, responseData[0]]);
+        setCustomers(prev => [...prev, ...responseData]);
       }
     } else {
       fetchCustomers(); // 예상치 못한 에러 시에만 백그라운드 재조회
@@ -2912,30 +2946,28 @@ function App() {
                 </div>
               </div>
 
-              {!editingId && (
-                <div className="animate-slide-up">
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">작업 소요 기간 (종료일 설정)</label>
-                  <div className="flex gap-2 items-center">
-                    <input type="date" value={bookDate} disabled className="flex-1 bg-slate-100 border border-slate-200 rounded-xl p-3 text-sm text-slate-500 cursor-not-allowed font-bold" />
-                    <span className="text-slate-400 font-black">~</span>
-                    <input type="date" value={endDate} min={bookDate} onChange={e => {
-                      if (!e.target.value) setEndDate('');
-                      else if (e.target.value >= bookDate) setEndDate(e.target.value);
-                      else alert('종료일은 시작일보다 같거나 늦어야 합니다.');
-                    }} className="flex-1 bg-white border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
-                  </div>
-                  {endDate && endDate > bookDate && (
-                    <p className="text-[10px] text-blue-500 font-bold mt-1.5 ml-1">
-                      ※ {bookDate} 부터 {endDate} 까지 연속으로 달력에 자동 등록됩니다. (매출액은 첫 날에만 합산)
-                    </p>
-                  )}
-                  {(!endDate || endDate <= bookDate) && (
-                    <p className="text-[10px] text-slate-400 font-bold mt-1.5 ml-1">
-                      ※ 종료일을 비워두시면 {bookDate} 당일 단일 예약으로 자동 처리됩니다.
-                    </p>
-                  )}
+              <div className="animate-slide-up">
+                <label className="block text-xs font-semibold text-slate-500 mb-1">작업 소요 기간 (종료일 설정)</label>
+                <div className="flex gap-2 items-center">
+                  <input type="date" value={bookDate} disabled className="flex-1 bg-slate-100 border border-slate-200 rounded-xl p-3 text-sm text-slate-500 cursor-not-allowed font-bold" />
+                  <span className="text-slate-400 font-black">~</span>
+                  <input type="date" value={endDate} min={bookDate} onChange={e => {
+                    if (!e.target.value) setEndDate('');
+                    else if (e.target.value >= bookDate) setEndDate(e.target.value);
+                    else alert('종료일은 시작일보다 같거나 늦어야 합니다.');
+                  }} className="flex-1 bg-white border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
                 </div>
-              )}
+                {endDate && endDate > bookDate && (
+                  <p className="text-[10px] text-blue-500 font-bold mt-1.5 ml-1">
+                    ※ {bookDate} 부터 {endDate} 까지 연속으로 달력에 자동 등록됩니다. (매출액은 첫 날에만 합산)
+                  </p>
+                )}
+                {(!endDate || endDate <= bookDate) && (
+                  <p className="text-[10px] text-slate-400 font-bold mt-1.5 ml-1">
+                    ※ 종료일을 비워두시면 {bookDate} 당일 단일 예약으로 자동 처리됩니다.
+                  </p>
+                )}
+              </div>
 
               {bookTimeType === '직접입력' && (
                 <div className="animate-slide-up">
