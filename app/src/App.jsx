@@ -204,7 +204,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.1.3"; // 현재 버전
+  const APP_VERSION = "v1.1.4"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -1956,6 +1956,11 @@ function App() {
         <div className="flex justify-between items-start mb-2">
           <div className="flex-1 pr-8">
             <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+              {c.memo?.match(/\[(\d+)일의 일정 중 (\d+)일차\]/) && (
+                <span className="bg-amber-100 text-amber-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-amber-200 shadow-sm animate-pulse">
+                  {c.memo.match(/\[(\d+)일의 일정 중 (\d+)일차\]/)[1]}일 연박 ({c.memo.match(/\[(\d+)일의 일정 중 (\d+)일차\]/)[2]}일차)
+                </span>
+              )}
               <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${c.assignee?.includes('2인') ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
                 {c.assignee}
               </span>
@@ -2709,10 +2714,15 @@ function App() {
                               >
                                 <div className={`absolute left-0 top-3 bottom-3 w-[4px] rounded-r-full ${statusColor}`}></div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-0.5">
+                                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                                     <p className={`text-xs font-bold truncate ${c.is_completed ? 'text-gray-400' : 'text-slate-800 dark:text-slate-100'}`}>
                                       {c.customer_name || '이름 없음'}
                                     </p>
+                                    {c.memo?.match(/\[(\d+)일의 일정 중 (\d+)일차\]/) && (
+                                      <span className="bg-amber-100 text-amber-700 text-[8px] font-black px-1.5 py-0.5 rounded border border-amber-200">
+                                        {c.memo.match(/\[(\d+)일의 일정 중 (\d+)일차\]/)[1]}일 일정 ({c.memo.match(/\[(\d+)일의 일정 중 (\d+)일차\]/)[2]}일차)
+                                      </span>
+                                    )}
                                     {c.is_completed && <span className="material-symbols-outlined text-[#10B981] text-[14px]">check_circle</span>}
                                   </div>
                                   <p className="text-[10px] text-gray-400 font-medium">
