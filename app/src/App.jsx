@@ -599,6 +599,7 @@ function App() {
   });
   const [bookTimeType, setBookTimeType] = useState('09:00');
   const [bookTimeCustom, setBookTimeCustom] = useState('14:00');
+  const [durationDays, setDurationDays] = useState(1);
   const [assignee, setAssignee] = useState(() => localStorage.getItem('default_assignee') || '');
   const [isAssigneePinned, setIsAssigneePinned] = useState(() => localStorage.getItem('default_assignee') !== null);
   const [isCompleted, setIsCompleted] = useState(false); // 완료 상태 유지용
@@ -1092,7 +1093,19 @@ function App() {
       responseData = data;
       if (!error) alert('예약이 수정되었습니다.');
     } else {
-      const { error: insErr, data } = await supabase.from('bookings').insert([entry]).select();
+      const entriesToInsert = [];
+      for (let i = 0; i < durationDays; i++) {
+        const d = new Date(bookDate);
+        d.setDate(d.getDate() + i);
+        const nextDateStr = d.toISOString().split('T')[0];
+        entriesToInsert.push({
+          ...entry,
+          book_date: nextDateStr,
+          final_price: i === 0 ? finalPrice : 0, // 첫 날에만 매출액 잡힘
+          memo: durationDays > 1 ? `${newMemo} [${durationDays}일의 일정 중 ${i+1}일차]` : newMemo
+        });
+      }
+      const { error: insErr, data } = await supabase.from('bookings').insert(entriesToInsert).select();
       error = insErr;
       responseData = data;
     }
@@ -1123,6 +1136,7 @@ function App() {
     setEditingId(null);
     setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
     setHasCashReceipt(false); setHasTaxInvoice(false); setIsSamsungCheck(false);
+    setDurationDays(1);
     setCurrentTab('calendar');
     setIsSavingBooking(false);
   };
@@ -1131,6 +1145,7 @@ function App() {
     setEditingId(null);
     setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
     setHasCashReceipt(false); setHasTaxInvoice(false); setIsSamsungCheck(false);
+    setDurationDays(1);
     setCurrentTab('calendar');
   };
 
@@ -2869,18 +2884,38 @@ function App() {
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1">방문 날짜</label>
                   <input type="date" value={bookDate} onChange={e => setBookDate(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2" />
+                  <div className="flex gap-1 mt-1.5">
+                    <button type="button" onClick={() => { const d = new Date(); setBookDate(d.toISOString().split('T')[0]); }} className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-[10px] rounded border border-slate-200 text-slate-600 font-bold transition-colors active:scale-95">오늘</button>
+                    <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate()+1); setBookDate(d.toISOString().split('T')[0]); }} className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-[10px] rounded border border-slate-200 text-slate-600 font-bold transition-colors active:scale-95">내일</button>
+                    <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate()+2); setBookDate(d.toISOString().split('T')[0]); }} className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-[10px] rounded border border-slate-200 text-slate-600 font-bold transition-colors active:scale-95">+2일</button>
+                    <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate()+3); setBookDate(d.toISOString().split('T')[0]); }} className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-[10px] rounded border border-slate-200 text-slate-600 font-bold transition-colors active:scale-95">+3일</button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1">방문 시간대</label>
                   <select value={bookTimeType} onChange={e => setBookTimeType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2">
-                    {Array.from({ length: 16 }, (_, i) => i + 7).map(hour => {
-                      const timeStr = `${String(hour).padStart(2, '0')}:00`;
+                    {Array.from({ length: 32 }, (_, i) => {
+                      const hour = Math.floor(i / 2) + 7;
+                      const minute = i % 2 === 0 ? '00' : '30';
+                      const timeStr = `${String(hour).padStart(2, '0')}:${minute}`;
                       return <option key={timeStr} value={timeStr}>{timeStr}</option>;
                     })}
                     <option value="직접입력">직접 입력 (분 단위 등)</option>
                   </select>
                 </div>
               </div>
+
+              {!editingId && (
+                <div className="animate-slide-up">
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">작업 소요 기간 (연속 예약)</label>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setDurationDays(1)} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${durationDays === 1 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200'}`}>1일 (단일)</button>
+                    <button type="button" onClick={() => setDurationDays(2)} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${durationDays === 2 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200'}`}>2일</button>
+                    <button type="button" onClick={() => setDurationDays(3)} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${durationDays === 3 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200'}`}>3일</button>
+                  </div>
+                  {durationDays > 1 && <p className="text-[10px] text-blue-500 font-bold mt-1.5 ml-1">※ 선택한 날부터 {durationDays}일 연속으로 달력에 자동 등록됩니다. (매출액은 첫 날에만 합산)</p>}
+                </div>
+              )}
 
               {bookTimeType === '직접입력' && (
                 <div className="animate-slide-up">
