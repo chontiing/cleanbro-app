@@ -599,7 +599,7 @@ function App() {
   });
   const [bookTimeType, setBookTimeType] = useState('09:00');
   const [bookTimeCustom, setBookTimeCustom] = useState('14:00');
-  const [durationDays, setDurationDays] = useState(1);
+  const [endDate, setEndDate] = useState('');
   const [assignee, setAssignee] = useState(() => localStorage.getItem('default_assignee') || '');
   const [isAssigneePinned, setIsAssigneePinned] = useState(() => localStorage.getItem('default_assignee') !== null);
   const [isCompleted, setIsCompleted] = useState(false); // 완료 상태 유지용
@@ -1093,6 +1093,13 @@ function App() {
       responseData = data;
       if (!error) alert('예약이 수정되었습니다.');
     } else {
+      let durationDays = 1;
+      if (endDate) {
+        const start = new Date(bookDate);
+        const end = new Date(endDate);
+        if (end >= start) durationDays = Math.min(30, Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1);
+      }
+
       const entriesToInsert = [];
       for (let i = 0; i < durationDays; i++) {
         const d = new Date(bookDate);
@@ -1136,7 +1143,7 @@ function App() {
     setEditingId(null);
     setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
     setHasCashReceipt(false); setHasTaxInvoice(false); setIsSamsungCheck(false);
-    setDurationDays(1);
+    setEndDate('');
     setCurrentTab('calendar');
     setIsSavingBooking(false);
   };
@@ -1145,7 +1152,7 @@ function App() {
     setEditingId(null);
     setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
     setHasCashReceipt(false); setHasTaxInvoice(false); setIsSamsungCheck(false);
-    setDurationDays(1);
+    setEndDate('');
     setCurrentTab('calendar');
   };
 
@@ -2907,13 +2914,26 @@ function App() {
 
               {!editingId && (
                 <div className="animate-slide-up">
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">작업 소요 기간 (연속 예약)</label>
-                  <div className="flex gap-2">
-                    <button type="button" onClick={() => setDurationDays(1)} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${durationDays === 1 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200'}`}>1일 (단일)</button>
-                    <button type="button" onClick={() => setDurationDays(2)} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${durationDays === 2 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200'}`}>2일</button>
-                    <button type="button" onClick={() => setDurationDays(3)} className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${durationDays === 3 ? 'bg-primary text-white border-primary' : 'bg-white text-slate-500 border-slate-200'}`}>3일</button>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">작업 소요 기간 (종료일 설정)</label>
+                  <div className="flex gap-2 items-center">
+                    <input type="date" value={bookDate} disabled className="flex-1 bg-slate-100 border border-slate-200 rounded-xl p-3 text-sm text-slate-500 cursor-not-allowed font-bold" />
+                    <span className="text-slate-400 font-black">~</span>
+                    <input type="date" value={endDate} min={bookDate} onChange={e => {
+                      if (!e.target.value) setEndDate('');
+                      else if (e.target.value >= bookDate) setEndDate(e.target.value);
+                      else alert('종료일은 시작일보다 같거나 늦어야 합니다.');
+                    }} className="flex-1 bg-white border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none" />
                   </div>
-                  {durationDays > 1 && <p className="text-[10px] text-blue-500 font-bold mt-1.5 ml-1">※ 선택한 날부터 {durationDays}일 연속으로 달력에 자동 등록됩니다. (매출액은 첫 날에만 합산)</p>}
+                  {endDate && endDate > bookDate && (
+                    <p className="text-[10px] text-blue-500 font-bold mt-1.5 ml-1">
+                      ※ {bookDate} 부터 {endDate} 까지 연속으로 달력에 자동 등록됩니다. (매출액은 첫 날에만 합산)
+                    </p>
+                  )}
+                  {(!endDate || endDate <= bookDate) && (
+                    <p className="text-[10px] text-slate-400 font-bold mt-1.5 ml-1">
+                      ※ 종료일을 비워두시면 {bookDate} 당일 단일 예약으로 자동 처리됩니다.
+                    </p>
+                  )}
                 </div>
               )}
 
