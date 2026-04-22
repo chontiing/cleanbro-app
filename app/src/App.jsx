@@ -204,7 +204,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.1.4"; // 현재 버젼
+  const APP_VERSION = "v1.1.5"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -598,7 +598,7 @@ function App() {
     return tmr.toISOString().split('T')[0];
   });
   const [bookTimeType, setBookTimeType] = useState('09:00');
-  const [bookTimeCustom, setBookTimeCustom] = useState('14:00');
+  const [bookTimeCustom, setBookTimeCustom] = useState('');
   const [endDate, setEndDate] = useState('');
   const [assignee, setAssignee] = useState(() => localStorage.getItem('default_assignee') || '');
   const [isAssigneePinned, setIsAssigneePinned] = useState(() => localStorage.getItem('default_assignee') !== null);
@@ -2945,8 +2945,8 @@ function App() {
                 <div>
                   <label className="block text-xs font-semibold text-slate-500 mb-1">방문 시간대</label>
                   <select value={bookTimeType} onChange={e => setBookTimeType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2">
-                    {Array.from({ length: 32 }, (_, i) => {
-                      const hour = Math.floor(i / 2) + 7;
+                    {Array.from({ length: 36 }, (_, i) => {
+                      const hour = Math.floor(i / 2) + 5;
                       const minute = i % 2 === 0 ? '00' : '30';
                       const timeStr = `${String(hour).padStart(2, '0')}:${minute}`;
                       return <option key={timeStr} value={timeStr}>{timeStr}</option>;
@@ -2998,7 +2998,7 @@ function App() {
 
               {bookTimeType === '직접입력' && (
                 <div className="animate-slide-up">
-                  <input type="time" value={bookTimeCustom} onChange={e => setBookTimeCustom(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2" />
+                  <input type="text" placeholder="예: 오전 10시 30분경" value={bookTimeCustom} onChange={e => setBookTimeCustom(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2" />
                 </div>
               )}
 
