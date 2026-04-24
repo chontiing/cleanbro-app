@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from './supabase';
 import confetti from 'canvas-confetti';
-import html2canvas from 'html2canvas';
+import { toBlob } from 'html-to-image';
 
 // --- 유틸리티 및 데이터 ---
 // UUID v4 폴백 생성기 (구형 브라우저 대응)
@@ -4283,40 +4283,47 @@ function App() {
                     const el = document.getElementById('quotation-card');
                     if (!el) return;
                     try {
-                      const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
-                      canvas.toBlob(async (blob) => {
-                        if (!blob) {
-                          alert('이미지 생성에 실패했습니다.');
-                          return;
+                      const blob = await toBlob(el, {
+                        backgroundColor: '#ffffff',
+                        pixelRatio: 2,
+                        style: {
+                          transform: 'scale(1)',
+                          transformOrigin: 'top left'
                         }
-                        const fileName = `견적서_${quoteTarget || '클린브로'}.png`;
-                        
-                        // 모바일(iOS/Android) 공유 API 지원 시 먼저 시도
-                        if (navigator.canShare && navigator.userAgent.match(/mobile/i)) {
-                          const file = new File([blob], fileName, { type: 'image/png' });
-                          if (navigator.canShare({ files: [file] })) {
-                            try {
-                              await navigator.share({
-                                files: [file],
-                                title: fileName,
-                              });
-                              return;
-                            } catch (err) {
-                              console.log('Share canceled or failed:', err);
-                            }
+                      });
+                      
+                      if (!blob) {
+                        alert('이미지 생성에 실패했습니다.');
+                        return;
+                      }
+                      
+                      const fileName = `견적서_${quoteTarget || '클린브로'}.png`;
+                      
+                      // 모바일(iOS/Android) 공유 API 지원 시 먼저 시도
+                      if (navigator.canShare && navigator.userAgent.match(/mobile/i)) {
+                        const file = new File([blob], fileName, { type: 'image/png' });
+                        if (navigator.canShare({ files: [file] })) {
+                          try {
+                            await navigator.share({
+                              files: [file],
+                              title: fileName,
+                            });
+                            return;
+                          } catch (err) {
+                            console.log('Share canceled or failed:', err);
                           }
                         }
+                      }
 
-                        // Fallback: 일반 다운로드 (PC 또는 공유 미지원 기기)
-                        const url = URL.createObjectURL(blob);
-                        const link = document.createElement('a');
-                        link.download = fileName;
-                        link.href = url;
-                        document.body.appendChild(link); // iOS Safari 대응을 위해 추가
-                        link.click();
-                        document.body.removeChild(link);
-                        setTimeout(() => URL.revokeObjectURL(url), 100);
-                      }, 'image/png');
+                      // Fallback: 일반 다운로드 (PC 또는 공유 미지원 기기)
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.download = fileName;
+                      link.href = url;
+                      document.body.appendChild(link); // iOS Safari 대응을 위해 추가
+                      link.click();
+                      document.body.removeChild(link);
+                      setTimeout(() => URL.revokeObjectURL(url), 100);
                     } catch (e) {
                       alert('이미지 처리 중 오류가 발생했습니다: ' + e.message);
                     }
