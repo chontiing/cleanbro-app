@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from './supabase';
 import confetti from 'canvas-confetti';
+import html2canvas from 'html2canvas';
 
 // --- 유틸리티 및 데이터 ---
 // UUID v4 폴백 생성기 (구형 브라우저 대응)
@@ -115,7 +116,13 @@ function App() {
   });
 
   const [currentTab, setCurrentTab] = useState('calendar'); // calendar, add, list, stats, settings, tax_expense, proshop, notice
-  const [taxExpenseSubTab, setTaxExpenseSubTab] = useState('expense'); // expense, tax
+  const [taxExpenseSubTab, setTaxExpenseSubTab] = useState('expense'); // expense, tax, quotation
+  
+  // 견적서 관련 상태
+  const [quoteTarget, setQuoteTarget] = useState('');
+  const [quoteProject, setQuoteProject] = useState('에어컨 분해청소');
+  const [quoteDate, setQuoteDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [quoteItems, setQuoteItems] = useState([{ id: Date.now(), name: '작업 내역', qty: 1, unitPrice: 0 }]);
   const [customers, setCustomers] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [mapPopupMemo, setMapPopupMemo] = useState(null);
@@ -3959,15 +3966,21 @@ function App() {
           <div className="flex gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
             <button
               onClick={() => setTaxExpenseSubTab('expense')}
-              className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${taxExpenseSubTab === 'expense' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex-1 py-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1 sm:gap-2 ${taxExpenseSubTab === 'expense' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
             >
               <span className="material-symbols-outlined text-sm">receipt_long</span> 지출 관리
             </button>
             <button
               onClick={() => setTaxExpenseSubTab('tax')}
-              className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2 ${taxExpenseSubTab === 'tax' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`flex-1 py-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1 sm:gap-2 ${taxExpenseSubTab === 'tax' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
             >
-              <span className="material-symbols-outlined text-sm">analytics</span> 세무 대시보드
+              <span className="material-symbols-outlined text-sm">analytics</span> 세무 현황
+            </button>
+            <button
+              onClick={() => setTaxExpenseSubTab('quotation')}
+              className={`flex-1 py-3 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-1 sm:gap-2 ${taxExpenseSubTab === 'quotation' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+            >
+              <span className="material-symbols-outlined text-sm">request_quote</span> 견적서
             </button>
           </div>
 
@@ -4182,6 +4195,99 @@ function App() {
               </div>
             );
           })()}
+
+          {/* --- 서브 탭 3: 견적서 작성 --- */}
+          {taxExpenseSubTab === 'quotation' && (
+            <div className="space-y-6 animate-fade-in">
+              <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-5 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
+                <h3 className="font-black text-primary">견적 정보 입력</h3>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">받는 분 (요청 업체/고객명)</label>
+                  <input type="text" value={quoteTarget} onChange={e => setQuoteTarget(e.target.value)} className="w-full bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2" placeholder="예: 홍길동 고객님" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">견적 내용 (품목)</label>
+                  <input type="text" value={quoteProject} onChange={e => setQuoteProject(e.target.value)} className="w-full bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2" placeholder="예: 벽걸이 에어컨 분해청소 외" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 mb-1">견적 총액 (원)</label>
+                  <input type="text" value={quoteItems[0].unitPrice} onChange={e => setQuoteItems([{...quoteItems[0], unitPrice: e.target.value.replace(/[^0-9]/g, '')}])} className="w-full bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-700 rounded-xl p-3 text-sm font-bold text-right focus:ring-2" placeholder="0" />
+                </div>
+                <button onClick={() => {
+                  const el = document.getElementById('quotation-card');
+                  if (!el) return;
+                  // 모바일/PC 화면에서 요소가 가려지지 않도록 클론해서 캡쳐
+                  html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }).then(canvas => {
+                    const link = document.createElement('a');
+                    link.download = `견적서_${quoteTarget || '클린브로'}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                  }).catch(e => alert('이미지 저장 실패: ' + e.message));
+                }} className="w-full py-4 bg-primary text-white font-bold rounded-2xl active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2">
+                  <span className="material-symbols-outlined">download</span> 견적서 이미지 저장하기
+                </button>
+              </div>
+
+              {/* 견적서 실제 렌더링 카드 (이 영역이 캡쳐됩니다) */}
+              <div className="overflow-x-auto pb-4">
+                <div id="quotation-card" className="bg-white p-6 rounded-none text-slate-800" style={{ width: '400px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+                  <div className="text-center mb-6 border-b-2 border-slate-800 pb-4">
+                    <h1 className="text-3xl font-black tracking-widest text-slate-800">견 적 서</h1>
+                  </div>
+                  
+                  <div className="flex justify-between items-end mb-6">
+                    <div>
+                      <div className="text-lg font-bold border-b border-slate-400 inline-block pr-4 pb-1 mb-1 text-slate-800">
+                        {quoteTarget || '(받는 분 이름)'} <span className="text-sm font-normal">귀하</span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-2">견적일: {quoteDate}</div>
+                      <div className="text-xs text-slate-500">프로젝트: {quoteProject}</div>
+                    </div>
+                    
+                    <div className="text-right text-[11px] leading-relaxed text-slate-700">
+                      <div className="font-black text-sm mb-1 text-primary">클린브로</div>
+                      <div>사업자번호: 803-53-00875</div>
+                      <div>대표자: 최찬용</div>
+                      <div>속초시 동해대로 3930번길 10-8</div>
+                      <div>전화: 010-2716-8635</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-100 p-4 mb-6 rounded-lg flex justify-between items-center border border-slate-200">
+                    <span className="font-bold text-slate-800">견적 총액 (VAT 포함)</span>
+                    <span className="text-xl font-black text-blue-600">₩ {fmtNum(quoteItems[0].unitPrice || 0)}</span>
+                  </div>
+
+                  <table className="w-full text-xs text-left mb-6 border-collapse">
+                    <thead>
+                      <tr className="border-b border-t border-slate-800 bg-slate-50 text-slate-800">
+                        <th className="py-2 px-2 font-bold">품목 / 내역</th>
+                        <th className="py-2 px-2 font-bold text-center">수량</th>
+                        <th className="py-2 px-2 font-bold text-right">금액</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-slate-800">
+                      <tr className="border-b border-slate-200">
+                        <td className="py-3 px-2 font-medium">{quoteProject || '작업 내역'}</td>
+                        <td className="py-3 px-2 text-center">1</td>
+                        <td className="py-3 px-2 text-right font-bold">{fmtNum(quoteItems[0].unitPrice || 0)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <div className="border border-slate-200 p-4 bg-slate-50 text-[10px] space-y-1 text-slate-600">
+                    <p className="font-bold text-slate-800 mb-1">안내 및 입금계좌</p>
+                    <p>- 본 견적은 작성일로부터 14일간 유효합니다.</p>
+                    <p>- <strong className="text-slate-800">카카오뱅크 3333-36-2878313 (예금주: 최찬용)</strong></p>
+                  </div>
+                  
+                  <div className="mt-8 text-center text-xs text-slate-500 font-bold">
+                    위와 같이 견적합니다.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       )}
 
