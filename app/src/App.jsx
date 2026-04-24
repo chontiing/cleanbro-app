@@ -31,7 +31,7 @@ const DEFAULT_PRICES = {
   '벽걸이': 80000,
   '스탠드': 120000,
   '2in1': 200000,
-  '시스템': 130000,
+  '시스템': 100000,
   '통돌이': 100000,
   '드럼': 160000,
   '아기용': 70000,
@@ -629,8 +629,31 @@ function App() {
       targetProduct = CATEGORIES[category][0];
       setProduct(targetProduct);
     }
-    setBasePrice(DEFAULT_PRICES[targetProduct] || 0);
-  }, [category, product]);
+    
+    if (isSamsungCheck) {
+      const samsungPrices = {
+        '벽걸이': 70000,
+        '스탠드': 110000,
+        '2in1': 173000,
+        '통돌이': 90000,
+        '드럼': 150000
+      };
+      setBasePrice(samsungPrices[targetProduct] || DEFAULT_PRICES[targetProduct] || 0);
+      setDiscountType('none');
+      setDiscountVal('');
+    } else {
+      setBasePrice(DEFAULT_PRICES[targetProduct] || 0);
+      setDiscountType('amount');
+      if (targetProduct === '2in1') {
+        setDiscountVal(20000);
+      } else if (['벽걸이', '스탠드', '시스템', '통돌이', '드럼'].includes(targetProduct)) {
+        setDiscountVal(10000);
+      } else {
+        setDiscountType('none');
+        setDiscountVal('');
+      }
+    }
+  }, [category, product, isSamsungCheck]);
 
   const finalPrice = useMemo(() => {
     let totalBase = (Number(basePrice) || 0) * (Number(qty) || 1);
@@ -642,8 +665,8 @@ function App() {
       totalBase = Math.max(0, totalBase - dVal);
     }
 
-    // 현금 결제이면서 영수증/계산서 필요시 10% 부가세 추가 (원단위 내림 처리)
-    if (payment === '현금' && (hasCashReceipt || hasTaxInvoice)) {
+    // 현금 결제이면서 영수증/계산서 필요시, 또는 카드 결제 시 10% 부가세 추가 (원단위 내림 처리)
+    if ((payment === '현금' && (hasCashReceipt || hasTaxInvoice)) || payment === '카드') {
       totalBase = Math.floor(totalBase * 1.1);
     }
 
