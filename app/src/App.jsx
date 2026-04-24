@@ -589,8 +589,8 @@ function App() {
   const [product, setProduct] = useState('벽걸이');
   const [qty, setQty] = useState(1);
   const [basePrice, setBasePrice] = useState(DEFAULT_PRICES['벽걸이']);
-  const [discountType, setDiscountType] = useState('none');
-  const [discountVal, setDiscountVal] = useState('');
+  const [discountType, setDiscountType] = useState('amount');
+  const [discountVal, setDiscountVal] = useState(10000);
   const [payment, setPayment] = useState('현금');
   const [bookDate, setBookDate] = useState(() => {
     const tmr = new Date();
@@ -1069,8 +1069,8 @@ function App() {
     setProduct('벽걸이');
     setQty(1);
     setBasePrice(DEFAULT_PRICES['벽걸이']);
-    setDiscountType('none');
-    setDiscountVal('');
+    setDiscountType('amount');
+    setDiscountVal(10000);
     setPayment('현금');
     const tmr = new Date();
     tmr.setDate(tmr.getDate() + 1);
