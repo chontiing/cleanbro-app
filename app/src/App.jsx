@@ -204,7 +204,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.1.6"; // 현재 버젼
+  const APP_VERSION = "v1.1.7"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -2627,7 +2627,7 @@ function App() {
                       `}
                     >
                       <div className={`w-7 h-7 flex items-center justify-center rounded-full text-xs sm:text-sm font-bold transition-colors
-                        ${isToday ? 'bg-[#3B82F6] text-white shadow-sm' : (isSelected ? 'text-blue-600' : 'text-slate-700')}
+                        ${isToday ? 'bg-[#FF5722] text-white shadow-md ring-2 ring-[#FF5722] ring-offset-1' : (isSelected ? 'text-blue-600' : 'text-slate-700')}
                       `}>
                         {dObj.getDate()}
                       </div>
