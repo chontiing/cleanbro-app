@@ -122,7 +122,8 @@ function App() {
   const [quoteTarget, setQuoteTarget] = useState('');
   const [quoteProject, setQuoteProject] = useState('에어컨 분해청소');
   const [quoteDate, setQuoteDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [quoteItems, setQuoteItems] = useState([{ id: Date.now(), name: '작업 내역', qty: 1, unitPrice: 0 }]);
+  const [quoteItems, setQuoteItems] = useState([{ id: Date.now(), name: '벽걸이 에어컨 완전분해청소', qty: 1, unitPrice: 80000 }]);
+  const [quoteVatType, setQuoteVatType] = useState('included'); // 'included', 'excluded'
   const [customers, setCustomers] = useState([]);
   const [loadingData, setLoadingData] = useState(false);
   const [mapPopupMemo, setMapPopupMemo] = useState(null);
@@ -4197,97 +4198,183 @@ function App() {
           })()}
 
           {/* --- 서브 탭 3: 견적서 작성 --- */}
-          {taxExpenseSubTab === 'quotation' && (
-            <div className="space-y-6 animate-fade-in">
-              <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-5 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
-                <h3 className="font-black text-primary">견적 정보 입력</h3>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">받는 분 (요청 업체/고객명)</label>
-                  <input type="text" value={quoteTarget} onChange={e => setQuoteTarget(e.target.value)} className="w-full bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2" placeholder="예: 홍길동 고객님" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">견적 내용 (품목)</label>
-                  <input type="text" value={quoteProject} onChange={e => setQuoteProject(e.target.value)} className="w-full bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2" placeholder="예: 벽걸이 에어컨 분해청소 외" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 mb-1">견적 총액 (원)</label>
-                  <input type="text" value={quoteItems[0].unitPrice} onChange={e => setQuoteItems([{...quoteItems[0], unitPrice: e.target.value.replace(/[^0-9]/g, '')}])} className="w-full bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-700 rounded-xl p-3 text-sm font-bold text-right focus:ring-2" placeholder="0" />
-                </div>
-                <button onClick={() => {
-                  const el = document.getElementById('quotation-card');
-                  if (!el) return;
-                  // 모바일/PC 화면에서 요소가 가려지지 않도록 클론해서 캡쳐
-                  html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }).then(canvas => {
-                    const link = document.createElement('a');
-                    link.download = `견적서_${quoteTarget || '클린브로'}.png`;
-                    link.href = canvas.toDataURL('image/png');
-                    link.click();
-                  }).catch(e => alert('이미지 저장 실패: ' + e.message));
-                }} className="w-full py-4 bg-primary text-white font-bold rounded-2xl active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2">
-                  <span className="material-symbols-outlined">download</span> 견적서 이미지 저장하기
-                </button>
-              </div>
+          {taxExpenseSubTab === 'quotation' && (() => {
+            const quoteSubtotal = quoteItems.reduce((acc, item) => acc + (Number(item.unitPrice) * Number(item.qty)), 0);
+            const quoteVat = quoteVatType === 'excluded' ? Math.floor(quoteSubtotal * 0.1) : 0;
+            const quoteTotal = quoteSubtotal + quoteVat;
 
-              {/* 견적서 실제 렌더링 카드 (이 영역이 캡쳐됩니다) */}
-              <div className="overflow-x-auto pb-4">
-                <div id="quotation-card" className="bg-white p-6 rounded-none text-slate-800" style={{ width: '400px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-                  <div className="text-center mb-6 border-b-2 border-slate-800 pb-4">
-                    <h1 className="text-3xl font-black tracking-widest text-slate-800">견 적 서</h1>
-                  </div>
+            return (
+              <div className="space-y-6 animate-fade-in">
+                <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-5 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-4">
+                  <h3 className="font-black text-primary">견적 정보 입력</h3>
                   
-                  <div className="flex justify-between items-end mb-6">
-                    <div>
-                      <div className="text-lg font-bold border-b border-slate-400 inline-block pr-4 pb-1 mb-1 text-slate-800">
-                        {quoteTarget || '(받는 분 이름)'} <span className="text-sm font-normal">귀하</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="block text-xs font-bold text-slate-500 mb-1">받는 분 (요청 업체/고객명)</label>
+                      <input type="text" value={quoteTarget} onChange={e => setQuoteTarget(e.target.value)} className="w-full bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2" placeholder="예: 홍길동 고객님" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-bold text-slate-500 mb-1">견적 프로젝트명</label>
+                      <input type="text" value={quoteProject} onChange={e => setQuoteProject(e.target.value)} className="w-full bg-slate-50 border border-slate-200 dark:bg-slate-900/50 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2" placeholder="예: 사업장 에어컨 대량청소 건" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-xs font-bold text-slate-500 mb-2">부가세 여부</label>
+                      <div className="flex bg-slate-100 dark:bg-slate-900 rounded-xl p-1">
+                        <button onClick={() => setQuoteVatType('included')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${quoteVatType === 'included' ? 'bg-white shadow text-primary' : 'text-slate-500'}`}>VAT 포함</button>
+                        <button onClick={() => setQuoteVatType('excluded')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${quoteVatType === 'excluded' ? 'bg-white shadow text-primary' : 'text-slate-500'}`}>VAT 별도 (+10%)</button>
                       </div>
-                      <div className="text-xs text-slate-500 mt-2">견적일: {quoteDate}</div>
-                      <div className="text-xs text-slate-500">프로젝트: {quoteProject}</div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-100 dark:border-slate-700 pt-4 mt-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <label className="text-xs font-bold text-slate-500">견적 품목</label>
+                      <button onClick={() => setQuoteItems([...quoteItems, { id: Date.now(), name: '', qty: 1, unitPrice: 0 }])} className="text-xs bg-primary/10 text-primary px-3 py-1.5 rounded-lg font-bold hover:bg-primary/20 active:scale-95 transition-all flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[14px]">add</span> 품목 추가
+                      </button>
                     </div>
                     
-                    <div className="text-right text-[11px] leading-relaxed text-slate-700">
-                      <div className="font-black text-sm mb-1 text-primary">클린브로</div>
-                      <div>사업자번호: 803-53-00875</div>
-                      <div>대표자: 최찬용</div>
-                      <div>속초시 동해대로 3930번길 10-8</div>
-                      <div>전화: 010-2716-8635</div>
+                    <div className="space-y-3">
+                      {quoteItems.map((item, idx) => (
+                        <div key={item.id} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700 flex gap-2 items-center relative">
+                          <button onClick={() => setQuoteItems(quoteItems.filter((_, i) => i !== idx))} className="absolute -top-2 -right-2 w-6 h-6 bg-red-100 text-red-500 rounded-full flex items-center justify-center font-bold text-xs hover:bg-red-200">✕</button>
+                          
+                          <div className="flex-1 grid grid-cols-4 gap-2">
+                            <div className="col-span-4">
+                              <input type="text" value={item.name} onChange={e => { const newItems = [...quoteItems]; newItems[idx].name = e.target.value; setQuoteItems(newItems); }} placeholder="품목 (예: 벽걸이 에어컨)" className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg p-2 text-xs focus:ring-1" list="quote-presets" />
+                            </div>
+                            <div className="col-span-1">
+                              <input type="number" min="1" value={item.qty} onChange={e => { const newItems = [...quoteItems]; newItems[idx].qty = Number(e.target.value); setQuoteItems(newItems); }} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg p-2 text-xs text-center focus:ring-1" placeholder="수량" />
+                            </div>
+                            <div className="col-span-3">
+                              <input type="text" value={item.unitPrice} onChange={e => { const newItems = [...quoteItems]; newItems[idx].unitPrice = e.target.value.replace(/[^0-9]/g, ''); setQuoteItems(newItems); }} className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg p-2 text-xs text-right focus:ring-1" placeholder="단가 (원)" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <datalist id="quote-presets">
+                      <option value="벽걸이 에어컨 완전분해청소" />
+                      <option value="스탠드 에어컨 완전분해청소" />
+                      <option value="2in1 에어컨 완전분해청소" />
+                      <option value="시스템(천장형) 에어컨 완전분해청소" />
+                      <option value="출장 점검비" />
+                    </datalist>
+                  </div>
+
+                  <div className="bg-slate-100 dark:bg-slate-800 p-4 rounded-xl mt-4">
+                    <div className="flex justify-between text-xs text-slate-500 mb-1">
+                      <span>공급가액</span>
+                      <span>{fmtNum(quoteSubtotal)}원</span>
+                    </div>
+                    {quoteVatType === 'excluded' && (
+                      <div className="flex justify-between text-xs text-slate-500 mb-1">
+                        <span>부가세 (10%)</span>
+                        <span>{fmtNum(quoteVat)}원</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm font-black mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                      <span>총 견적금액</span>
+                      <span className="text-primary">{fmtNum(quoteTotal)}원</span>
                     </div>
                   </div>
 
-                  <div className="bg-slate-100 p-4 mb-6 rounded-lg flex justify-between items-center border border-slate-200">
-                    <span className="font-bold text-slate-800">견적 총액 (VAT 포함)</span>
-                    <span className="text-xl font-black text-blue-600">₩ {fmtNum(quoteItems[0].unitPrice || 0)}</span>
-                  </div>
+                  <button onClick={() => {
+                    const el = document.getElementById('quotation-card');
+                    if (!el) return;
+                    html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }).then(canvas => {
+                      const link = document.createElement('a');
+                      link.download = `견적서_${quoteTarget || '클린브로'}.png`;
+                      link.href = canvas.toDataURL('image/png');
+                      link.click();
+                    }).catch(e => alert('이미지 저장 실패: ' + e.message));
+                  }} className="w-full py-4 bg-primary text-white font-bold rounded-2xl active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 mt-4">
+                    <span className="material-symbols-outlined">download</span> 견적서 이미지 저장하기
+                  </button>
+                </div>
 
-                  <table className="w-full text-xs text-left mb-6 border-collapse">
-                    <thead>
-                      <tr className="border-b border-t border-slate-800 bg-slate-50 text-slate-800">
-                        <th className="py-2 px-2 font-bold">품목 / 내역</th>
-                        <th className="py-2 px-2 font-bold text-center">수량</th>
-                        <th className="py-2 px-2 font-bold text-right">금액</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-slate-800">
-                      <tr className="border-b border-slate-200">
-                        <td className="py-3 px-2 font-medium">{quoteProject || '작업 내역'}</td>
-                        <td className="py-3 px-2 text-center">1</td>
-                        <td className="py-3 px-2 text-right font-bold">{fmtNum(quoteItems[0].unitPrice || 0)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
+                {/* 견적서 실제 렌더링 카드 (이 영역이 캡쳐됩니다) */}
+                <div className="overflow-x-auto pb-4">
+                  <div id="quotation-card" className="bg-white p-6 rounded-none text-slate-800" style={{ width: '400px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+                    <div className="text-center mb-6 border-b-2 border-slate-800 pb-4">
+                      <h1 className="text-3xl font-black tracking-widest text-slate-800">견 적 서</h1>
+                    </div>
+                    
+                    <div className="flex justify-between items-end mb-6">
+                      <div>
+                        <div className="text-lg font-bold border-b border-slate-400 inline-block pr-4 pb-1 mb-1 text-slate-800">
+                          {quoteTarget || '(받는 분 이름)'} <span className="text-sm font-normal">귀하</span>
+                        </div>
+                        <div className="text-xs text-slate-500 mt-2">견적일: {quoteDate}</div>
+                        <div className="text-xs text-slate-500">프로젝트: {quoteProject}</div>
+                      </div>
+                      
+                      <div className="text-right text-[11px] leading-relaxed text-slate-700">
+                        <div className="font-black text-sm mb-1 text-primary">클린브로</div>
+                        <div>사업자번호: 803-53-00875</div>
+                        <div>대표자: 최찬용</div>
+                        <div>속초시 동해대로 3930번길 10-8</div>
+                        <div>전화: 010-2716-8635</div>
+                      </div>
+                    </div>
 
-                  <div className="border border-slate-200 p-4 bg-slate-50 text-[10px] space-y-1 text-slate-600">
-                    <p className="font-bold text-slate-800 mb-1">안내 및 입금계좌</p>
-                    <p>- 본 견적은 작성일로부터 14일간 유효합니다.</p>
-                    <p>- <strong className="text-slate-800">카카오뱅크 3333-36-2878313 (예금주: 최찬용)</strong></p>
-                  </div>
-                  
-                  <div className="mt-8 text-center text-xs text-slate-500 font-bold">
-                    위와 같이 견적합니다.
+                    <div className="bg-slate-100 p-4 mb-4 rounded-lg flex justify-between items-center border border-slate-200">
+                      <div className="font-bold text-slate-800">견적 총액<br/><span className="text-[10px] font-normal text-slate-500">({quoteVatType === 'included' ? 'VAT 포함' : 'VAT 별도'})</span></div>
+                      <span className="text-xl font-black text-blue-600">₩ {fmtNum(quoteTotal)}</span>
+                    </div>
+
+                    <table className="w-full text-xs text-left mb-6 border-collapse">
+                      <thead>
+                        <tr className="border-b border-t border-slate-800 bg-slate-50 text-slate-800">
+                          <th className="py-2 px-2 font-bold">품목 / 내역</th>
+                          <th className="py-2 px-2 font-bold text-center w-12">수량</th>
+                          <th className="py-2 px-2 font-bold text-right">단가</th>
+                          <th className="py-2 px-2 font-bold text-right">금액</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-slate-800">
+                        {quoteItems.map((item, idx) => (
+                          <tr key={item.id || idx} className="border-b border-slate-200">
+                            <td className="py-3 px-2 font-medium">{item.name || '(품목명)'}</td>
+                            <td className="py-3 px-2 text-center">{item.qty || 1}</td>
+                            <td className="py-3 px-2 text-right">{fmtNum(item.unitPrice || 0)}</td>
+                            <td className="py-3 px-2 text-right font-bold">{fmtNum((item.unitPrice || 0) * (item.qty || 1))}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    <div className="flex justify-end mb-6 text-xs border-b border-slate-200 pb-2">
+                      <div className="w-1/2 space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">공급가액:</span>
+                          <span className="font-bold">{fmtNum(quoteSubtotal)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">부가세액:</span>
+                          <span className="font-bold">{fmtNum(quoteVat)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm font-black pt-1 border-t border-slate-300">
+                          <span>합계:</span>
+                          <span className="text-blue-600">{fmtNum(quoteTotal)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border border-slate-200 p-4 bg-slate-50 text-[10px] space-y-1 text-slate-600">
+                      <p className="font-bold text-slate-800 mb-1">안내 및 입금계좌</p>
+                      <p>- 본 견적은 작성일로부터 14일간 유효합니다.</p>
+                      <p>- <strong className="text-slate-800">카카오뱅크 3333-36-2878313 (예금주: 최찬용)</strong></p>
+                    </div>
+                    
+                    <div className="mt-8 text-center text-xs text-slate-500 font-bold">
+                      위와 같이 견적합니다.
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </main>
       )}
 
