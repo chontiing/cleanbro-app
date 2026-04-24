@@ -4333,23 +4333,24 @@ function App() {
                 </div>
 
                 {/* 견적서 실제 렌더링 카드 (이 영역이 캡쳐됩니다) */}
+                {/* 캡쳐 시 oklch 파싱 에러를 방지하기 위해 Tailwind 색상 클래스 대신 인라인 hex 스타일을 사용합니다. */}
                 <div className="overflow-x-auto pb-4">
-                  <div id="quotation-card" className="bg-white p-6 rounded-none text-slate-800" style={{ width: '400px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-                    <div className="text-center mb-6 border-b-2 border-slate-800 pb-4">
-                      <h1 className="text-3xl font-black tracking-widest text-slate-800">견 적 서</h1>
+                  <div id="quotation-card" className="p-6 rounded-none" style={{ width: '400px', margin: '0 auto', fontFamily: 'sans-serif', backgroundColor: '#ffffff', color: '#1e293b' }}>
+                    <div className="text-center mb-6 border-b-2 pb-4" style={{ borderColor: '#1e293b' }}>
+                      <h1 className="text-3xl font-black tracking-widest" style={{ color: '#1e293b' }}>견 적 서</h1>
                     </div>
                     
                     <div className="flex justify-between items-end mb-6">
                       <div>
-                        <div className="text-lg font-bold border-b border-slate-400 inline-block pr-4 pb-1 mb-1 text-slate-800">
+                        <div className="text-lg font-bold border-b inline-block pr-4 pb-1 mb-1" style={{ borderColor: '#94a3b8', color: '#1e293b' }}>
                           {quoteTarget || '(받는 분 이름)'} <span className="text-sm font-normal">귀하</span>
                         </div>
-                        <div className="text-xs text-slate-500 mt-2">견적일: {quoteDate}</div>
-                        <div className="text-xs text-slate-500">프로젝트: {quoteProject}</div>
+                        <div className="text-xs mt-2" style={{ color: '#64748b' }}>견적일: {quoteDate}</div>
+                        <div className="text-xs" style={{ color: '#64748b' }}>프로젝트: {quoteProject}</div>
                       </div>
                       
-                      <div className="text-right text-[11px] leading-relaxed text-slate-700">
-                        <div className="font-black text-sm mb-1 text-primary">클린브로</div>
+                      <div className="text-right text-[11px] leading-relaxed" style={{ color: '#334155' }}>
+                        <div className="font-black text-sm mb-1" style={{ color: '#2563eb' }}>클린브로</div>
                         <div>사업자번호: 803-53-00875</div>
                         <div>대표자: 최찬용</div>
                         <div>속초시 동해대로 3930번길 10-8</div>
@@ -4357,23 +4358,23 @@ function App() {
                       </div>
                     </div>
 
-                    <div className="bg-slate-100 p-4 mb-4 rounded-lg flex justify-between items-center border border-slate-200">
-                      <div className="font-bold text-slate-800">견적 총액<br/><span className="text-[10px] font-normal text-slate-500">({quoteVatType === 'included' ? 'VAT 포함' : 'VAT 별도'})</span></div>
-                      <span className="text-xl font-black text-blue-600">₩ {fmtNum(quoteTotal)}</span>
+                    <div className="p-4 mb-4 rounded-lg flex justify-between items-center border" style={{ backgroundColor: '#f1f5f9', borderColor: '#e2e8f0' }}>
+                      <div className="font-bold" style={{ color: '#1e293b' }}>견적 총액<br/><span className="text-[10px] font-normal" style={{ color: '#64748b' }}>({quoteVatType === 'included' ? 'VAT 포함' : 'VAT 별도'})</span></div>
+                      <span className="text-xl font-black" style={{ color: '#2563eb' }}>₩ {fmtNum(quoteTotal)}</span>
                     </div>
 
                     <table className="w-full text-xs text-left mb-6 border-collapse">
                       <thead>
-                        <tr className="border-b border-t border-slate-800 bg-slate-50 text-slate-800">
+                        <tr className="border-b border-t" style={{ borderColor: '#1e293b', backgroundColor: '#f8fafc', color: '#1e293b' }}>
                           <th className="py-2 px-2 font-bold">품목 / 내역</th>
                           <th className="py-2 px-2 font-bold text-center w-12">수량</th>
                           <th className="py-2 px-2 font-bold text-right">단가</th>
                           <th className="py-2 px-2 font-bold text-right">금액</th>
                         </tr>
                       </thead>
-                      <tbody className="text-slate-800">
+                      <tbody style={{ color: '#1e293b' }}>
                         {quoteItems.map((item, idx) => (
-                          <tr key={item.id || idx} className="border-b border-slate-200">
+                          <tr key={item.id || idx} className="border-b" style={{ borderColor: '#e2e8f0' }}>
                             <td className="py-3 px-2 font-medium">{item.name || '(품목명)'}</td>
                             <td className="py-3 px-2 text-center">{item.qty || 1}</td>
                             <td className="py-3 px-2 text-right">{fmtNum(item.unitPrice || 0)}</td>
@@ -4383,30 +4384,30 @@ function App() {
                       </tbody>
                     </table>
 
-                    <div className="flex justify-end mb-6 text-xs border-b border-slate-200 pb-2">
+                    <div className="flex justify-end mb-6 text-xs border-b pb-2" style={{ borderColor: '#e2e8f0' }}>
                       <div className="w-1/2 space-y-1">
                         <div className="flex justify-between">
-                          <span className="text-slate-500">공급가액:</span>
+                          <span style={{ color: '#64748b' }}>공급가액:</span>
                           <span className="font-bold">{fmtNum(quoteSubtotal)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className="text-slate-500">부가세액:</span>
+                          <span style={{ color: '#64748b' }}>부가세액:</span>
                           <span className="font-bold">{fmtNum(quoteVat)}</span>
                         </div>
-                        <div className="flex justify-between text-sm font-black pt-1 border-t border-slate-300">
+                        <div className="flex justify-between text-sm font-black pt-1 border-t" style={{ borderColor: '#cbd5e1' }}>
                           <span>합계:</span>
-                          <span className="text-blue-600">{fmtNum(quoteTotal)}</span>
+                          <span style={{ color: '#2563eb' }}>{fmtNum(quoteTotal)}</span>
                         </div>
                       </div>
                     </div>
 
-                    <div className="border border-slate-200 p-4 bg-slate-50 text-[10px] space-y-1 text-slate-600">
-                      <p className="font-bold text-slate-800 mb-1">안내 및 입금계좌</p>
+                    <div className="border p-4 text-[10px] space-y-1" style={{ borderColor: '#e2e8f0', backgroundColor: '#f8fafc', color: '#475569' }}>
+                      <p className="font-bold mb-1" style={{ color: '#1e293b' }}>안내 및 입금계좌</p>
                       <p>- 본 견적은 작성일로부터 14일간 유효합니다.</p>
-                      <p>- <strong className="text-slate-800">카카오뱅크 3333-36-2878313 (예금주: 최찬용)</strong></p>
+                      <p>- <strong style={{ color: '#1e293b' }}>카카오뱅크 3333-36-2878313 (예금주: 최찬용)</strong></p>
                     </div>
                     
-                    <div className="mt-8 text-center text-xs text-slate-500 font-bold">
+                    <div className="mt-8 text-center text-xs font-bold" style={{ color: '#64748b' }}>
                       위와 같이 견적합니다.
                     </div>
                   </div>
