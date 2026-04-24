@@ -1033,6 +1033,34 @@ function App() {
     }
   };
 
+  const resetBookingForm = () => {
+    setEditingId(null);
+    setCustomerName('');
+    setNewPhone('');
+    setAddress('');
+    setAddressDetail('');
+    setHasCashReceipt(false);
+    setHasTaxInvoice(false);
+    setNewMemo('');
+    setCategory('에어컨');
+    setProduct('벽걸이');
+    setQty(1);
+    setBasePrice(DEFAULT_PRICES['벽걸이']);
+    setDiscountType('none');
+    setDiscountVal('');
+    setPayment('현금');
+    const tmr = new Date();
+    tmr.setDate(tmr.getDate() + 1);
+    setBookDate(tmr.toISOString().split('T')[0]);
+    setBookTimeType('09:00');
+    setBookTimeCustom('');
+    setEndDate('');
+    setIsCompleted(false);
+    setIsSamsungCheck(false);
+    setServiceType('에어컨');
+    setModelName('');
+  };
+
   const handleSaveBooking = async () => {
     if (isSavingBooking) return;
     
@@ -1174,19 +1202,13 @@ function App() {
       fetchCustomers(); // 예상치 못한 에러 시에만 백그라운드 재조회
     }
 
-    setEditingId(null);
-    setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
-    setHasCashReceipt(false); setHasTaxInvoice(false); setIsSamsungCheck(false);
-    setEndDate('');
+    resetBookingForm();
     setCurrentTab('calendar');
     setIsSavingBooking(false);
   };
 
   const handleCancelEdit = () => {
-    setEditingId(null);
-    setCustomerName(''); setNewPhone(''); setAddress(''); setAddressDetail(''); setNewMemo('');
-    setHasCashReceipt(false); setHasTaxInvoice(false); setIsSamsungCheck(false);
-    setEndDate('');
+    resetBookingForm();
     setCurrentTab('calendar');
   };
 
@@ -4195,7 +4217,7 @@ function App() {
             <p className={`text-[9px] ${currentTab === 'calendar' ? 'font-bold' : 'font-medium'}`}>홈</p>
           </button>
 
-          <button onClick={() => setCurrentTab('add')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'add' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
+          <button onClick={() => { resetBookingForm(); setCurrentTab('add'); }} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'add' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
             <span className={`material-symbols-outlined text-[24px] ${currentTab === 'add' ? 'font-fill' : ''}`}>edit_calendar</span>
             <p className={`text-[9px] ${currentTab === 'add' ? 'font-bold' : 'font-medium'}`}>예약</p>
           </button>
