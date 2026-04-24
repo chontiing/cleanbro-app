@@ -4279,17 +4279,49 @@ function App() {
                     </div>
                   </div>
 
-                  <button onClick={() => {
+                  <button onClick={async () => {
                     const el = document.getElementById('quotation-card');
                     if (!el) return;
-                    html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true }).then(canvas => {
-                      const link = document.createElement('a');
-                      link.download = `견적서_${quoteTarget || '클린브로'}.png`;
-                      link.href = canvas.toDataURL('image/png');
-                      link.click();
-                    }).catch(e => alert('이미지 저장 실패: ' + e.message));
+                    try {
+                      const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
+                      canvas.toBlob(async (blob) => {
+                        if (!blob) {
+                          alert('이미지 생성에 실패했습니다.');
+                          return;
+                        }
+                        const fileName = `견적서_${quoteTarget || '클린브로'}.png`;
+                        
+                        // 모바일(iOS/Android) 공유 API 지원 시 먼저 시도
+                        if (navigator.canShare && navigator.userAgent.match(/mobile/i)) {
+                          const file = new File([blob], fileName, { type: 'image/png' });
+                          if (navigator.canShare({ files: [file] })) {
+                            try {
+                              await navigator.share({
+                                files: [file],
+                                title: fileName,
+                              });
+                              return;
+                            } catch (err) {
+                              console.log('Share canceled or failed:', err);
+                            }
+                          }
+                        }
+
+                        // Fallback: 일반 다운로드 (PC 또는 공유 미지원 기기)
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.download = fileName;
+                        link.href = url;
+                        document.body.appendChild(link); // iOS Safari 대응을 위해 추가
+                        link.click();
+                        document.body.removeChild(link);
+                        setTimeout(() => URL.revokeObjectURL(url), 100);
+                      }, 'image/png');
+                    } catch (e) {
+                      alert('이미지 처리 중 오류가 발생했습니다: ' + e.message);
+                    }
                   }} className="w-full py-4 bg-primary text-white font-bold rounded-2xl active:scale-95 transition-all shadow-lg flex items-center justify-center gap-2 mt-4">
-                    <span className="material-symbols-outlined">download</span> 견적서 이미지 저장하기
+                    <span className="material-symbols-outlined">ios_share</span> 견적서 카톡 전송 / 저장하기
                   </button>
                 </div>
 
