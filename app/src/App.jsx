@@ -1991,7 +1991,7 @@ function App() {
               <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${c.assignee?.includes('2인') ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-blue-50 text-blue-600 border-blue-200'}`}>
                 {c.assignee}
               </span>
-              <span className="bg-gray-100 text-gray-500 text-[9px] font-bold px-1.5 py-0.5 rounded">
+              <span className="bg-slate-200 text-slate-800 text-[13px] sm:text-[14px] font-black px-2 py-0.5 rounded-md shadow-sm border border-slate-300">
                 {c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type}
               </span>
               <span className="text-gray-400 text-[10px] font-bold">{c.category} · {c.product}</span>
