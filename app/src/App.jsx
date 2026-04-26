@@ -222,7 +222,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.1.9"; // 현재 버젼
+  const APP_VERSION = "v1.2.0"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -3032,15 +3032,45 @@ function App() {
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <label className="block text-xs font-semibold text-slate-500 mb-1">방문 시간대</label>
-                    <input type="text" list="time-options" placeholder="예: 13:00~14:00" value={bookTimeType} onChange={e => setBookTimeType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 bg-white" />
-                    <datalist id="time-options">
-                      {Array.from({ length: 36 }, (_, i) => {
-                        const hour = Math.floor(i / 2) + 5;
+                    <select 
+                      value={Array.from({ length: 33 }, (_, i) => {
+                        const h = Math.floor(i / 2) + 6;
+                        const m = i % 2 === 0 ? '00' : '30';
+                        return `${String(h).padStart(2, '0')}:${m}`;
+                      }).includes(bookTimeType) ? bookTimeType : '직접입력'} 
+                      onChange={e => {
+                        const val = e.target.value;
+                        if (val === '직접입력') {
+                          setBookTimeType(''); // Reset to empty for custom input
+                        } else {
+                          setBookTimeType(val);
+                        }
+                      }}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 bg-white"
+                    >
+                      {Array.from({ length: 33 }, (_, i) => {
+                        const hour = Math.floor(i / 2) + 6;
                         const minute = i % 2 === 0 ? '00' : '30';
                         const timeStr = `${String(hour).padStart(2, '0')}:${minute}`;
-                        return <option key={timeStr} value={timeStr} />;
+                        return <option key={timeStr} value={timeStr}>{timeStr}</option>;
                       })}
-                    </datalist>
+                      <option value="직접입력">직접 입력 (범위 등)</option>
+                    </select>
+                    {!Array.from({ length: 33 }, (_, i) => {
+                      const h = Math.floor(i / 2) + 6;
+                      const m = i % 2 === 0 ? '00' : '30';
+                      return `${String(h).padStart(2, '0')}:${m}`;
+                    }).includes(bookTimeType) && (
+                      <div className="mt-2 animate-slide-up">
+                        <input 
+                          type="text" 
+                          placeholder="예: 1시~2시" 
+                          value={bookTimeType} 
+                          onChange={e => setBookTimeType(e.target.value)} 
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2"
+                        />
+                      </div>
+                    )}
                   </div>
                   <div className="flex-1">
                     <label className="block text-xs font-semibold text-slate-500 mb-1">완료 예상시간</label>
