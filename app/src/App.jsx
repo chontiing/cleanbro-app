@@ -42,6 +42,16 @@ const DEFAULT_PRICES = {
   '원데이 클래스': 40000
 };
 
+// 2026, 2027 주요 공휴일 (대체공휴일 포함)
+const PUBLIC_HOLIDAYS = [
+  '2026-01-01', '2026-02-16', '2026-02-17', '2026-02-18', '2026-03-01', '2026-03-02', 
+  '2026-05-05', '2026-05-24', '2026-05-25', '2026-06-06', '2026-08-15', '2026-08-17', 
+  '2026-09-24', '2026-09-25', '2026-09-26', '2026-10-03', '2026-10-05', '2026-10-09', '2026-12-25',
+  '2027-01-01', '2027-02-06', '2027-02-07', '2027-02-08', '2027-03-01', '2027-05-05', 
+  '2027-05-13', '2027-06-06', '2027-08-15', '2027-09-14', '2027-09-15', '2027-09-16', 
+  '2027-10-03', '2027-10-09', '2027-12-25'
+];
+
 // 숫자 콤마 포맷
 const fmtNum = (num) => Number(num).toLocaleString('ko-KR');
 
@@ -212,7 +222,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.1.7"; // 현재 버젼
+  const APP_VERSION = "v1.1.8"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -2593,9 +2603,11 @@ function App() {
           <div className="max-w-lg mx-auto w-full bg-white dark:bg-slate-800 p-4 sm:p-5 rounded-2xl shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] border-0">
             <div className="flex items-center justify-between px-1">
               <div className="cursor-pointer transition-transform active:scale-95 flex-1" onClick={() => setCurrentTab('stats')}>
-                <p className="text-[10px] font-bold text-slate-400 mb-0.5 leading-none">오늘의 합계 매출</p>
+                <p className="text-[10px] font-bold text-slate-400 mb-0.5 leading-none">
+                  {selectedDate === getTodayStr() ? '오늘의 합계 매출' : `${parseInt(selectedDate.split('-')[1], 10)}월 ${parseInt(selectedDate.split('-')[2], 10)}일 합계 매출`}
+                </p>
                 <div className="text-xl font-black text-slate-800 dark:text-white flex items-baseline truncate">
-                  {fmtNum(revenueStats.todaySales)}<span className="text-[10px] text-slate-400 font-bold ml-0.5">원</span>
+                  {fmtNum(calcDashboard(selectedDate).total)}<span className="text-[10px] text-slate-400 font-bold ml-0.5">원</span>
                 </div>
               </div>
 
@@ -2670,6 +2682,13 @@ function App() {
                   const isToday = dStr === getTodayStr();
                   const isSelected = dStr === selectedDate;
                   const count = dList.length;
+                  const isSunday = idx % 7 === 0;
+                  const isSaturday = idx % 7 === 6;
+                  const isHoliday = PUBLIC_HOLIDAYS.includes(dStr);
+                  
+                  let dayTextColor = 'text-slate-700';
+                  if (isSunday || isHoliday) dayTextColor = 'text-red-500';
+                  else if (isSaturday) dayTextColor = 'text-blue-500';
 
                   return (
                     <div
@@ -2680,7 +2699,7 @@ function App() {
                       `}
                     >
                       <div className={`w-7 h-7 flex items-center justify-center rounded-full text-xs sm:text-sm font-bold transition-colors
-                        ${isToday ? 'bg-[#FF5722] text-white shadow-md ring-2 ring-[#FF5722] ring-offset-1' : (isSelected ? 'text-blue-600' : 'text-slate-700')}
+                        ${isToday ? 'bg-[#FF5722] text-white shadow-md ring-2 ring-[#FF5722] ring-offset-1' : (isSelected ? 'text-blue-600' : dayTextColor)}
                       `}>
                         {dObj.getDate()}
                       </div>
