@@ -222,7 +222,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.1.8"; // 현재 버젼
+  const APP_VERSION = "v1.1.9"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -569,8 +569,8 @@ function App() {
     setDiscountVal(c.discount_value || 0);
     setPayment(c.payment_method || '현금');
     setBookDate(c.book_date || getTodayStr());
-    setBookTimeType(c.book_time_type || '09:00');
-    setBookTimeCustom(c.book_time_custom || '');
+    setBookTimeType(c.book_time_type === '직접입력' ? (c.book_time_custom || '') : (c.book_time_type || '09:00'));
+    setBookTimeCustom(c.book_time_type === '직접입력' ? '' : (c.book_time_custom || ''));
     setAssignee(c.assignee || 'ccy6208');
     setIsCompleted(c.is_completed || false);
     setIsSamsungCheck(c.is_samsung_check || false);
@@ -1113,11 +1113,10 @@ function App() {
     setIsSavingBooking(true);
 
     if (!editingId) {
-      const isDuplicate = customers.some(c =>
-        c.book_date === bookDate &&
-        c.book_time_type === bookTimeType &&
-        (bookTimeType !== '직접입력' || c.book_time_custom === bookTimeCustom)
-      );
+      const isDuplicate = customers.some(c => {
+        const timeVal = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
+        return c.book_date === bookDate && timeVal === bookTimeType;
+      });
       if (isDuplicate) {
         if (!window.confirm('⚠️ 선택하신 날짜/시간에 이미 다른 예약이 있습니다. 계속 저장하시겠습니까?')) {
           setIsSavingBooking(false);
@@ -1144,7 +1143,7 @@ function App() {
       payment_method: payment,
       book_date: bookDate,
       book_time_type: bookTimeType,
-      book_time_custom: bookTimeType === '직접입력' ? bookTimeCustom : null,
+      book_time_custom: bookTimeCustom,
       assignee: assignee || 'ccy6208',
       is_completed: isCompleted,
       is_samsung_check: isSamsungCheck,
@@ -2035,7 +2034,12 @@ function App() {
               <span className="bg-slate-200 text-slate-800 text-[13px] sm:text-[14px] font-black px-2 py-0.5 rounded-md shadow-sm border border-slate-300">
                 {c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type}
               </span>
-              <span className="text-gray-400 text-[10px] font-bold">{c.category} · {c.product}</span>
+              {c.book_time_type !== '직접입력' && c.book_time_custom && (
+                <span className="bg-amber-100 text-amber-800 text-[11px] font-black px-2 py-0.5 rounded-md shadow-sm border border-amber-200 ml-1">
+                  완료예상: {c.book_time_custom}
+                </span>
+              )}
+              <span className="text-gray-400 text-[10px] font-bold ml-1">{c.category} · {c.product}</span>
             </div>
 
             <h4
@@ -2808,7 +2812,8 @@ function App() {
                                     {c.is_completed && <span className="material-symbols-outlined text-[#10B981] text-[14px]">check_circle</span>}
                                   </div>
                                   <p className="text-[10px] text-gray-400 font-medium">
-                                    {c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type} · {c.product}
+                                    {c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type} 
+                                    {c.book_time_type !== '직접입력' && c.book_time_custom ? ` (완료예상: ${c.book_time_custom})` : ''} · {c.product}
                                   </p>
                                 </div>
                                 <div className="text-right">
@@ -3024,19 +3029,24 @@ function App() {
                     <button type="button" onClick={() => { const d = new Date(); d.setDate(d.getDate()+3); setBookDate(d.toISOString().split('T')[0]); }} className="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-[10px] rounded border border-slate-200 text-slate-600 font-bold transition-colors active:scale-95">+3일</button>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 mb-1">방문 시간대</label>
-                  <select value={bookTimeType} onChange={e => setBookTimeType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2">
-                    {Array.from({ length: 36 }, (_, i) => {
-                      const hour = Math.floor(i / 2) + 5;
-                      const minute = i % 2 === 0 ? '00' : '30';
-                      const timeStr = `${String(hour).padStart(2, '0')}:${minute}`;
-                      return <option key={timeStr} value={timeStr}>{timeStr}</option>;
-                    })}
-                    <option value="직접입력">직접 입력 (분 단위 등)</option>
-                  </select>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">방문 시간대</label>
+                    <input type="text" list="time-options" placeholder="예: 13:00~14:00" value={bookTimeType} onChange={e => setBookTimeType(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 bg-white" />
+                    <datalist id="time-options">
+                      {Array.from({ length: 36 }, (_, i) => {
+                        const hour = Math.floor(i / 2) + 5;
+                        const minute = i % 2 === 0 ? '00' : '30';
+                        const timeStr = `${String(hour).padStart(2, '0')}:${minute}`;
+                        return <option key={timeStr} value={timeStr} />;
+                      })}
+                    </datalist>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">완료 예상시간</label>
+                    <input type="text" placeholder="예: 16:00 (선택)" value={bookTimeCustom} onChange={e => setBookTimeCustom(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 bg-white" />
+                  </div>
                 </div>
-              </div>
 
               <div className="animate-slide-up">
                 <label className="block text-xs font-semibold text-slate-500 mb-1">작업 소요 기간 (종료일 설정)</label>
@@ -3077,12 +3087,6 @@ function App() {
                   </p>
                 )}
               </div>
-
-              {bookTimeType === '직접입력' && (
-                <div className="animate-slide-up">
-                  <input type="text" placeholder="예: 오전 10시 30분경" value={bookTimeCustom} onChange={e => setBookTimeCustom(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2" />
-                </div>
-              )}
 
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <div>
