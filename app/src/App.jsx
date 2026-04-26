@@ -3047,6 +3047,7 @@ function App() {
                     <input type="text" placeholder="예: 16:00 (선택)" value={bookTimeCustom} onChange={e => setBookTimeCustom(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 bg-white" />
                   </div>
                 </div>
+              </div>
 
               <div className="animate-slide-up">
                 <label className="block text-xs font-semibold text-slate-500 mb-1">작업 소요 기간 (종료일 설정)</label>
