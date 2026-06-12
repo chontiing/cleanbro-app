@@ -249,9 +249,9 @@ function App() {
       reader.onload = async () => {
         const base64Data = reader.result.split(',')[1];
         
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCW_pJGBIMfFQP_c6oVSIVf1FxkhPb7ma0";
         if (!apiKey) {
-          alert('Gemini API 키가 환경변수에 설정되지 않았습니다.');
+          alert('Gemini API 키가 설정되지 않았습니다.');
           setIsExtracting(false);
           return;
         }
