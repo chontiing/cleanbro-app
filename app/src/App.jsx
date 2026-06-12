@@ -138,6 +138,10 @@ function App() {
   const [loadingData, setLoadingData] = useState(false);
   const [mapPopupMemo, setMapPopupMemo] = useState(null);
 
+  // 이미지 추출 기능 상태
+  const [regionHint, setRegionHint] = useState('지역 선택 안함'); // '속초', '고성', '양양', '인제' 등
+  const [isExtracting, setIsExtracting] = useState(false);
+
   // 추가 기능: 프로필 닉네임, 팀원 리스트, 지출 리스트
   const [myNickname, setMyNickname] = useState('');
   const [teamMembers, setTeamMembers] = useState([]);
@@ -230,6 +234,79 @@ function App() {
   const [isAndroid, setIsAndroid] = useState(false);
   const [settingsMsgSubTab, setSettingsMsgSubTab] = useState('completion'); // completion, auto_sms
   const [settingsActiveMenu, setSettingsActiveMenu] = useState('main'); // main, profile, message, sms, invite, bulk
+
+  // ==========================================
+  // [이미지 추출 (Gemini Vision API)]
+  // ==========================================
+  const handleImageExtraction = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setIsExtracting(true);
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64Data = reader.result.split(',')[1];
+        
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        if (!apiKey) {
+          alert('Gemini API 키가 환경변수에 설정되지 않았습니다.');
+          setIsExtracting(false);
+          return;
+        }
+
+        const promptText = `이 이미지는 고객의 주소와 전화번호 정보가 포함된 스마트폰 캡처 화면입니다. 이미지를 분석하여 데이터만 추출하고 순수 JSON 형식으로만 응답하세요. 마크다운 서식이나 앞뒤 설명은 완전히 제외해야 합니다. \n[추출 규칙]\n1. phone: 숫자와 하이픈(-)만 포함된 형태로 통일 (예: 010-1234-5678)\n2. address: 도로명 주소 또는 지번 주소 전체 추출. (동, 호수, 층수 등 상세 주소가 있다면 누락 없이 모두 포함)\n3. 주소 힌트 지역: ${regionHint !== '지역 선택 안함' ? regionHint : '이미지 내용 참고'}\n[출력 포맷]\n{\n  "phone": "추출된 전화번호",\n  "address": "추출된 주소"\n}`;
+
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: promptText },
+                  { inlineData: { mimeType: file.type, data: base64Data } }
+                ]
+              }]
+            })
+          });
+
+          const data = await response.json();
+          if (data.candidates && data.candidates.length > 0) {
+            let text = data.candidates[0].content.parts[0].text;
+            text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+            try {
+              const parsed = JSON.parse(text);
+              if (parsed.phone) setNewPhone(parsed.phone);
+              if (parsed.address) setAddress(parsed.address);
+              alert('이미지 분석 완료: 전화번호와 주소가 폼에 반영되었습니다!');
+            } catch (err) {
+              console.error('JSON Parse Error:', err);
+              alert('AI가 반환한 데이터의 형식을 처리할 수 없습니다.');
+            }
+          } else {
+            alert('이미지에서 정보를 추출하지 못했습니다.');
+          }
+        } catch (apiErr) {
+          console.error(apiErr);
+          alert('API 통신 중 오류가 발생했습니다.');
+        } finally {
+          setIsExtracting(false);
+          // file input 초기화
+          e.target.value = '';
+        }
+      };
+      reader.onerror = () => {
+        alert('이미지를 읽는 중 오류가 발생했습니다.');
+        setIsExtracting(false);
+      };
+    } catch (err) {
+      console.error(err);
+      alert('이미지 처리 중 오류가 발생했습니다.');
+      setIsExtracting(false);
+    }
+  };
 
   // ==========================================
   // [인증 관련 (Supabase Auth)]
@@ -1713,6 +1790,36 @@ function App() {
   const [selectedDate, setSelectedDate] = useState(getTodayStr());
   const [showAllSchedule, setShowAllSchedule] = useState(false); // 전체 일정 보기 토글 상태 추가
 
+  // 캘린더에 표시 중인 월(calDate)의 총 매출 계산
+  const calMonthSales = useMemo(() => {
+    const year = calDate.getFullYear();
+    const month = String(calDate.getMonth() + 1).padStart(2, '0');
+    const prefix = `${year}-${month}`;
+    return customers
+      .filter(c => c.book_date?.startsWith(prefix))
+      .reduce((acc, c) => acc + (c.final_price || 0), 0);
+  }, [customers, calDate]);
+
+  // 캘린더에 표시 중인 월의 목표 달성률 계산
+  const calAchieveRate = useMemo(() => {
+    const target = businessProfile.monthly_target_revenue || 5000000;
+    return Math.min(100, Math.floor((calMonthSales / target) * 100));
+  }, [calMonthSales, businessProfile.monthly_target_revenue]);
+
+  // 캘린더에 표시 중인 월의 전월 대비 성장률 계산
+  const calMonthGrowth = useMemo(() => {
+    const prevDate = new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1);
+    const prevYear = prevDate.getFullYear();
+    const prevMonth = String(prevDate.getMonth() + 1).padStart(2, '0');
+    const prevPrefix = `${prevYear}-${prevMonth}`;
+
+    const prevMonthSales = customers
+      .filter(c => c.book_date?.startsWith(prevPrefix))
+      .reduce((acc, c) => acc + (c.final_price || 0), 0);
+
+    return prevMonthSales === 0 ? 100 : Math.round(((calMonthSales / prevMonthSales) * 100) - 100);
+  }, [customers, calDate, calMonthSales]);
+
   const getCalendarDays = () => {
     const year = calDate.getFullYear();
     const month = calDate.getMonth();
@@ -2618,13 +2725,13 @@ function App() {
               <div className="h-6 w-[1px] bg-slate-100 dark:bg-slate-700 mx-3"></div>
 
               <div className="cursor-pointer transition-transform active:scale-95 flex-1 text-right" onClick={() => setCurrentTab('stats')}>
-                <p className="text-[10px] font-bold text-slate-400 mb-0.5 leading-none">이번 달 총 매출</p>
+                <p className="text-[10px] font-bold text-slate-400 mb-0.5 leading-none">{calDate.getMonth() + 1}월 총 매출</p>
                 <div className="flex flex-col items-end">
                   <div className="text-xl font-black text-primary flex items-baseline truncate">
-                    {fmtNum(revenueStats.monthSales)}<span className="text-[10px] text-slate-400 font-bold ml-0.5">원</span>
+                    {fmtNum(calMonthSales)}<span className="text-[10px] text-slate-400 font-bold ml-0.5">원</span>
                   </div>
-                  <div className={`text-[9px] font-bold mt-0 flex items-center gap-0.5 ${revenueStats.growth >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
-                    {revenueStats.growth >= 0 ? '▲' : '▼'} {Math.abs(revenueStats.growth)}% <span className="text-slate-400 font-medium ml-0.5">전월대비</span>
+                  <div className={`text-[9px] font-bold mt-0 flex items-center gap-0.5 ${calMonthGrowth >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                    {calMonthGrowth >= 0 ? '▲' : '▼'} {Math.abs(calMonthGrowth)}% <span className="text-slate-400 font-medium ml-0.5">전월대비</span>
                   </div>
                 </div>
               </div>
@@ -2635,7 +2742,7 @@ function App() {
               <div className="flex justify-between items-center mb-1.5">
                 <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
                   <span className="material-symbols-outlined text-[14px] text-amber-500">military_tech</span>
-                  목표 달성률 <span className="text-slate-900 dark:text-white">{revenueStats.achieveRate}%</span>
+                  목표 달성률 <span className="text-slate-900 dark:text-white">{calAchieveRate}%</span>
                 </p>
                 <button onClick={() => { setNewTargetRevenue(revenueStats.target.toString()); setShowTargetEdit(true); }} className="p-0.5 px-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 transition-colors text-slate-400 flex items-center">
                   <span className="material-symbols-outlined text-[14px]">settings</span>
@@ -2643,17 +2750,17 @@ function App() {
               </div>
               <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden flex p-0 border border-slate-50">
                 <div
-                  className={`h-full rounded-full transition-all duration-1000 ease-out shadow-sm relative ${revenueStats.achieveRate < 50 ? 'bg-orange-500' :
-                    revenueStats.achieveRate < 80 ? 'bg-yellow-400' :
-                      revenueStats.achieveRate < 100 ? 'bg-green-500' :
+                  className={`h-full rounded-full transition-all duration-1000 ease-out shadow-sm relative ${calAchieveRate < 50 ? 'bg-orange-500' :
+                    calAchieveRate < 80 ? 'bg-yellow-400' :
+                      calAchieveRate < 100 ? 'bg-green-500' :
                         'bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 animate-pulse'
                     }`}
-                  style={{ width: `${revenueStats.achieveRate}%` }}
+                  style={{ width: `${calAchieveRate}%` }}
                 >
                 </div>
               </div>
               <div className="flex justify-between mt-1.5 px-0.5">
-                <span className="text-[9px] text-slate-400 font-bold tracking-tight">이번 달 목표액</span>
+                <span className="text-[9px] text-slate-400 font-bold tracking-tight">{calDate.getMonth() + 1}월 목표액</span>
                 <span className="text-[10px] text-slate-600 font-black">{fmtNum(revenueStats.target)}원</span>
               </div>
             </div>
@@ -2667,7 +2774,12 @@ function App() {
                 <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1))} className="p-0.5 text-slate-400 hover:text-primary">
                   <span className="material-symbols-outlined text-base sm:text-xl">chevron_left</span>
                 </button>
-                <h2 className="font-bold text-xs sm:text-lg">{calDate.getFullYear()}년 {calDate.getMonth() + 1}월</h2>
+                <div className="flex flex-col items-center">
+                  <h2 className="font-bold text-xs sm:text-lg">{calDate.getFullYear()}년 {calDate.getMonth() + 1}월</h2>
+                  <span className="text-[10px] font-black text-primary bg-blue-50 dark:bg-blue-950/30 px-2.5 py-0.5 rounded-full mt-0.5 shadow-sm border border-blue-100/30">
+                    총 매출: {fmtNum(calMonthSales)}원
+                  </span>
+                </div>
                 <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1))} className="p-0.5 text-slate-400 hover:text-primary">
                   <span className="material-symbols-outlined text-base sm:text-xl">chevron_right</span>
                 </button>
@@ -2748,6 +2860,7 @@ function App() {
                     <span className="material-symbols-outlined text-blue-600 text-[20px]">calendar_month</span>
                     {calDate.getMonth() + 1}월 전체 일정
                     <span className="text-xs bg-gray-100 dark:bg-slate-700 px-2.5 py-1 rounded-full text-gray-500 font-bold ml-1">{monthlyCalendarList.length}건</span>
+                    <span className="text-xs bg-blue-50 dark:bg-blue-900/20 text-primary px-2.5 py-1 rounded-full font-bold ml-1">{fmtNum(calMonthSales)}원</span>
                   </span>
                   <button 
                     onClick={() => setShowAllSchedule(false)}
@@ -2871,6 +2984,50 @@ function App() {
           </div>
 
           <div className="bg-white dark:bg-slate-800 rounded-[1.5rem] p-6 border-0 shadow-[0_4px_20px_-10px_rgba(0,0,0,0.05)] space-y-5">
+
+            <div className="space-y-3 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-primary flex items-center gap-1">
+                <span className="material-symbols-outlined text-[18px]">photo_camera</span> 이미지로 정보 쓱싹 추출
+              </h3>
+              <p className="text-[10px] text-slate-500">캡처 이미지를 올리면 전화번호와 주소가 자동으로 입력됩니다!</p>
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-500 mb-1">기본 지역 힌트</label>
+                <div className="flex gap-2 flex-wrap mb-2">
+                  {['지역 선택 안함', '속초', '고성', '양양', '인제'].map(loc => (
+                    <button
+                      key={loc}
+                      type="button"
+                      onClick={() => setRegionHint(loc)}
+                      className={`px-3 py-1 text-xs font-bold rounded-full transition-all border ${regionHint === loc ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                    >
+                      {loc}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="relative">
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleImageExtraction} 
+                  disabled={isExtracting}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed" 
+                />
+                <div className={`w-full bg-white dark:bg-slate-800 border-2 border-dashed ${isExtracting ? 'border-primary/50 bg-primary/5' : 'border-slate-200 dark:border-slate-700 hover:border-primary/50'} rounded-xl p-4 flex flex-col items-center justify-center gap-2 transition-all`}>
+                  {isExtracting ? (
+                    <>
+                      <span className="material-symbols-outlined animate-spin text-primary">autorenew</span>
+                      <span className="text-xs font-bold text-primary">AI가 이미지를 분석하고 있습니다...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-slate-400">upload_file</span>
+                      <span className="text-xs font-bold text-slate-500">클릭하여 이미지 첨부</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
 
             <div className="space-y-3">
               <h3 className="text-sm font-bold text-primary border-b border-primary/20 pb-1">1. 기본 정보</h3>

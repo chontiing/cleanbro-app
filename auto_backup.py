@@ -1,10 +1,24 @@
 import os
+import sys
 import time
 import subprocess
 import hashlib
 import json
+
+# 로컬의 'supabase' 폴더와 가상환경의 'supabase' 패키지 충돌 방지
+current_dir = os.path.abspath(os.path.dirname(__file__))
+original_sys_path = sys.path.copy()
+if current_dir in sys.path:
+    sys.path.remove(current_dir)
+if '' in sys.path:
+    sys.path.remove('')
+
 from supabase import create_client, Client
 from dotenv import load_dotenv
+
+# 임포트 후 원래 sys.path 복구
+sys.path = original_sys_path
+
 
 load_dotenv()
 url = os.environ.get("VITE_SUPABASE_URL")
