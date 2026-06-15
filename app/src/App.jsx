@@ -149,6 +149,7 @@ function App() {
 
   // 매출 분석용 추가 상태
   const [showTargetEdit, setShowTargetEdit] = useState(false);
+  const [showYearSalesModal, setShowYearSalesModal] = useState(false);
   const [newTargetRevenue, setNewTargetRevenue] = useState('');
   const [showConfettiOnce, setShowConfettiOnce] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
@@ -1800,6 +1801,21 @@ function App() {
       .reduce((acc, c) => acc + (c.final_price || 0), 0);
   }, [customers, calDate]);
 
+  // 캘린더에 표시 중인 연도의 총 매출 계산 및 월별 breakdown
+  const calYearSalesBreakdown = useMemo(() => {
+    const year = calDate.getFullYear();
+    const months = Array.from({ length: 12 }, (_, i) => {
+      const monthStr = String(i + 1).padStart(2, '0');
+      const prefix = `${year}-${monthStr}`;
+      const sales = customers
+        .filter(c => c.book_date?.startsWith(prefix))
+        .reduce((acc, c) => acc + (c.final_price || 0), 0);
+      return { month: i + 1, sales };
+    });
+    const total = months.reduce((acc, m) => acc + m.sales, 0);
+    return { year, months, total };
+  }, [customers, calDate]);
+
   // 캘린더에 표시 중인 월의 목표 달성률 계산
   const calAchieveRate = useMemo(() => {
     const target = businessProfile.monthly_target_revenue || 5000000;
@@ -2775,11 +2791,21 @@ function App() {
                 <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() - 1, 1))} className="p-0.5 text-slate-400 hover:text-primary">
                   <span className="material-symbols-outlined text-base sm:text-xl">chevron_left</span>
                 </button>
-                <div className="flex flex-col items-center">
+                 <div className="flex flex-col items-center">
                   <h2 className="font-bold text-xs sm:text-lg">{calDate.getFullYear()}년 {calDate.getMonth() + 1}월</h2>
-                  <span className="text-[10px] font-black text-primary bg-blue-50 dark:bg-blue-950/30 px-2.5 py-0.5 rounded-full mt-0.5 shadow-sm border border-blue-100/30">
-                    총 매출: {fmtNum(calMonthSales)}원
-                  </span>
+                  <div className="flex flex-col items-center gap-1 mt-0.5">
+                    <span className="text-[10px] font-black text-primary bg-blue-50 dark:bg-blue-950/30 px-2.5 py-0.5 rounded-full shadow-sm border border-blue-100/30">
+                      총 매출: {fmtNum(calMonthSales)}원
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowYearSalesModal(true)}
+                      className="text-[9px] font-bold text-slate-500 hover:text-primary hover:border-primary/50 rounded-full px-2 py-0.5 flex items-center gap-0.5 active:scale-95 transition-all cursor-pointer bg-slate-50 hover:bg-blue-50/50 dark:bg-slate-800 dark:hover:bg-slate-700/50 border border-slate-200 dark:border-slate-750"
+                    >
+                      <span className="material-symbols-outlined text-[10px]">analytics</span>
+                      올해 총 매출 보기
+                    </button>
+                  </div>
                 </div>
                 <button onClick={() => setCalDate(new Date(calDate.getFullYear(), calDate.getMonth() + 1, 1))} className="p-0.5 text-slate-400 hover:text-primary">
                   <span className="material-symbols-outlined text-base sm:text-xl">chevron_right</span>
@@ -5010,6 +5036,77 @@ function App() {
       )}
 
       {/* ======================= [탭 8: 모달들] ======================= */}
+      
+      {/* 0. 올해 총 매출 분석 모달 */}
+      {showYearSalesModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-display">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-slide-up flex flex-col border border-slate-100 dark:border-slate-800">
+            {/* Header */}
+            <div className="flex justify-between items-center px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+              <div>
+                <h3 className="font-black text-slate-800 dark:text-white text-base flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-primary text-lg">calendar_today</span>
+                  {calYearSalesBreakdown.year}년 총 매출 분석
+                </h3>
+                <p className="text-[10px] font-bold text-slate-400 mt-0.5">연간 매출 현황 및 월별 통계</p>
+              </div>
+              <button type="button" onClick={() => setShowYearSalesModal(false)} className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full transition-colors active:scale-95">
+                <span className="material-symbols-outlined text-sm">close</span>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-5 max-h-[60vh] flex flex-col gap-4">
+              {/* Total Card */}
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-5 rounded-2xl text-white shadow-md">
+                <p className="text-[10px] font-bold text-blue-100/90 leading-none mb-1">{calYearSalesBreakdown.year}년 합계 매출액</p>
+                <h4 className="text-2xl font-black flex items-baseline">
+                  {fmtNum(calYearSalesBreakdown.total)}<span className="text-xs font-bold text-blue-100 ml-1">원</span>
+                </h4>
+              </div>
+
+              {/* Monthly breakdown */}
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-black text-slate-700 dark:text-slate-300 px-1 mb-1">월별 매출 상세</p>
+                <div className="flex flex-col gap-2 bg-slate-50 dark:bg-slate-950/20 p-3 rounded-xl border border-slate-100 dark:border-slate-800/50">
+                  {calYearSalesBreakdown.months.map((m) => {
+                    // Find max sales for calculating progress bar percentage
+                    const maxSales = Math.max(...calYearSalesBreakdown.months.map(x => x.sales), 1);
+                    const pct = (m.sales / maxSales) * 100;
+                    
+                    return (
+                      <div key={m.month} className="flex flex-col gap-1 py-1.5 border-b border-slate-100 dark:border-slate-800/40 last:border-0">
+                        <div className="flex justify-between items-center text-xs font-bold">
+                          <span className="text-slate-500">{m.month}월</span>
+                          <span className={`${m.sales > 0 ? 'text-slate-800 dark:text-white font-extrabold' : 'text-slate-400 font-medium'}`}>
+                            {m.sales > 0 ? `${fmtNum(m.sales)}원` : '매출 없음'}
+                          </span>
+                        </div>
+                        {m.sales > 0 && (
+                          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden mt-0.5">
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }}></div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+              <button 
+                type="button"
+                onClick={() => setShowYearSalesModal(false)}
+                className="w-full py-2.5 bg-slate-800 text-white font-black rounded-xl text-xs active:scale-95 transition-all shadow-sm hover:bg-slate-700 text-center"
+              >
+                확인
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 1. 목표 매출 수정 모달 */}
       {showTargetEdit && (
