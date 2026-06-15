@@ -218,11 +218,11 @@ def schedule_loop():
         except Exception as e:
             print(f"[스케줄러] 메인 루프 에러: {e}")
             
-        # 매일 아침 8시경 (8시 0분 ~ 8시 30분 사이) 오늘 일정 알림(Morning SMS) 트리거
+        # 매일 오후 6시경 (18시 0분 ~ 18시 30분 사이) 내일 예약 전날 알림(Reminder SMS) 트리거
         now = datetime.now()
-        if now.hour == 8 and now.minute < 30:
+        if now.hour == 18 and now.minute < 30:
             if not getattr(schedule_loop, "morning_sms_sent_today", False):
-                print(f"[스케줄러/시스템] ☀️ 아침 8시가 넘어 고객 모닝 알림 문자를 일괄 트리거합니다.")
+                print(f"[스케줄러/시스템] ☀️ 오후 6시가 넘어 고객 하루 전날 알림 문자를 일괄 트리거합니다.")
                 try:
                     m_res = requests.post(
                         f"{SUPABASE_URL}/functions/v1/send-sms",

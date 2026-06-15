@@ -1369,7 +1369,7 @@ function App() {
       setEditNoticeTemplate(businessProfile.notice_template || `[안내] 오늘 방문 예정입니다. 시간 맞춰 뵙겠습니다.\n- 클린브로 ([시간])`);
       setEditReminderTemplate(businessProfile.reminder_template || `[알림] [고객명]님, 곧 도착 예정입니다. 잠시만 기다려주세요!`);
       setEditConfirmedTemplate(businessProfile.confirmed_template || `[예약 확정] [일시]에 예약이 완료되었습니다. - 클린브로 ([파트너전화번호])`);
-      setEditMorningReminderTemplate(businessProfile.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`);
+      setEditMorningReminderTemplate(businessProfile.morning_reminder_template || `[알림] 내일 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`);
       setEditAutoConfirmSms(businessProfile.auto_confirm_sms || false);
       setEditAutoMorningReminders(businessProfile.auto_morning_reminders || false);
       setEditAutoPartnerSms(businessProfile.auto_partner_sms ?? true);
@@ -1856,7 +1856,7 @@ function App() {
       template = businessProfile.confirmed_template || `[클린브로] [일시] 방문예정. 감사합니다!`;
       updateField = 'sms_sent_initial';
     } else {
-      template = businessProfile.morning_reminder_template || `[클린브로] 오늘 [시간] 방문예정. 뵙겠습니다!`;
+      template = businessProfile.morning_reminder_template || `[클린브로] 내일 [시간] 방문예정. 뵙겠습니다!`;
       updateField = 'sms_sent_reminder';
     }
 
@@ -2074,22 +2074,23 @@ function App() {
       }
       if (!c.phone) return alert('고객 연락처가 없습니다.');
       
-      // KST 기준 08:00 계산
+      // KST 기준 전날 18:00 계산
       const d = new Date(c.book_date);
-      d.setHours(8, 0, 0, 0);
+      d.setDate(d.getDate() - 1);
+      d.setHours(18, 0, 0, 0);
       let scheduledUtc = d.toISOString();
       const isPast = d.getTime() <= Date.now();
 
       if (isPast) {
-        if (!confirm('예약 당일 아침 8시가 이미 지났습니다. 지금 즉시 아침 알림 문자를 발송하시겠습니까?')) return;
+        if (!confirm('예약 전날이 이미 지났습니다. 지금 즉시 전날 알림 문자를 발송하시겠습니까?')) return;
         scheduledUtc = null; // 과거 시간이면 즉시 발송
       } else {
-        if (!confirm('예약 당일 아침 8시로 알림 문자를 예약 발송하시겠습니까?')) return;
+        if (!confirm('예약 전날로 알림 문자를 예약 발송하시겠습니까?')) return;
       }
       
       setSendingType('morning');
       try {
-        const tpl = businessProfile?.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`;
+        const tpl = businessProfile?.morning_reminder_template || `[알림] 내일 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`;
         const timeVal = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
         const text = tpl
           .replace(/\[고객명\]/g, c.customer_name || '고객')
@@ -2104,7 +2105,7 @@ function App() {
         } else if (!error) {
             c.is_morning_alert_sent = true;
         }
-        alert(scheduledUtc ? '아침 알림 예약이 완료되었습니다.' : '아침 알림 문자가 즉시 발송되었습니다.');
+        alert(scheduledUtc ? '전날 알림 예약이 완료되었습니다.' : '전날 알림 문자가 즉시 발송되었습니다.');
       } catch (e) {
         alert('발송 실패: ' + e.message);
       } finally {
@@ -2217,7 +2218,7 @@ function App() {
             }`}
           >
             <span className="material-symbols-outlined text-[12px]">wb_twilight</span>
-            {sendingType === 'morning' ? '처리중' : ((c.is_morning_alert_sent || c.sms_sent_reminder) ? '예약완료' : '아침알림')}
+            {sendingType === 'morning' ? '처리중' : ((c.is_morning_alert_sent || c.sms_sent_reminder) ? '예약완료' : '전날알림')}
           </button>
 
           <button onClick={(e) => { e.stopPropagation(); handleEdit(c); }} className="flex-none px-3 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all">
@@ -3715,7 +3716,7 @@ function App() {
                       <textarea value={editConfirmedTemplate} onChange={e => setEditConfirmedTemplate(e.target.value)} className="w-full h-20 p-3 text-xs bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium" />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-bold text-slate-500 mb-1">당일 아침 8시 자동 알림</label>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">하루 전날 자동 알림</label>
                       <textarea value={editMorningReminderTemplate} onChange={e => setEditMorningReminderTemplate(e.target.value)} className="w-full h-20 p-3 text-xs bg-slate-50 border rounded-xl outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium" />
                     </div>
                     <div className="flex flex-col gap-2 mt-4">
@@ -3728,8 +3729,8 @@ function App() {
                       </label>
                       <label className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors">
                         <div>
-                          <span className="text-xs font-black text-slate-700 flex items-center gap-1"><span className="material-symbols-outlined text-sm text-orange-500">alarm</span> 당일 아침 8시 자동 알림 발송</span>
-                          <p className="text-[9px] text-slate-400 font-bold mt-0.5">당일 작업 대상자에게 아침 8시에 알림을 보냅니다.</p>
+                          <span className="text-xs font-black text-slate-700 flex items-center gap-1"><span className="material-symbols-outlined text-sm text-orange-500">alarm</span> 하루 전날 자동 알림 발송</span>
+                          <p className="text-[9px] text-slate-400 font-bold mt-0.5">내일 작업 대상자에게 하루 전날 알림을 보냅니다.</p>
                         </div>
                         <input type="checkbox" checked={editAutoMorningReminders} onChange={e => setEditAutoMorningReminders(e.target.checked)} className="w-5 h-5 accent-primary rounded-lg" />
                       </label>
@@ -5216,7 +5217,7 @@ function App() {
               {[
                 { icon: 'calendar_month', title: '📅 일정 및 예약 관리', text: '달력에서 날짜를 선택하여 당일 예약을 확인하거나, 하단 [예약] 탭에서 새 일정을 등록합니다. 항목을 길게 누르면 수정/삭제됩니다.' },
                 { icon: 'photo_camera', title: '📸 작업 보고서 및 발송', text: '항목의 [작업 완료 체크]를 눌러 전/후 사진을 등록하세요. 워터마크가 첨부된 사진과 완료 메시지가 고객에게 원클릭 전송됩니다.' },
-                { icon: 'sms', title: '💬 솔라피 자동 문자 연동', text: '설정에서 솔라피 API를 연동하면 예약 즉시 안내 문자 및 당일 아침 알림이 자동으로 발송되어 시간을 절약해 줍니다.' },
+                { icon: 'sms', title: '💬 솔라피 자동 문자 연동', text: '설정에서 솔라피 API를 연동하면 예약 즉시 안내 문자 및 하루 전날 알림이 자동으로 발송되어 시간을 절약해 줍니다.' },
                 { icon: 'monitoring', title: '📊 매출 및 지출/세무 관리', text: '통계 탭에서 매출 추이를 확인하고, 세무 탭에서 예상 부가세 계산 및 엑셀 자료 다운로드가 가능합니다.' },
                 { icon: 'shopping_bag', title: '🛍️ 프로 샵 이용하기', text: '청소 전문가를 위한 고성능 장비를 엄선하여 최저가 링크를 제공합니다.' },
                 { icon: 'install_mobile', title: '📱 앱 설치 (홈 화면 추가)', text: '아이폰(사파리 공유 > 홈 화면 추가), 안드로이드(크롬 메뉴 > 홈 화면 추가)를 통해 일반 앱처럼 사용하세요.' }

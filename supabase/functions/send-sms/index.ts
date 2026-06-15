@@ -224,12 +224,13 @@ Deno.serve(async (req: any) => {
             })
         }
 
-        // 2. Cron (스케줄러) 모드: 오늘 예약자 아침 8시 알림
+        // 2. Cron (스케줄러) 모드: 내일 예약자 하루 전날 알림
         if (payload.action === 'send_morning_reminders' || (!payload.type && !payload.action)) {
             const today = new Date()
             // Supabase Edge Function은 UTC이므로 한국 시간(KST)으로 수동 변환 (+9시간)
-            const kstTime = new Date(today.getTime() + (9 * 60 * 60 * 1000))
-            const todayStr = kstTime.toISOString().split('T')[0]
+            // 하루 전날 알림이므로, 내일 날짜를 구함 (+1일 = 24시간)
+            const kstTimeTomorrow = new Date(today.getTime() + (9 * 60 * 60 * 1000) + (24 * 60 * 60 * 1000))
+            const targetDateStr = kstTimeTomorrow.toISOString().split('T')[0]
 
             // 먼저 자동 발송이 활성화된 업체 리스트 가져오기
             const { data: activeBusinesses } = await supabase.from('businesses').select('id').eq('auto_morning_reminders', true)
@@ -244,7 +245,7 @@ Deno.serve(async (req: any) => {
             const { data: bookings, error } = await supabase
                 .from('bookings')
                 .select('*')
-                .eq('book_date', todayStr)
+                .eq('book_date', targetDateStr)
                 .in('business_id', activeBusinessIds)
                 .or('sms_sent_reminder.is.null,sms_sent_reminder.eq.false')
 
@@ -253,7 +254,7 @@ Deno.serve(async (req: any) => {
             let sentCount = 0
             for (const b of bookings) {
                 if (b.is_samsung_check) {
-                    console.log(`[Cron:Morning] Skipping booking ${b.id} because is_samsung_check is true.`);
+                    console.log(`[Cron:Reminder] Skipping booking ${b.id} because is_samsung_check is true.`);
                     continue;
                 }
                 if (!b.phone || b.phone.length < 10) continue
@@ -262,7 +263,7 @@ Deno.serve(async (req: any) => {
                 const { data: business } = await supabase.from('businesses').select('*').eq('id', b.business_id).maybeSingle()
                 const { data: profile } = await supabase.from('profiles').select('*').eq('id', b.user_id).maybeSingle()
 
-                const reminderTpl = business?.morning_reminder_template || `[알림] 오늘 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`
+                const reminderTpl = business?.morning_reminder_template || `[알림] 내일 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`
                 const timeVal = b.book_time_type === '직접입력' ? b.book_time_custom : b.book_time_type
                 const dateTimeStr = `${b.book_date} ${timeVal}`
 
@@ -283,7 +284,7 @@ Deno.serve(async (req: any) => {
                 }
             }
 
-            return new Response(JSON.stringify({ message: `Sent ${sentCount} reminders for ${todayStr}` }), {
+            return new Response(JSON.stringify({ message: `Sent ${sentCount} reminders for ${targetDateStr}` }), {
                 status: 200,
                 headers: { ...corsHeaders, 'Content-Type': 'application/json' }
             })
