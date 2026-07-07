@@ -236,7 +236,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.2.2"; // 현재 버젼
+  const APP_VERSION = "v1.2.3"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -2199,7 +2199,7 @@ function App() {
             {(() => {
               const region = ['속초', '양양', '고성', '인제'].find(r => c.address?.includes(r));
               return region ? (
-                <span className={`text-[10px] text-white font-black px-2 py-0.5 rounded-full mb-1 shadow-sm ${getRegionColor(c.address)}`}>
+                <span className={`text-[10px] text-white font-black px-2 py-0.5 rounded-full mb-1 shadow-sm mr-8 ${getRegionColor(c.address)}`}>
                   {region}
                 </span>
               ) : null;
@@ -2864,12 +2864,11 @@ function App() {
                         {dObj.getDate()}
                       </div>
                       
-                      <div className="flex items-center justify-center mt-1 h-4 gap-0.5 px-1 flex-wrap">
-                        {dList.slice(0, 4).map((c, i) => (
-                          <div key={i} className={`w-1.5 h-1.5 rounded-full ${getRegionColor(c.address)}`}></div>
-                        ))}
-                        {dList.length > 4 && (
-                          <div className="text-[8px] font-bold text-slate-500 ml-0.5">+{dList.length - 4}</div>
+                      <div className="flex items-center justify-center mt-1 h-4">
+                        {count > 0 && (
+                          <div className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] flex items-center justify-center font-black">
+                            {count}
+                          </div>
                         )}
                       </div>
                     </div>
