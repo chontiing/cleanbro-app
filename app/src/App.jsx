@@ -236,7 +236,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.2.6"; // 현재 버젼
+  const APP_VERSION = "v1.2.7"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -300,10 +300,10 @@ function App() {
 4. memo: 기타 참고사항이나 예약 일시, 품목 등 (알 수 없으면 빈 문자열)
 [출력 포맷]
 {
-  "name": "고객명",
-  "phone": "전화번호",
-  "address": "주소",
-  "memo": "메모"
+  "name": "",
+  "phone": "",
+  "address": "",
+  "memo": ""
 }
 
 [텍스트 원본]
@@ -314,7 +314,6 @@ ${pasteText}`;
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: promptText }] }],
-          generationConfig: { responseMimeType: "application/json" },
           safetySettings: [
             { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
             { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
@@ -325,25 +324,51 @@ ${pasteText}`;
       });
 
       const data = await response.json();
+      
+      let parsed = null;
       if (data.candidates && data.candidates.length > 0) {
         let text = data.candidates[0].content.parts[0].text;
         text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-        try {
-          const parsed = JSON.parse(text);
-          if (parsed.name) setCustomerName(parsed.name);
-          if (parsed.phone) {
-            let p = parsed.phone.replace(/^\+82\s?10/, '010').replace(/^\+82\s?-?10/, '010');
-            if (p.startsWith('8210')) p = '0' + p.substring(2);
-            setNewPhone(p);
-          }
-          if (parsed.address) setAddress(parsed.address);
-          if (parsed.memo) setNewMemo(parsed.memo);
-          setPasteText(''); // Clear text
-          alert('텍스트 분석 완료: 폼에 자동으로 입력되었습니다!');
-        } catch (err) {
-          console.error('JSON Parse Error:', err);
-          alert('AI가 반환한 데이터의 형식을 처리할 수 없습니다.');
+        try { parsed = JSON.parse(text); } catch(e) { console.error('JSON Parse Error:', e); }
+      }
+
+      if (parsed) {
+        if (parsed.name) setCustomerName(parsed.name);
+        if (parsed.phone) {
+          let p = parsed.phone.replace(/^\+82\s?10/, '010').replace(/^\+82\s?-?10/, '010');
+          if (p.startsWith('8210')) p = '0' + p.substring(2);
+          setNewPhone(p);
         }
+        if (parsed.address) setAddress(parsed.address);
+        if (parsed.memo) setNewMemo(parsed.memo);
+      }
+
+      // [강력한 기본 추출기 Fallback] AI가 실패했거나, 너무 짧아서 전화번호/주소를 누락한 경우
+      let fallbackUsed = false;
+      if (!parsed || !parsed.phone || !parsed.address) {
+        const phoneRegex = /(?:010|\+82\s?10|82\s?10)[-.\s]?\d{4}[-.\s]?\d{4}/;
+        const phoneMatch = pasteText.match(phoneRegex);
+        if (phoneMatch && (!parsed || !parsed.phone)) {
+          let p = phoneMatch[0].replace(/[-.\s]/g, '').replace(/^(?:\+82|82)/, '0');
+          if (p.length === 11) p = `${p.slice(0,3)}-${p.slice(3,7)}-${p.slice(7)}`;
+          setNewPhone(p);
+          fallbackUsed = true;
+        }
+        
+        let addressStr = pasteText.replace(phoneRegex, '').trim();
+        // 남은 텍스트가 4글자 이상이면 주소/메모로 간주
+        if (addressStr.length >= 4 && (!parsed || !parsed.address)) {
+          setAddress(addressStr);
+          fallbackUsed = true;
+        }
+      }
+
+      setPasteText(''); // Clear text
+      
+      if (parsed && !fallbackUsed) {
+        alert('텍스트 분석 완료: 폼에 자동으로 입력되었습니다!');
+      } else if (fallbackUsed) {
+        alert('문자열 패턴 분석으로 전화번호와 텍스트를 찾았습니다. 주소가 맞는지 확인해주세요.');
       } else {
         alert('텍스트에서 정보를 추출하지 못했습니다.');
       }
@@ -386,7 +411,6 @@ ${pasteText}`;
                   { inlineData: { mimeType: file.type, data: base64Data } }
                 ]
               }],
-              generationConfig: { responseMimeType: "application/json" },
               safetySettings: [
                 { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
                 { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
