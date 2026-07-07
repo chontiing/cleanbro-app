@@ -97,6 +97,15 @@ const truncateToSMS = (str) => {
   return result;
 };
 
+// 지역별 색상 지정 유틸리티
+const getRegionColor = (address) => {
+  if (!address) return 'bg-slate-400';
+  if (address.includes('속초')) return 'bg-blue-500';
+  if (address.includes('양양')) return 'bg-emerald-500';
+  if (address.includes('고성')) return 'bg-purple-500';
+  if (address.includes('인제')) return 'bg-amber-500';
+  return 'bg-slate-400';
+};
 
 function App() {
   const [session, setSession] = useState(null);
@@ -227,7 +236,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.2.0"; // 현재 버젼
+  const APP_VERSION = "v1.2.1"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -2172,7 +2181,12 @@ function App() {
             >
               {c.customer_name || '이름 없음'}
               {c.is_completed && <span className="material-symbols-outlined text-[#10B981] text-[18px] ml-1">check_circle</span>}
-              {c.address && <span className="text-[10px] font-bold text-gray-400 ml-1.5 truncate max-w-[130px]">({c.address.split(' ').slice(0, 2).join(' ')})</span>}
+              {c.address && (
+                <span className="flex items-center text-[10px] font-bold text-gray-400 ml-1.5 truncate max-w-[130px]">
+                  <span className={`w-1.5 h-1.5 rounded-full mr-1 flex-shrink-0 ${getRegionColor(c.address)}`}></span>
+                  ({c.address.split(' ').slice(0, 2).join(' ')})
+                </span>
+              )}
             </h4>
 
             <div className="flex items-center gap-1.5 mt-0.5">
@@ -2847,19 +2861,12 @@ function App() {
                         {dObj.getDate()}
                       </div>
                       
-                      <div className="flex items-center justify-center mt-1 h-4">
-                        {count === 1 && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-[#3B82F6]"></div>
-                        )}
-                        {count >= 2 && count <= 3 && (
-                          <div className="w-4 h-4 rounded-full bg-[#3B82F6] text-white text-[9px] flex items-center justify-center font-black">
-                            {count}
-                          </div>
-                        )}
-                        {count >= 4 && (
-                          <div className="w-4 h-4 rounded-full bg-[#1E3A8A] text-white text-[9px] flex items-center justify-center font-black">
-                            {count}
-                          </div>
+                      <div className="flex items-center justify-center mt-1 h-4 gap-0.5 px-1 flex-wrap">
+                        {dList.slice(0, 4).map((c, i) => (
+                          <div key={i} className={`w-1.5 h-1.5 rounded-full ${getRegionColor(c.address)}`}></div>
+                        ))}
+                        {dList.length > 4 && (
+                          <div className="text-[8px] font-bold text-slate-500 ml-0.5">+{dList.length - 4}</div>
                         )}
                       </div>
                     </div>
@@ -2936,7 +2943,8 @@ function App() {
                                 <div className={`absolute left-0 top-3 bottom-3 w-[4px] rounded-r-full ${statusColor}`}></div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                                    <p className={`text-xs font-bold truncate ${c.is_completed ? 'text-gray-400' : 'text-slate-800 dark:text-slate-100'}`}>
+                                    <p className={`text-xs font-bold truncate ${c.is_completed ? 'text-gray-400' : 'text-slate-800 dark:text-slate-100'} flex items-center`}>
+                                      <span className={`w-1.5 h-1.5 rounded-full inline-block mr-1.5 flex-shrink-0 ${getRegionColor(c.address)}`}></span>
                                       {c.customer_name || '이름 없음'}
                                     </p>
                                     {c.is_samsung_check && (
