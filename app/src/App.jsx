@@ -236,7 +236,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.2.5"; // 현재 버젼
+  const APP_VERSION = "v1.2.6"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -313,7 +313,14 @@ ${pasteText}`;
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }] }]
+          contents: [{ parts: [{ text: promptText }] }],
+          generationConfig: { responseMimeType: "application/json" },
+          safetySettings: [
+            { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+            { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+          ]
         })
       });
 
@@ -378,7 +385,14 @@ ${pasteText}`;
                   { text: promptText },
                   { inlineData: { mimeType: file.type, data: base64Data } }
                 ]
-              }]
+              }],
+              generationConfig: { responseMimeType: "application/json" },
+              safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+              ]
             })
           });
 
@@ -3156,9 +3170,9 @@ ${pasteText}`;
 
             <div className="space-y-3 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
               <h3 className="text-sm font-bold text-primary flex items-center gap-1">
-                <span className="material-symbols-outlined text-[18px]">smart_toy</span> 예약 내용 텍스트/이미지로 쓱싹 추출
+                <span className="material-symbols-outlined text-[18px]">smart_toy</span> 예약 내용 AI 쓱싹 추출
               </h3>
-              <p className="text-[10px] text-slate-500">고객의 카톡을 붙여넣거나 캡처 이미지를 올리면 정보가 자동으로 입력됩니다!</p>
+              <p className="text-[10px] text-slate-500">고객의 카톡을 붙여넣거나 마이크로 말하면 정보가 자동으로 입력됩니다!</p>
               <div className="flex flex-col gap-2 mb-3">
                 <div className="flex gap-2">
                   <input 
@@ -3189,43 +3203,7 @@ ${pasteText}`;
                   </button>
                 </div>
               </div>
-              <div>
-                <label className="block text-[10px] font-semibold text-slate-500 mb-1">기본 지역 힌트</label>
-                <div className="flex gap-2 flex-wrap mb-2">
-                  {['지역 선택 안함', '속초', '고성', '양양', '인제'].map(loc => (
-                    <button
-                      key={loc}
-                      type="button"
-                      onClick={() => setRegionHint(loc)}
-                      className={`px-3 py-1 text-xs font-bold rounded-full transition-all border ${regionHint === loc ? 'bg-primary text-white border-primary shadow-sm' : 'bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                    >
-                      {loc}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="relative">
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  onChange={handleImageExtraction} 
-                  disabled={isExtracting}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed" 
-                />
-                <div className={`w-full bg-white dark:bg-slate-800 border-2 border-dashed ${isExtracting ? 'border-primary/50 bg-primary/5' : 'border-slate-200 dark:border-slate-700 hover:border-primary/50'} rounded-xl p-4 flex flex-col items-center justify-center gap-2 transition-all`}>
-                  {isExtracting ? (
-                    <>
-                      <span className="material-symbols-outlined animate-spin text-primary">autorenew</span>
-                      <span className="text-xs font-bold text-primary">AI가 이미지를 분석하고 있습니다...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="material-symbols-outlined text-slate-400">upload_file</span>
-                      <span className="text-xs font-bold text-slate-500">클릭하여 이미지 첨부</span>
-                    </>
-                  )}
-                </div>
-              </div>
+
             </div>
 
             <div className="space-y-3">
