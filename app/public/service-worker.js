@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cleanbro-cache-v1.2.4';
+const CACHE_NAME = 'cleanbro-cache-v1.2.5';
 const urlsToCache = [
     '/',
     '/index.html',

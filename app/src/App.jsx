@@ -236,7 +236,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.2.4"; // 현재 버젼
+  const APP_VERSION = "v1.2.5"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -248,6 +248,40 @@ function App() {
   // ==========================================
   // [이미지 추출 (Gemini Vision API)]
   // ==========================================
+  const toggleListen = () => {
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("현재 브라우저는 음성 인식을 지원하지 않습니다. 크롬 브라우저를 이용해주세요.");
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ko-KR';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognitionRef.current = recognition;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      setPasteText(prev => prev + (prev ? ' ' : '') + transcript);
+    };
+    recognition.onerror = (event) => {
+      console.error(event.error);
+      setIsListening(false);
+      alert('음성 인식 중 오류가 발생했습니다.');
+    };
+    recognition.onend = () => setIsListening(false);
+    
+    recognition.start();
+  };
+
   const handleTextExtraction = async () => {
     if (!pasteText.trim()) return;
     setIsExtracting(true);
@@ -756,6 +790,8 @@ ${pasteText}`;
   const [customerName, setCustomerName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [pasteText, setPasteText] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef(null);
   const [address, setAddress] = useState('');
   const [addressDetail, setAddressDetail] = useState('');
   const [hasCashReceipt, setHasCashReceipt] = useState(false);
@@ -783,6 +819,24 @@ ${pasteText}`;
   const [serviceType, setServiceType] = useState('에어컨'); // 썸네일용 서비스 종류
   const [modelName, setModelName] = useState(''); // 썸네일용 모델명
   const [isSavingBooking, setIsSavingBooking] = useState(false);
+
+  useEffect(() => {
+    // 3번 기능: 기존 고객 자동완성
+    if (newPhone && newPhone.length >= 10 && !editingId) {
+      const formattedPhone = newPhone.replace(/-/g, '');
+      const existing = [...customers]
+        .sort((a,b) => new Date(b.created_at) - new Date(a.created_at))
+        .find(c => c.phone && c.phone.replace(/-/g, '') === formattedPhone && c.address);
+      
+      if (existing) {
+        if (!customerName && existing.customer_name) setCustomerName(existing.customer_name);
+        if (!address && existing.address) {
+          setAddress(existing.address);
+          setAddressDetail(existing.address_detail || '');
+        }
+      }
+    }
+  }, [newPhone, editingId, customers]);
 
   useEffect(() => {
     if (!assignee && myNickname) {
@@ -3111,10 +3165,19 @@ ${pasteText}`;
                     type="text" 
                     value={pasteText} 
                     onChange={(e) => setPasteText(e.target.value)} 
-                    placeholder="고객의 문자/카톡 내용을 이곳에 붙여넣으세요..." 
+                    placeholder="문자 복붙 또는 마이크를 눌러 말해보세요..." 
                     className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none"
                     disabled={isExtracting}
                   />
+                  <button 
+                    type="button" 
+                    onClick={toggleListen}
+                    disabled={isExtracting}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold flex flex-col items-center justify-center shrink-0 transition-colors ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-200 text-slate-600'}`}
+                  >
+                    <span className="material-symbols-outlined text-[16px] mb-0.5">mic</span>
+                    <span>{isListening ? '듣는중' : '음성'}</span>
+                  </button>
                   <button 
                     type="button" 
                     onClick={handleTextExtraction}
@@ -3122,7 +3185,7 @@ ${pasteText}`;
                     className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold flex flex-col items-center justify-center shrink-0 disabled:opacity-50"
                   >
                     <span className="material-symbols-outlined text-[16px] mb-0.5">smart_toy</span>
-                    <span>텍스트 분석</span>
+                    <span>AI 분석</span>
                   </button>
                 </div>
               </div>
