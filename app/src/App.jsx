@@ -236,7 +236,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.2.3"; // 현재 버젼
+  const APP_VERSION = "v1.2.4"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -248,6 +248,72 @@ function App() {
   // ==========================================
   // [이미지 추출 (Gemini Vision API)]
   // ==========================================
+  const handleTextExtraction = async () => {
+    if (!pasteText.trim()) return;
+    setIsExtracting(true);
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCW_pJGBIMfFQP_c6oVSIVf1FxkhPb7ma0";
+      if (!apiKey) {
+        alert('Gemini API 키가 설정되지 않았습니다.');
+        setIsExtracting(false);
+        return;
+      }
+      const promptText = `다음 텍스트는 고객의 예약 문의 메시지입니다. 텍스트를 분석하여 데이터만 추출하고 순수 JSON 형식으로만 응답하세요. 마크다운 서식이나 앞뒤 설명은 완전히 제외해야 합니다.
+[추출 규칙]
+1. name: 고객 이름 (알 수 없으면 빈 문자열)
+2. phone: 숫자와 하이픈(-)만 포함된 형태로 통일 (예: 010-1234-5678). +82 또는 82로 시작하는 국가코드가 있으면 반드시 010으로 시작하도록 변경하세요 (예: +82 10-1234-5678 -> 010-1234-5678).
+3. address: 주소 전체 (동, 호수 등 상세 주소 포함). 기본 지역 힌트: ${regionHint !== '지역 선택 안함' ? regionHint : '내용 참고'}
+4. memo: 기타 참고사항이나 예약 일시, 품목 등 (알 수 없으면 빈 문자열)
+[출력 포맷]
+{
+  "name": "고객명",
+  "phone": "전화번호",
+  "address": "주소",
+  "memo": "메모"
+}
+
+[텍스트 원본]
+${pasteText}`;
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptText }] }]
+        })
+      });
+
+      const data = await response.json();
+      if (data.candidates && data.candidates.length > 0) {
+        let text = data.candidates[0].content.parts[0].text;
+        text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+        try {
+          const parsed = JSON.parse(text);
+          if (parsed.name) setCustomerName(parsed.name);
+          if (parsed.phone) {
+            let p = parsed.phone.replace(/^\+82\s?10/, '010').replace(/^\+82\s?-?10/, '010');
+            if (p.startsWith('8210')) p = '0' + p.substring(2);
+            setNewPhone(p);
+          }
+          if (parsed.address) setAddress(parsed.address);
+          if (parsed.memo) setNewMemo(parsed.memo);
+          setPasteText(''); // Clear text
+          alert('텍스트 분석 완료: 폼에 자동으로 입력되었습니다!');
+        } catch (err) {
+          console.error('JSON Parse Error:', err);
+          alert('AI가 반환한 데이터의 형식을 처리할 수 없습니다.');
+        }
+      } else {
+        alert('텍스트에서 정보를 추출하지 못했습니다.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('분석 중 오류가 발생했습니다.');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   const handleImageExtraction = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -288,7 +354,11 @@ function App() {
             text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
             try {
               const parsed = JSON.parse(text);
-              if (parsed.phone) setNewPhone(parsed.phone);
+              if (parsed.phone) {
+                let p = parsed.phone.replace(/^\+82\s?10/, '010').replace(/^\+82\s?-?10/, '010');
+                if (p.startsWith('8210')) p = '0' + p.substring(2);
+                setNewPhone(p);
+              }
               if (parsed.address) setAddress(parsed.address);
               alert('이미지 분석 완료: 전화번호와 주소가 폼에 반영되었습니다!');
             } catch (err) {
@@ -685,6 +755,7 @@ function App() {
   const [editingId, setEditingId] = useState(null);
   const [customerName, setCustomerName] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [pasteText, setPasteText] = useState('');
   const [address, setAddress] = useState('');
   const [addressDetail, setAddressDetail] = useState('');
   const [hasCashReceipt, setHasCashReceipt] = useState(false);
@@ -3031,9 +3102,30 @@ function App() {
 
             <div className="space-y-3 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
               <h3 className="text-sm font-bold text-primary flex items-center gap-1">
-                <span className="material-symbols-outlined text-[18px]">photo_camera</span> 이미지로 정보 쓱싹 추출
+                <span className="material-symbols-outlined text-[18px]">smart_toy</span> 예약 내용 텍스트/이미지로 쓱싹 추출
               </h3>
-              <p className="text-[10px] text-slate-500">캡처 이미지를 올리면 전화번호와 주소가 자동으로 입력됩니다!</p>
+              <p className="text-[10px] text-slate-500">고객의 카톡을 붙여넣거나 캡처 이미지를 올리면 정보가 자동으로 입력됩니다!</p>
+              <div className="flex flex-col gap-2 mb-3">
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={pasteText} 
+                    onChange={(e) => setPasteText(e.target.value)} 
+                    placeholder="고객의 문자/카톡 내용을 이곳에 붙여넣으세요..." 
+                    className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary outline-none"
+                    disabled={isExtracting}
+                  />
+                  <button 
+                    type="button" 
+                    onClick={handleTextExtraction}
+                    disabled={isExtracting || !pasteText.trim()}
+                    className="bg-primary text-white px-4 py-2 rounded-xl text-sm font-bold flex flex-col items-center justify-center shrink-0 disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[16px] mb-0.5">smart_toy</span>
+                    <span>텍스트 분석</span>
+                  </button>
+                </div>
+              </div>
               <div>
                 <label className="block text-[10px] font-semibold text-slate-500 mb-1">기본 지역 힌트</label>
                 <div className="flex gap-2 flex-wrap mb-2">
