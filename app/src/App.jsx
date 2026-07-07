@@ -236,7 +236,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.2.1"; // 현재 버젼
+  const APP_VERSION = "v1.2.2"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -2181,12 +2181,7 @@ function App() {
             >
               {c.customer_name || '이름 없음'}
               {c.is_completed && <span className="material-symbols-outlined text-[#10B981] text-[18px] ml-1">check_circle</span>}
-              {c.address && (
-                <span className="flex items-center text-[10px] font-bold text-gray-400 ml-1.5 truncate max-w-[130px]">
-                  <span className={`w-1.5 h-1.5 rounded-full mr-1 flex-shrink-0 ${getRegionColor(c.address)}`}></span>
-                  ({c.address.split(' ').slice(0, 2).join(' ')})
-                </span>
-              )}
+              {c.address && <span className="text-[10px] font-bold text-gray-400 ml-1.5 truncate max-w-[130px]">({c.address.split(' ').slice(0, 2).join(' ')})</span>}
             </h4>
 
             <div className="flex items-center gap-1.5 mt-0.5">
@@ -2200,7 +2195,15 @@ function App() {
               )}
             </div>
           </div>
-          <div className="text-right">
+          <div className="text-right flex flex-col items-end">
+            {(() => {
+              const region = ['속초', '양양', '고성', '인제'].find(r => c.address?.includes(r));
+              return region ? (
+                <span className={`text-[10px] text-white font-black px-2 py-0.5 rounded-full mb-1 shadow-sm ${getRegionColor(c.address)}`}>
+                  {region}
+                </span>
+              ) : null;
+            })()}
             <p className="font-black text-blue-600 text-lg leading-tight">{fmtNum(c.final_price)}원</p>
             <p className="text-[9px] font-bold text-gray-400 mt-0.5">{c.payment_method || '미결제'}</p>
           </div>
@@ -2943,8 +2946,7 @@ function App() {
                                 <div className={`absolute left-0 top-3 bottom-3 w-[4px] rounded-r-full ${statusColor}`}></div>
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                                    <p className={`text-xs font-bold truncate ${c.is_completed ? 'text-gray-400' : 'text-slate-800 dark:text-slate-100'} flex items-center`}>
-                                      <span className={`w-1.5 h-1.5 rounded-full inline-block mr-1.5 flex-shrink-0 ${getRegionColor(c.address)}`}></span>
+                                    <p className={`text-xs font-bold truncate ${c.is_completed ? 'text-gray-400' : 'text-slate-800 dark:text-slate-100'}`}>
                                       {c.customer_name || '이름 없음'}
                                     </p>
                                     {c.is_samsung_check && (
@@ -2964,7 +2966,15 @@ function App() {
                                     {c.book_time_type !== '직접입력' && c.book_time_custom ? ` (완료예상: ${c.book_time_custom})` : ''} · {c.product}
                                   </p>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-right flex flex-col items-end gap-0.5">
+                                  {(() => {
+                                    const region = ['속초', '양양', '고성', '인제'].find(r => c.address?.includes(r));
+                                    return region ? (
+                                      <span className={`text-[9px] text-white font-bold px-1.5 py-0.5 rounded shadow-sm ${getRegionColor(c.address)}`}>
+                                        {region}
+                                      </span>
+                                    ) : null;
+                                  })()}
                                   <p className="text-[10px] font-black text-slate-700">{fmtNum(c.final_price)}원</p>
                                 </div>
                               </div>
