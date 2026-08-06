@@ -2417,6 +2417,20 @@ ${pasteText}`;
             {sendingType === 'morning' ? '처리중' : ((c.is_morning_alert_sent || c.sms_sent_reminder) ? '예약완료' : '전날알림')}
           </button>
 
+          <button 
+            disabled={c.is_samsung_check}
+            onClick={(e) => { e.stopPropagation(); handleSendCompletionSms(c); }}
+            title={c.is_samsung_check ? "삼성 체크 건은 문자 발송 제외 대상입니다." : ""}
+            className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
+              c.is_samsung_check 
+                ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-50 pointer-events-none'
+                : 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100 active:scale-[0.98]'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[12px]">send</span>
+            완료문자
+          </button>
+
           <button onClick={(e) => { e.stopPropagation(); handleEdit(c); }} className="flex-none px-3 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all">
             수정
           </button>
@@ -2495,6 +2509,32 @@ ${pasteText}`;
     });
   };
 
+  // --- 개별 완료문자 재전송 ---
+  const handleSendCompletionSms = (c) => {
+    let completionText = businessProfile.default_completion_message ||
+      `[클린브로] 안녕하세요, 고객님!\n{customer_name}님 {memo} 작업이 완료되었습니다.\n깨끗하게 청소해 드렸으니 확인해 주세요. 감사합니다! 😊`;
+    completionText = completionText
+      .replace(/{customer_name}/g, c.customer_name || '고객')
+      .replace(/{memo}/g, c.memo || '')
+      .replace(/{after_url}/g, '');
+
+    if (!c.is_samsung_check) {
+      let guideUrl = '';
+      if ((c.category?.includes('에어컨') || c.product?.includes('에어컨')) && businessProfile?.ac_guide_url) {
+        guideUrl = businessProfile.ac_guide_url;
+      } else if ((c.category?.includes('세탁기') || c.product?.includes('세탁기')) && businessProfile?.washer_guide_url) {
+        guideUrl = businessProfile.washer_guide_url;
+      }
+      if (guideUrl) {
+        completionText += `\n\n💡 [관리 요령 안내]\n아래 링크를 눌러 관리 요령 이미지를 확인해 주세요!\n${guideUrl}`;
+      }
+    }
+
+    const cleanPhone = c.phone.replace(/[^0-9]/g, '');
+    const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
+    window.location.href = `sms:${cleanPhone}${sep}body=${encodeURIComponent(completionText)}`;
+  };
+
   // --- 작업 완료 처리 (사진 첨부 없이 빠른 완료 + 메시지앱 열기 + 블로그 모달) ---
   const handleFinalComplete = async (withSms = true) => {
     setIsUploadingPhotos(true);
@@ -2513,6 +2553,18 @@ ${pasteText}`;
           .replace(/{customer_name}/g, completionTarget.customer_name || '고객')
           .replace(/{memo}/g, completionTarget.memo || '')
           .replace(/{after_url}/g, '');
+
+        if (!completionTarget.is_samsung_check) {
+          let guideUrl = '';
+          if ((completionTarget.category?.includes('에어컨') || completionTarget.product?.includes('에어컨')) && businessProfile?.ac_guide_url) {
+            guideUrl = businessProfile.ac_guide_url;
+          } else if ((completionTarget.category?.includes('세탁기') || completionTarget.product?.includes('세탁기')) && businessProfile?.washer_guide_url) {
+            guideUrl = businessProfile.washer_guide_url;
+          }
+          if (guideUrl) {
+            completionText += `\n\n💡 [관리 요령 안내]\n아래 링크를 눌러 관리 요령 이미지를 확인해 주세요!\n${guideUrl}`;
+          }
+        }
 
         // 메시지앱 열기 (완료 안내문구 pre-fill)
         const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
