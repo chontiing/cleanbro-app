@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: '클린브로',
   webDir: 'dist',
   server: {
-    url: 'http://192.168.219.105:5174',
+    url: 'http://192.168.219.114:5173',
     cleartext: true
   }
 };

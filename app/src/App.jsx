@@ -163,6 +163,8 @@ function App() {
   const [showConfettiOnce, setShowConfettiOnce] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [completionTarget, setCompletionTarget] = useState(null);
+  const [completionPhotoFile, setCompletionPhotoFile] = useState(null);
+  const [completionPhotoPreview, setCompletionPhotoPreview] = useState(null);
   const [beforeFiles, setBeforeFiles] = useState([]);
   const [afterFiles, setAfterFiles] = useState([]);
   const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
@@ -499,8 +501,8 @@ ${pasteText}`;
       }
     });
 
-    // 서비스 워커 등록 및 업데이트 감지
-    if ('serviceWorker' in navigator) {
+    // 서비스 워커 등록 및 업데이트 감지 (개발 서버에서는 캐시가 눌러붙어 수정사항이 안 보이므로 배포 빌드에서만 등록)
+    if ('serviceWorker' in navigator && import.meta.env.PROD) {
       navigator.serviceWorker.register('/service-worker.js')
         .then(reg => {
           setSwRegistration(reg);
@@ -2379,6 +2381,8 @@ ${pasteText}`;
               toggleCompletion(c);
             } else {
               setCompletionTarget(c);
+              setCompletionPhotoFile(null);
+              setCompletionPhotoPreview(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
               setShowCompletionModal(true);
             }
           }} className={`flex-1 min-w-[25%] py-1.5 rounded-lg text-[11px] font-bold transition-all border ${c.is_completed ? 'bg-white border-gray-200 text-gray-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 active:scale-[0.98]'}`}>
@@ -2516,7 +2520,7 @@ ${pasteText}`;
     completionText = completionText
       .replace(/{customer_name}/g, c.customer_name || '고객')
       .replace(/{memo}/g, c.memo || '')
-      .replace(/{after_url}/g, '');
+      .replace(/{after_url}/g, c.after_photo_url || '');
 
     if (!c.is_samsung_check) {
       let guideUrl = '';
@@ -2539,9 +2543,24 @@ ${pasteText}`;
   const handleFinalComplete = async (withSms = true) => {
     setIsUploadingPhotos(true);
     try {
+      let afterPhotoUrl = completionTarget.after_photo_url || '';
+
+      if (completionPhotoFile) {
+        const arrayBuffer = await processImage(completionPhotoFile);
+        const fileName = `${myBusinessId}/completion/${completionTarget.id}_${Date.now()}.jpg`;
+        const { error: upErr } = await supabase.storage.from('receipts').upload(fileName, arrayBuffer, {
+          contentType: 'image/jpeg',
+          upsert: false
+        });
+        if (upErr) throw new Error('사진 업로드 실패: ' + upErr.message);
+        const { data: urlData } = supabase.storage.from('receipts').getPublicUrl(fileName);
+        afterPhotoUrl = urlData.publicUrl;
+      }
+
       // DB 완료 처리
       const { error: dbErr } = await supabase.from('bookings').update({
         is_completed: true,
+        after_photo_url: afterPhotoUrl || null,
       }).eq('id', completionTarget.id);
       if (dbErr) throw dbErr;
 
@@ -2552,7 +2571,7 @@ ${pasteText}`;
         completionText = completionText
           .replace(/{customer_name}/g, completionTarget.customer_name || '고객')
           .replace(/{memo}/g, completionTarget.memo || '')
-          .replace(/{after_url}/g, '');
+          .replace(/{after_url}/g, afterPhotoUrl || '');
 
         if (!completionTarget.is_samsung_check) {
           let guideUrl = '';
@@ -2573,6 +2592,8 @@ ${pasteText}`;
       }
 
       setShowCompletionModal(false);
+      setCompletionPhotoFile(null);
+      setCompletionPhotoPreview(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
       fetchCustomers();
 
     } catch (err) {
@@ -5381,19 +5402,59 @@ ${pasteText}`;
                 <h2 className="text-xl font-black">{completionTarget.customer_name || '고객'}님 작업 완료</h2>
                 <p className="text-xs font-bold text-slate-400 mt-1">현장 사진을 등록하고 고객님께 보고하세요.</p>
               </div>
-              <button onClick={() => setShowCompletionModal(false)} className="p-2 bg-slate-100 rounded-full">
+              <button onClick={() => {
+                setShowCompletionModal(false);
+                setCompletionPhotoFile(null);
+                setCompletionPhotoPreview(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+              }} className="p-2 bg-slate-100 rounded-full">
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
 
-            <div className="flex-1 flex flex-col items-center justify-center px-6 py-10 text-center gap-4">
+            <div className="flex-1 flex flex-col items-center justify-center px-6 py-6 text-center gap-4 overflow-y-auto">
               <span className="text-5xl">✅</span>
               <h3 className="font-black text-xl text-slate-800 dark:text-white">작업 완료 처리할까요?</h3>
               <p className="text-sm text-slate-500 font-medium leading-relaxed">
                 완료를 누르면 <strong>메시지앱</strong>이 열리고<br />
-                완료 안내문구가 자동으로 입력됩니다.<br />
-                <span className="text-blue-500 font-bold">사진 첨부는 블로그 작성 화면</span>에서 이어서 할 수 있어요.
+                완료 안내문구가 자동으로 입력됩니다.
               </p>
+
+              <div className="w-full max-w-xs">
+                {completionPhotoPreview ? (
+                  <div className="relative">
+                    <img src={completionPhotoPreview} className="w-full h-40 object-cover rounded-2xl border shadow-sm" />
+                    <button
+                      onClick={() => {
+                        URL.revokeObjectURL(completionPhotoPreview);
+                        setCompletionPhotoFile(null);
+                        setCompletionPhotoPreview(null);
+                      }}
+                      className="absolute top-2 right-2 bg-black/60 text-white rounded-full p-1.5"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">close</span>
+                    </button>
+                  </div>
+                ) : (
+                  <label className="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-slate-300 rounded-2xl py-6 cursor-pointer hover:border-primary hover:bg-primary/5 transition-all">
+                    <span className="material-symbols-outlined text-slate-400 text-2xl">add_a_photo</span>
+                    <span className="text-xs font-bold text-slate-500">작업 완료 사진 첨부 (선택)</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={e => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        setCompletionPhotoFile(file);
+                        setCompletionPhotoPreview(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
+                      }}
+                    />
+                  </label>
+                )}
+                <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                  사진을 첨부하면 완료문자에 사진 링크가 함께 발송돼요. 첨부하지 않으면 링크 없이 발송됩니다.
+                </p>
+              </div>
             </div>
 
             <div className="p-6 shrink-0 border-t bg-white dark:bg-slate-900 pb-10 flex gap-3">
