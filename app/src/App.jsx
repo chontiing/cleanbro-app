@@ -176,6 +176,8 @@ function App() {
   const [productSearchPreview, setProductSearchPreview] = useState(null);
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [isAnalyzingProduct, setIsAnalyzingProduct] = useState(false);
+  const [customGeminiKey, setCustomGeminiKey] = useState(() => localStorage.getItem('custom_gemini_api_key') || '');
+  const [showApiKeySetting, setShowApiKeySetting] = useState(false);
 
   // 블로그 초안 생성 관련 상태
 
@@ -509,9 +511,10 @@ ${pasteText}`;
     setIsAnalyzingProduct(true);
     try {
       const base64Data = await compressImageForAI(file);
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCW_pJGBIMfFQP_c6oVSIVf1FxkhPb7ma0";
+      const apiKey = customGeminiKey.trim() || import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCW_pJGBIMfFQP_c6oVSIVf1FxkhPb7ma0";
       if (!apiKey) {
-        alert('Gemini API 키가 설정되지 않았습니다.');
+        setShowApiKeySetting(true);
+        alert('Gemini API 키가 설정되지 않았습니다. 아래 [API Key 설정]에서 무료 키를 입력해 주세요.');
         setIsAnalyzingProduct(false);
         return;
       }
@@ -525,9 +528,9 @@ ${pasteText}`;
   "fullQuery": "삼성 무풍 2구 스탠드 에어컨 AF17B6474WZ"
 }`;
 
-      const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+      const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-flash-latest'];
       let resultText = '';
-      let lastErr = null;
+      let isKeyInvalid = false;
 
       for (const model of modelsToTry) {
         try {
@@ -551,18 +554,30 @@ ${pasteText}`;
           });
 
           const data = await response.json();
+          if (data.error) {
+            console.error(`Gemini model ${model} error:`, data.error);
+            if (data.error.message?.includes('API key not valid') || data.error.status === 'INVALID_ARGUMENT') {
+              isKeyInvalid = true;
+            }
+          }
           if (data.candidates && data.candidates.length > 0 && data.candidates[0].content?.parts?.[0]?.text) {
             resultText = data.candidates[0].content.parts[0].text;
             break;
           }
         } catch (err) {
           console.warn(`Model ${model} call failed:`, err);
-          lastErr = err;
         }
       }
 
+      if (isKeyInvalid) {
+        setShowApiKeySetting(true);
+        alert('🔑 Gemini API 키가 만료되었거나 올바르지 않습니다.\n\n아래 [Gemini API Key 설정] 카드의 안내에 따라 Google AI Studio 무료 키를 등록해 주세요!');
+        setIsAnalyzingProduct(false);
+        return;
+      }
+
       if (!resultText) {
-        alert('AI 모델명 인식에 실패했습니다. 사진이 흐리거나 지원되지 않는 이미지일 수 있습니다. 모델명을 수동으로 입력해 주세요.');
+        alert('AI 모델명 인식에 실패했습니다. 사진이 너무 어둡거나 모델명이 안 보일 수 있습니다. 아래 폼에 모델명을 직접 입력해 주세요!');
         setIsAnalyzingProduct(false);
         return;
       }
@@ -5218,6 +5233,49 @@ ${pasteText}`;
                 제품 사진을 촬영하거나 모델명을 입력하면 AI가 분해 영상 및 매뉴얼을 찾아드립니다.
               </p>
             </div>
+          </div>
+
+          {/* Gemini API Key 설정 버튼 및 토글 카드 */}
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-2xl p-3 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-base text-amber-600">key</span>
+                Gemini API Key: {customGeminiKey ? <span className="text-green-600 font-extrabold">개인 키 적용됨</span> : <span className="text-slate-500 font-medium">등록 필요</span>}
+              </span>
+              <button
+                onClick={() => setShowApiKeySetting(!showApiKeySetting)}
+                className="text-xs font-bold text-amber-700 underline hover:text-amber-900"
+              >
+                {showApiKeySetting ? '닫기' : 'API Key 설정'}
+              </button>
+            </div>
+
+            {showApiKeySetting && (
+              <div className="pt-2 border-t border-amber-200/60 dark:border-amber-900/40 space-y-2">
+                <p className="text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed font-medium">
+                  AI 사진 인식이 안 될 경우 <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="underline font-bold text-blue-600 dark:text-blue-400">Google AI Studio(무료)</a>에서 발급받은 API 키를 입력해 주세요.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={customGeminiKey}
+                    onChange={e => setCustomGeminiKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      localStorage.setItem('custom_gemini_api_key', customGeminiKey.trim());
+                      alert('✨ Gemini API 키가 저장되었습니다! 다시 사진을 올려주세요.');
+                      setShowApiKeySetting(false);
+                    }}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl transition-all shadow-sm"
+                  >
+                    저장
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 1. 사진으로 제품/라벨 AI 분석 */}
