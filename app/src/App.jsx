@@ -468,39 +468,77 @@ ${pasteText}`;
     }
   };
 
+  const compressImageForAI = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('파일 읽기 실패'));
+      reader.readAsDataURL(file);
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('이미지 로드 실패'));
+        img.src = e.target.result;
+        img.onload = () => {
+          const MAX_SIZE = 1000;
+          let w = img.width;
+          let h = img.height;
+          if (w > h) {
+            if (w > MAX_SIZE) {
+              h = Math.round((h * MAX_SIZE) / w);
+              w = MAX_SIZE;
+            }
+          } else {
+            if (h > MAX_SIZE) {
+              w = Math.round((w * MAX_SIZE) / h);
+              h = MAX_SIZE;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          resolve(dataUrl.split(',')[1]);
+        };
+      };
+    });
+  };
+
   const handleAnalyzeProductImage = async (file) => {
     if (!file) return;
     setIsAnalyzingProduct(true);
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        const base64Data = reader.result.split(',')[1];
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCW_pJGBIMfFQP_c6oVSIVf1FxkhPb7ma0";
-        if (!apiKey) {
-          alert('Gemini API 키가 설정되지 않았습니다.');
-          setIsAnalyzingProduct(false);
-          return;
-        }
+      const base64Data = await compressImageForAI(file);
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCW_pJGBIMfFQP_c6oVSIVf1FxkhPb7ma0";
+      if (!apiKey) {
+        alert('Gemini API 키가 설정되지 않았습니다.');
+        setIsAnalyzingProduct(false);
+        return;
+      }
 
-        const promptText = `이 이미지는 가전제품(에어컨, 세탁기, 청소기 등) 사진 또는 제품 라벨/모델명 스티커입니다. 이미지를 분석하여 브랜드명, 제품 종류, 모델명을 정확히 식별해 주세요. 순수 JSON 형식으로만 응답해야 합니다. 마크다운 서식(json 태그 등)은 완전히 제외하세요.
-[출력 포맷]
+      const promptText = `사진에 보이는 가전제품(에어컨, 세탁기, 청소기 등) 또는 제품 모델명 라벨 스티커를 분석하여 브랜드명, 제품 종류, 모델명을 식별하세요.
+마크다운 서식 없이 순수 JSON 형식으로만 답하세요:
 {
   "brand": "브랜드명 (예: 삼성, LG, 캐리어)",
   "category": "제품 종류 (예: 무풍 2구 스탠드 에어컨, 드럼세탁기)",
   "model": "모델명 (예: AF17B6474WZ)",
-  "fullQuery": "검색에 유용한 통합 제품명 (예: 삼성 무풍 2구 스탠드 에어컨 AF17B6474WZ)"
+  "fullQuery": "삼성 무풍 2구 스탠드 에어컨 AF17B6474WZ"
 }`;
 
+      const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+      let resultText = '';
+      let lastErr = null;
+
+      for (const model of modelsToTry) {
         try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: [{
                 parts: [
                   { text: promptText },
-                  { inlineData: { mimeType: file.type || 'image/jpeg', data: base64Data } }
+                  { inlineData: { mimeType: 'image/jpeg', data: base64Data } }
                 ]
               }],
               safetySettings: [
@@ -513,34 +551,42 @@ ${pasteText}`;
           });
 
           const data = await response.json();
-          if (data.candidates && data.candidates.length > 0) {
-            let text = data.candidates[0].content.parts[0].text;
-            text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-            try {
-              const parsed = JSON.parse(text);
-              const resultQuery = parsed.fullQuery || `${parsed.brand || ''} ${parsed.category || ''} ${parsed.model || ''}`.trim();
-              if (resultQuery) {
-                setProductSearchQuery(resultQuery);
-                alert(`✨ AI 분석 완료: "${resultQuery}"\n아래 분해자료 검색 버튼을 눌러 영상을 확인하세요!`);
-              } else {
-                alert('이미지에서 모델명을 정확히 인식하지 못했습니다. 수동으로 제품명을 입력해 주세요.');
-              }
-            } catch (err) {
-              console.error('JSON Parse Error:', err);
-              if (text) setProductSearchQuery(text.substring(0, 50));
-            }
-          } else {
-            alert('이미지에서 정보를 인식하지 못했습니다. 제품명을 직접 입력해 주세요.');
+          if (data.candidates && data.candidates.length > 0 && data.candidates[0].content?.parts?.[0]?.text) {
+            resultText = data.candidates[0].content.parts[0].text;
+            break;
           }
-        } catch (apiErr) {
-          console.error(apiErr);
-          alert('AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
-        } finally {
-          setIsAnalyzingProduct(false);
+        } catch (err) {
+          console.warn(`Model ${model} call failed:`, err);
+          lastErr = err;
         }
-      };
+      }
+
+      if (!resultText) {
+        alert('AI 모델명 인식에 실패했습니다. 사진이 흐리거나 지원되지 않는 이미지일 수 있습니다. 모델명을 수동으로 입력해 주세요.');
+        setIsAnalyzingProduct(false);
+        return;
+      }
+
+      let cleanText = resultText.replace(/```json/gi, '').replace(/```/g, '').trim();
+      let extractedQuery = '';
+
+      try {
+        const parsed = JSON.parse(cleanText);
+        extractedQuery = parsed.fullQuery || `${parsed.brand || ''} ${parsed.category || ''} ${parsed.model || ''}`.trim();
+      } catch (e) {
+        extractedQuery = cleanText.replace(/[\{\}"']/g, '').replace(/fullQuery:/gi, '').trim();
+      }
+
+      if (extractedQuery) {
+        setProductSearchQuery(extractedQuery);
+        alert(`✨ AI 인식 완료: "${extractedQuery}"\n아래 분해자료 검색 버튼을 누르세요!`);
+      } else {
+        alert('인식 결과를 텍스트로 변환하지 못했습니다. 수동으로 입력해 주세요.');
+      }
     } catch (err) {
       console.error(err);
+      alert('이미지 분석 중 오류가 발생했습니다: ' + (err.message || err));
+    } finally {
       setIsAnalyzingProduct(false);
     }
   };
