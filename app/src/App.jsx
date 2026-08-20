@@ -171,6 +171,12 @@ function App() {
   // 업로드 완료 후 공유 대기 데이터 { files: File[], text: string, fallbackSmsUrl: string }
   const [pendingShare, setPendingShare] = useState(null);
 
+  // 분해자료 검색 (제품검색) 상태
+  const [productSearchFile, setProductSearchFile] = useState(null);
+  const [productSearchPreview, setProductSearchPreview] = useState(null);
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [isAnalyzingProduct, setIsAnalyzingProduct] = useState(false);
+
   // 블로그 초안 생성 관련 상태
 
   const [manualDraftInfo, setManualDraftInfo] = useState({ address: '', category: '에어컨', product: '벽걸이', memo: '' });
@@ -459,6 +465,83 @@ ${pasteText}`;
       console.error(err);
       alert('이미지 처리 중 오류가 발생했습니다.');
       setIsExtracting(false);
+    }
+  };
+
+  const handleAnalyzeProductImage = async (file) => {
+    if (!file) return;
+    setIsAnalyzingProduct(true);
+    try {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        const base64Data = reader.result.split(',')[1];
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCW_pJGBIMfFQP_c6oVSIVf1FxkhPb7ma0";
+        if (!apiKey) {
+          alert('Gemini API 키가 설정되지 않았습니다.');
+          setIsAnalyzingProduct(false);
+          return;
+        }
+
+        const promptText = `이 이미지는 가전제품(에어컨, 세탁기, 청소기 등) 사진 또는 제품 라벨/모델명 스티커입니다. 이미지를 분석하여 브랜드명, 제품 종류, 모델명을 정확히 식별해 주세요. 순수 JSON 형식으로만 응답해야 합니다. 마크다운 서식(json 태그 등)은 완전히 제외하세요.
+[출력 포맷]
+{
+  "brand": "브랜드명 (예: 삼성, LG, 캐리어)",
+  "category": "제품 종류 (예: 무풍 2구 스탠드 에어컨, 드럼세탁기)",
+  "model": "모델명 (예: AF17B6474WZ)",
+  "fullQuery": "검색에 유용한 통합 제품명 (예: 삼성 무풍 2구 스탠드 에어컨 AF17B6474WZ)"
+}`;
+
+        try {
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { text: promptText },
+                  { inlineData: { mimeType: file.type || 'image/jpeg', data: base64Data } }
+                ]
+              }],
+              safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+              ]
+            })
+          });
+
+          const data = await response.json();
+          if (data.candidates && data.candidates.length > 0) {
+            let text = data.candidates[0].content.parts[0].text;
+            text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+            try {
+              const parsed = JSON.parse(text);
+              const resultQuery = parsed.fullQuery || `${parsed.brand || ''} ${parsed.category || ''} ${parsed.model || ''}`.trim();
+              if (resultQuery) {
+                setProductSearchQuery(resultQuery);
+                alert(`✨ AI 분석 완료: "${resultQuery}"\n아래 분해자료 검색 버튼을 눌러 영상을 확인하세요!`);
+              } else {
+                alert('이미지에서 모델명을 정확히 인식하지 못했습니다. 수동으로 제품명을 입력해 주세요.');
+              }
+            } catch (err) {
+              console.error('JSON Parse Error:', err);
+              if (text) setProductSearchQuery(text.substring(0, 50));
+            }
+          } else {
+            alert('이미지에서 정보를 인식하지 못했습니다. 제품명을 직접 입력해 주세요.');
+          }
+        } catch (apiErr) {
+          console.error(apiErr);
+          alert('AI 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.');
+        } finally {
+          setIsAnalyzingProduct(false);
+        }
+      };
+    } catch (err) {
+      console.error(err);
+      setIsAnalyzingProduct(false);
     }
   };
 
@@ -4983,6 +5066,11 @@ ${pasteText}`;
             <p className={`text-[9px] ${currentTab === 'karrot' ? 'font-bold' : 'font-medium'}`}>당근소식</p>
           </button>
 
+          <button onClick={() => setCurrentTab('product_search')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'product_search' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
+            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'product_search' ? 'font-fill' : ''}`}>handyman</span>
+            <p className={`text-[9px] ${currentTab === 'product_search' ? 'font-bold' : 'font-medium'}`}>분해자료</p>
+          </button>
+
           <button onClick={() => setCurrentTab('settings')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'settings' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
             <span className={`material-symbols-outlined text-[24px] ${currentTab === 'settings' ? 'font-fill' : ''}`}>manage_accounts</span>
             <p className={`text-[9px] ${currentTab === 'settings' ? 'font-bold' : 'font-medium'}`}>설정</p>
@@ -5068,6 +5156,215 @@ ${pasteText}`;
                 </div>
               </div>
             ))}
+          </div>
+        </main>
+      )}
+
+      {/* ======================= [탭: 에어컨/가전 분해자료 검색 (Product Disassembly Search)] ======================= */}
+      {currentTab === 'product_search' && (
+        <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-5 animate-slide-up pb-32">
+          <div className="flex justify-between items-end mb-2 mt-4">
+            <div>
+              <h2 className="text-2xl font-black flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <span className="material-symbols-outlined text-blue-500">handyman</span> 분해자료 검색
+              </h2>
+              <p className="text-xs text-slate-500 font-medium mt-1">
+                제품 사진을 촬영하거나 모델명을 입력하면 AI가 분해 영상 및 매뉴얼을 찾아드립니다.
+              </p>
+            </div>
+          </div>
+
+          {/* 1. 사진으로 제품/라벨 AI 분석 */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-extrabold text-base text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-500 text-xl">center_focus_strong</span>
+                사진으로 모델명 인식 (AI Vision)
+              </h3>
+              <span className="text-[11px] font-bold px-2.5 py-1 bg-blue-50 text-blue-600 rounded-full dark:bg-blue-900/30 dark:text-blue-400">Gemini AI</span>
+            </div>
+
+            {productSearchPreview ? (
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-inner max-h-56 flex justify-center bg-slate-950">
+                <img src={productSearchPreview} alt="제품 라벨 미리보기" className="h-56 object-contain" />
+                <button
+                  onClick={() => {
+                    if (productSearchPreview) URL.revokeObjectURL(productSearchPreview);
+                    setProductSearchFile(null);
+                    setProductSearchPreview(null);
+                  }}
+                  className="absolute top-3 right-3 bg-black/70 hover:bg-black text-white p-2 rounded-full backdrop-blur-md transition-all"
+                >
+                  <span className="material-symbols-outlined text-sm">close</span>
+                </button>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 dark:hover:border-blue-500 rounded-2xl py-8 cursor-pointer bg-slate-50/50 dark:bg-slate-800/30 hover:bg-blue-50/30 transition-all text-center px-4">
+                <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shadow-sm">
+                  <span className="material-symbols-outlined text-2xl">photo_camera</span>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-700 dark:text-slate-200">에어컨 / 제품 스티커 사진 선택</p>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">제품 전체 사진 또는 모델명 라벨 촬영/갤러리 선택</p>
+                </div>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    setProductSearchFile(file);
+                    if (productSearchPreview) URL.revokeObjectURL(productSearchPreview);
+                    setProductSearchPreview(URL.createObjectURL(file));
+                    handleAnalyzeProductImage(file);
+                  }}
+                />
+              </label>
+            )}
+
+            {productSearchPreview && (
+              <button
+                disabled={isAnalyzingProduct}
+                onClick={() => handleAnalyzeProductImage(productSearchFile)}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold rounded-2xl flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 disabled:opacity-50 text-sm"
+              >
+                {isAnalyzingProduct ? (
+                  <>
+                    <span className="material-symbols-outlined animate-spin text-lg">sync</span>
+                    AI가 모델명을 분석하는 중...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined text-lg">auto_awesome</span>
+                    사진 재분석하기
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* 2. 제품명 입력 및 빠른 입력 태그 */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm space-y-4">
+            <h3 className="font-extrabold text-base text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <span className="material-symbols-outlined text-indigo-500 text-xl">edit_note</span>
+              검색어 (제품/모델명)
+            </h3>
+
+            <div className="relative">
+              <input
+                type="text"
+                value={productSearchQuery}
+                onChange={e => setProductSearchQuery(e.target.value)}
+                placeholder="예: 삼성 무풍 2구 스탠드 에어컨"
+                className="w-full px-4 py-3.5 pr-10 text-sm font-semibold rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all shadow-inner"
+              />
+              {productSearchQuery && (
+                <button
+                  onClick={() => setProductSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                >
+                  <span className="material-symbols-outlined text-sm">cancel</span>
+                </button>
+              )}
+            </div>
+
+            {/* 빠른 추천 키워드 태그 */}
+            <div>
+              <p className="text-[11px] font-bold text-slate-400 mb-2">자주 찾는 기종 빠른 선택</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  '삼성 무풍 스탠드 에어컨',
+                  'LG 휘센 벽걸이 에어컨',
+                  '캐리어 2구 스탠드 에어컨',
+                  '삼성 무풍 벽걸이',
+                  'LG 시스템 에어컨 4way',
+                  '위니아 벽걸이 에어컨',
+                  'LG 통돌이 세탁기',
+                  '삼성 드럼 세탁기'
+                ].map((tag, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setProductSearchQuery(tag)}
+                    className="text-xs font-semibold px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-900/30 text-slate-600 dark:text-slate-300 rounded-xl transition-all border border-slate-200/60 dark:border-slate-700"
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 3. 검색 바로가기 카드 (유튜브 / 네이버 / 구글) */}
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-100 dark:border-slate-800 shadow-sm space-y-4">
+            <h3 className="font-extrabold text-base text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <span className="material-symbols-outlined text-red-500 text-xl">play_circle</span>
+              분해자료 / 영상 검색결과 열기
+            </h3>
+
+            {productSearchQuery.trim() ? (
+              <div className="space-y-3">
+                <a
+                  href={`https://www.youtube.com/results?search_query=${encodeURIComponent(productSearchQuery.trim() + ' 분해')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-4 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white rounded-2xl shadow-lg shadow-red-500/20 active:scale-[0.99] transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-2xl text-white">play_arrow</span>
+                    </div>
+                    <div>
+                      <p className="font-extrabold text-sm group-hover:underline">유튜브 (YouTube) 분해 영상</p>
+                      <p className="text-[11px] text-red-100 font-medium">"{productSearchQuery.trim()} 분해" 영상 검색</p>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-xl">open_in_new</span>
+                </a>
+
+                <a
+                  href={`https://search.naver.com/search.naver?query=${encodeURIComponent(productSearchQuery.trim() + ' 분해')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-4 bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white rounded-2xl shadow-lg shadow-emerald-500/20 active:scale-[0.99] transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-2xl text-white">article</span>
+                    </div>
+                    <div>
+                      <p className="font-extrabold text-sm group-hover:underline">네이버 (Naver) 블로그/카페 검색</p>
+                      <p className="text-[11px] text-emerald-100 font-medium">실제 청소기사 분해 후기 및 팁</p>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-xl">open_in_new</span>
+                </a>
+
+                <a
+                  href={`https://www.google.com/search?q=${encodeURIComponent(productSearchQuery.trim() + ' 분해')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white rounded-2xl shadow-lg shadow-blue-500/20 active:scale-[0.99] transition-all group"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-2xl text-white">search</span>
+                    </div>
+                    <div>
+                      <p className="font-extrabold text-sm group-hover:underline">구글 (Google) 매뉴얼 & 도면 검색</p>
+                      <p className="text-[11px] text-blue-100 font-medium">분해 순서도, 부품 매뉴얼 검색</p>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-xl">open_in_new</span>
+                </a>
+              </div>
+            ) : (
+              <div className="py-8 px-4 text-center bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                <span className="material-symbols-outlined text-slate-300 text-4xl mb-2">find_in_page</span>
+                <p className="text-sm font-bold text-slate-500">제품 사진을 찍거나 모델명을 입력해 주세요</p>
+                <p className="text-xs text-slate-400 mt-1">입력된 검색어로 유튜브/네이버/구글 검색 링크가 자동 생성됩니다.</p>
+              </div>
+            )}
           </div>
         </main>
       )}
