@@ -2756,20 +2756,46 @@ ${pasteText}`;
 
       // 이미지 업로드 로직
       if (productImageFile) {
-        const fileExt = productImageFile.name.split('.').pop();
-        const fileName = `product_${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('products')
-          .upload(fileName, productImageFile, { upsert: true });
-
-        if (uploadError) {
-          // products 버킷이 없을 경우를 대비해 logos 버킷 재시도 또는 에러 알림
-          console.error('Upload error, checking bucket:', uploadError);
-          alert('상품 이미지 업로드 실패. 버킷 권한이나 존재 여부를 확인해주세요.');
-          setIsSavingProduct(false);
-          return;
+        let arrayBuffer;
+        try {
+          arrayBuffer = await processImage(productImageFile);
+        } catch (compErr) {
+          arrayBuffer = await productImageFile.arrayBuffer();
         }
-        const { data: publicUrlData } = supabase.storage.from('products').getPublicUrl(fileName);
+
+        const fileName = `products/product_${Date.now()}.jpg`;
+
+        // 1차시도: 'receipts' 버킷
+        let uploadResult = await supabase.storage
+          .from('receipts')
+          .upload(fileName, arrayBuffer, {
+            contentType: 'image/jpeg',
+            upsert: true
+          });
+
+        let targetBucket = 'receipts';
+        let targetPath = fileName;
+
+        // 2차시도: 'logos' 버킷
+        if (uploadResult.error) {
+          console.warn('receipts upload failed, trying logos bucket:', uploadResult.error);
+          const logoFileName = `product_${Date.now()}.jpg`;
+          uploadResult = await supabase.storage
+            .from('logos')
+            .upload(logoFileName, arrayBuffer, {
+              contentType: 'image/jpeg',
+              upsert: true
+            });
+          targetBucket = 'logos';
+          targetPath = logoFileName;
+        }
+
+        if (uploadResult.error) {
+          console.error('Upload error on all buckets:', uploadResult.error);
+          throw new Error('이미지 업로드 실패: ' + uploadResult.error.message);
+        }
+
+        const { data: publicUrlData } = supabase.storage.from(targetBucket).getPublicUrl(targetPath);
         imageUrl = publicUrlData.publicUrl;
       }
 
@@ -2790,8 +2816,9 @@ ${pasteText}`;
       setShowProductModal(false);
       setProductImageFile(null);
       fetchProducts();
+      alert('✨ 상품 정보가 성공적으로 저장되었습니다!');
     } catch (err) {
-      alert('상품 저장 중 오류: ' + err.message);
+      alert('상품 저장 중 오류: ' + (err.message || err));
     } finally {
       setIsSavingProduct(false);
     }
