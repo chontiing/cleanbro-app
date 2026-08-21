@@ -5149,11 +5149,6 @@ ${pasteText}`;
             <p className={`text-[9px] ${currentTab === 'proshop' ? 'font-bold' : 'font-medium'}`}>프로샵</p>
           </button>
 
-          <button onClick={() => setCurrentTab('karrot')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'karrot' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
-            <span className={`material-symbols-outlined text-[24px] ${currentTab === 'karrot' ? 'font-fill' : ''}`}>cruelty_free</span>
-            <p className={`text-[9px] ${currentTab === 'karrot' ? 'font-bold' : 'font-medium'}`}>당근소식</p>
-          </button>
-
           <button onClick={() => setCurrentTab('product_search')} className={`flex flex-col items-center justify-center gap-1 flex-1 transition-colors ${currentTab === 'product_search' ? 'text-primary' : 'text-slate-400 hover:text-primary/70'}`}>
             <span className={`material-symbols-outlined text-[24px] ${currentTab === 'product_search' ? 'font-fill' : ''}`}>handyman</span>
             <p className={`text-[9px] ${currentTab === 'product_search' ? 'font-bold' : 'font-medium'}`}>분해자료</p>
@@ -5165,88 +5160,6 @@ ${pasteText}`;
           </button>
         </div>
       </nav>
-
-      {/* ======================= [탭: 당근 소식 (Karrot News)] ======================= */}
-      {currentTab === 'karrot' && (
-        <main className="flex-1 max-w-lg mx-auto w-full p-4 space-y-5 animate-slide-up pb-32">
-          <div className="flex justify-between items-end mb-2 mt-4">
-            <div>
-              <h2 className="text-2xl font-black flex items-center gap-2 text-orange-600">
-                <span className="material-symbols-outlined text-orange-500">cruelty_free</span> 당근 소식
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">블로그 작성 시 자동 생성된 동네요정 말투의 소식글입니다.</p>
-            </div>
-            <button
-               onClick={fetchSocialPosts}
-               disabled={isFetchingSocialPosts}
-               className="p-2 bg-slate-100 rounded-xl text-slate-500 active:scale-95"
-            >
-               <span className={`material-symbols-outlined text-sm ${isFetchingSocialPosts ? 'animate-spin' : ''}`}>sync</span>
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            {socialPosts.length === 0 && !isFetchingSocialPosts && (
-              <div className="py-10 text-center text-slate-400">
-                <span className="material-symbols-outlined text-[48px] opacity-20 mb-2">inbox</span>
-                <p className="text-sm">아직 생성된 당근 소식이 없습니다.</p>
-              </div>
-            )}
-            
-            {socialPosts.map(post => (
-              <div key={post.id} className="bg-white rounded-[20px] shadow-sm border border-orange-100/50 overflow-hidden flex flex-col">
-                {/* 썸네일 & 헤더 */}
-                <div className="flex bg-slate-50 p-3 gap-3">
-                  {post.image_url ? (
-                    <img src={post.image_url} alt="썸네일" className="w-16 h-16 rounded-xl object-cover bg-slate-200" />
-                  ) : (
-                    <div className="w-16 h-16 rounded-xl bg-orange-50 flex items-center justify-center text-orange-300">
-                      <span className="material-symbols-outlined">image</span>
-                    </div>
-                  )}
-                  <div className="flex-1 flex flex-col justify-center">
-                    <p className="text-xs text-orange-500 font-bold">{new Date(post.created_at).toLocaleDateString()}</p>
-                    <h3 className="text-sm font-black text-slate-700 line-clamp-2 leading-tight mt-0.5">{post.blog_title || '연관 블로그 제목 없음'}</h3>
-                  </div>
-                </div>
-                
-                {/* 당근용 텍스트 컨텐츠 */}
-                <div className="p-4 bg-white">
-                  <p className="text-sm text-slate-600 whitespace-pre-wrap leading-relaxed">
-                    {post.karrot_content}
-                  </p>
-                </div>
-                
-                {/* 액션 버튼 */}
-                <div className="p-3 border-t border-slate-50 bg-slate-50/50 flex gap-2">
-                  <button
-                    onClick={() => {
-                       navigator.clipboard.writeText(post.karrot_content);
-                       alert('당근마켓용 본문이 복사되었습니다! 당근 앱에 붙여넣기 하세요.');
-                    }}
-                    className="flex-1 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 text-xs font-bold active:scale-95 flex items-center justify-center gap-1 shadow-sm"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">content_copy</span> 내용 복사
-                  </button>
-                  <button
-                    onClick={() => markSocialPostAsDone(post.id, post.is_posted_karrot)}
-                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold active:scale-95 flex items-center justify-center gap-1 shadow-sm transition-colors ${
-                      post.is_posted_karrot 
-                        ? 'bg-slate-200 text-slate-500' 
-                        : 'bg-orange-500 text-white shadow-orange-500/20'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[16px]">
-                      {post.is_posted_karrot ? 'check_circle' : 'publish'}
-                    </span> 
-                    {post.is_posted_karrot ? '발행 완료' : '발행하기'}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </main>
-      )}
 
       {/* ======================= [탭: 에어컨/가전 분해자료 검색 (Product Disassembly Search)] ======================= */}
       {currentTab === 'product_search' && (
