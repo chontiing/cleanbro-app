@@ -2657,20 +2657,38 @@ ${pasteText}`;
     });
   };
 
-  // --- 개별 완료문자 재전송 ---
-  const handleSendCompletionSms = (c) => {
+  // --- 완료문자 생성 헬퍼 (사진 링크 누락 철저 방지) ---
+  const buildCompletionSmsText = (booking, photoUrl) => {
     let completionText = businessProfile.default_completion_message ||
-      `[클린브로] 안녕하세요, 고객님!\n{customer_name}님 {memo} 작업이 완료되었습니다.\n깨끗하게 청소해 드렸으니 확인해 주세요. 감사합니다! 😊`;
-    completionText = completionText
-      .replace(/{customer_name}/g, c.customer_name || '고객')
-      .replace(/{memo}/g, c.memo || '')
-      .replace(/{after_url}/g, c.after_photo_url || '');
+      `[클린브로] 청소 작업 완료 안내\n안녕하세요, 고객님! {customer_name}님 {memo} 작업이 완료되었습니다.\n\n📸 작업 사진 확인하기:\n{after_url}\n\n감사합니다! 😊`;
 
-    if (!c.is_samsung_check) {
+    completionText = completionText
+      .replace(/{customer_name}/g, booking.customer_name || '고객')
+      .replace(/{memo}/g, booking.memo || '');
+
+    const finalPhotoUrl = photoUrl || booking.after_photo_url || '';
+
+    if (finalPhotoUrl) {
+      if (completionText.includes('{after_url}')) {
+        completionText = completionText.replace(/{after_url}/g, finalPhotoUrl);
+      } else {
+        // 템플릿에 {after_url} 치환자가 없는 경우에도 사진 링크 자동 강제 추가
+        completionText += `\n\n📸 작업 사진 확인하기:\n${finalPhotoUrl}`;
+      }
+    } else {
+      // 사진이 없는 경우 라벨 및 치환자 깔끔 제거
+      completionText = completionText
+        .replace(/📸\s*작업\s*사진\s*확인하기:\s*\n?\{after_url\}/g, '')
+        .replace(/📸\s*작업\s*완료\s*사진:\s*\n?\{after_url\}/g, '')
+        .replace(/\{after_url\}/g, '')
+        .trim();
+    }
+
+    if (!booking.is_samsung_check) {
       let guideUrl = '';
-      if ((c.category?.includes('에어컨') || c.product?.includes('에어컨')) && businessProfile?.ac_guide_url) {
+      if ((booking.category?.includes('에어컨') || booking.product?.includes('에어컨')) && businessProfile?.ac_guide_url) {
         guideUrl = businessProfile.ac_guide_url;
-      } else if ((c.category?.includes('세탁기') || c.product?.includes('세탁기')) && businessProfile?.washer_guide_url) {
+      } else if ((booking.category?.includes('세탁기') || booking.product?.includes('세탁기')) && businessProfile?.washer_guide_url) {
         guideUrl = businessProfile.washer_guide_url;
       }
       if (guideUrl) {
@@ -2678,12 +2696,18 @@ ${pasteText}`;
       }
     }
 
+    return completionText;
+  };
+
+  // --- 개별 완료문자 재전송 ---
+  const handleSendCompletionSms = (c) => {
+    const completionText = buildCompletionSmsText(c, c.after_photo_url);
     const cleanPhone = c.phone.replace(/[^0-9]/g, '');
     const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
     window.location.href = `sms:${cleanPhone}${sep}body=${encodeURIComponent(completionText)}`;
   };
 
-  // --- 작업 완료 처리 (사진 첨부 없이 빠른 완료 + 메시지앱 열기 + 블로그 모달) ---
+  // --- 작업 완료 처리 (사진 첨부 및 DB 업데이트 + 메시지앱 열기 + 블로그 모달) ---
   const handleFinalComplete = async (withSms = true) => {
     setIsUploadingPhotos(true);
     try {
@@ -2701,7 +2725,7 @@ ${pasteText}`;
         afterPhotoUrl = urlData.publicUrl;
       }
 
-      // DB 완료 처리
+      // DB 완료 처리 및 after_photo_url 저장
       const { error: dbErr } = await supabase.from('bookings').update({
         is_completed: true,
         after_photo_url: afterPhotoUrl || null,
@@ -2709,25 +2733,8 @@ ${pasteText}`;
       if (dbErr) throw dbErr;
 
       if (withSms) {
-        // 완료 안내문구 준비
-        let completionText = businessProfile.default_completion_message ||
-          `[클린브로] 안녕하세요, 고객님!\n{customer_name}님 {memo} 작업이 완료되었습니다.\n깨끗하게 청소해 드렸으니 확인해 주세요. 감사합니다! 😊`;
-        completionText = completionText
-          .replace(/{customer_name}/g, completionTarget.customer_name || '고객')
-          .replace(/{memo}/g, completionTarget.memo || '')
-          .replace(/{after_url}/g, afterPhotoUrl || '');
-
-        if (!completionTarget.is_samsung_check) {
-          let guideUrl = '';
-          if ((completionTarget.category?.includes('에어컨') || completionTarget.product?.includes('에어컨')) && businessProfile?.ac_guide_url) {
-            guideUrl = businessProfile.ac_guide_url;
-          } else if ((completionTarget.category?.includes('세탁기') || completionTarget.product?.includes('세탁기')) && businessProfile?.washer_guide_url) {
-            guideUrl = businessProfile.washer_guide_url;
-          }
-          if (guideUrl) {
-            completionText += `\n\n💡 [관리 요령 안내]\n아래 링크를 눌러 관리 요령 이미지를 확인해 주세요!\n${guideUrl}`;
-          }
-        }
+        // 완료 안내문구 생성 (사진 링크 100% 보장)
+        const completionText = buildCompletionSmsText(completionTarget, afterPhotoUrl);
 
         // 메시지앱 열기 (완료 안내문구 pre-fill)
         const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
