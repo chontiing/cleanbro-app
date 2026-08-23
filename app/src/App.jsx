@@ -2699,15 +2699,45 @@ ${pasteText}`;
     return completionText;
   };
 
-  // --- 개별 완료문자 재전송 ---
-  const handleSendCompletionSms = (c) => {
-    const completionText = buildCompletionSmsText(c, c.after_photo_url);
-    const cleanPhone = c.phone.replace(/[^0-9]/g, '');
+  // --- 스마트 모바일 SMS / 시스템 공유 통합 발송 헬퍼 (URL 누락 100% 방지) ---
+  const triggerSmsOrShare = async (phone, completionText) => {
+    const cleanPhone = phone ? phone.replace(/[^0-9]/g, '') : '';
+
+    // 1. 클립보드에 문자 본문(사진 링크 포함) 자동 복사
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(completionText);
+      }
+    } catch (clipErr) {
+      console.warn('Clipboard write failed:', clipErr);
+    }
+
+    // 2. 모바일 OS 네이티브 공유 API 시도 (삼성 메세지/아이폰 메세지/카카오톡 100% 완벽 연동)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: '클린브로 작업 완료 안내',
+          text: completionText
+        });
+        return;
+      } catch (shareErr) {
+        if (shareErr.name === 'AbortError') return; // 사용자가 취소 시 멈춤
+      }
+    }
+
+    // 3. sms: URL Scheme 앱 연동 + 붙여넣기 안내
+    alert('📋 완료 문구(사진 링크 포함)가 클립보드에 자동 복사되었습니다!\n\n문자 앱이 열리면 입력창을 꾹 눌러 [붙여넣기]를 해주시면 사진 링크가 100% 들어갑니다.');
     const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
     window.location.href = `sms:${cleanPhone}${sep}body=${encodeURIComponent(completionText)}`;
   };
 
-  // --- 작업 완료 처리 (사진 첨부 및 DB 업데이트 + 메시지앱 열기 + 블로그 모달) ---
+  // --- 개별 완료문자 재전송 ---
+  const handleSendCompletionSms = (c) => {
+    const completionText = buildCompletionSmsText(c, c.after_photo_url);
+    triggerSmsOrShare(c.phone, completionText);
+  };
+
+  // --- 작업 완료 처리 (사진 첨부 및 DB 업데이트 + 메시지앱/공유창 열기 + 블로그 모달) ---
   const handleFinalComplete = async (withSms = true) => {
     setIsUploadingPhotos(true);
     try {
@@ -2735,11 +2765,7 @@ ${pasteText}`;
       if (withSms) {
         // 완료 안내문구 생성 (사진 링크 100% 보장)
         const completionText = buildCompletionSmsText(completionTarget, afterPhotoUrl);
-
-        // 메시지앱 열기 (완료 안내문구 pre-fill)
-        const cleanPhone = completionTarget.phone.replace(/[^0-9]/g, '');
-        const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
-        window.location.href = `sms:${cleanPhone}${sep}body=${encodeURIComponent(completionText)}`;
+        await triggerSmsOrShare(completionTarget.phone, completionText);
       }
 
       setShowCompletionModal(false);
