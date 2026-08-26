@@ -309,7 +309,7 @@ function App() {
     if (!pasteText.trim()) return;
     setIsExtracting(true);
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCW_pJGBIMfFQP_c6oVSIVf1FxkhPb7ma0";
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
         alert('Gemini API 키가 설정되지 않았습니다.');
         setIsExtracting(false);
@@ -414,7 +414,7 @@ ${pasteText}`;
       reader.onload = async () => {
         const base64Data = reader.result.split(',')[1];
         
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCW_pJGBIMfFQP_c6oVSIVf1FxkhPb7ma0";
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
         if (!apiKey) {
           alert('Gemini API 키가 설정되지 않았습니다.');
           setIsExtracting(false);
@@ -524,7 +524,7 @@ ${pasteText}`;
     setIsAnalyzingProduct(true);
     try {
       const base64Data = await compressImageForAI(file);
-      const apiKey = customGeminiKey.trim() || import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyCW_pJGBIMfFQP_c6oVSIVf1FxkhPb7ma0";
+      const apiKey = customGeminiKey.trim() || import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) {
         setShowApiKeySetting(true);
         alert('Gemini API 키가 설정되지 않았습니다. 아래 [API Key 설정]에서 무료 키를 입력해 주세요.');
