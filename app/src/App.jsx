@@ -21,6 +21,12 @@ const getTodayStr = () => {
   return d.toISOString().split('T')[0];
 };
 
+const formatDateStr = (dateObj = new Date()) => {
+  const d = new Date(dateObj);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().split('T')[0];
+};
+
 const CATEGORIES = {
   '에어컨': ['벽걸이', '스탠드', '2in1', '시스템'],
   '세탁기': ['통돌이', '드럼', '아기용'],
@@ -2056,24 +2062,26 @@ ${pasteText}`;
 
   const getAiTaxAdvice = () => {
     const yearStr = `${taxYear}-`;
-    const yrSales = customers.filter(c => c.book_date?.startsWith(yearStr)).reduce((sum, c) => sum + c.final_price, 0);
+    const yrSales = customers.filter(c => c.book_date?.startsWith(yearStr)).reduce((sum, c) => sum + (Number(c.final_price) || 0), 0);
 
     const targetMonthStr = `${taxYear}-${String(taxMonth).padStart(2, '0')}`;
     const moExpenses = expenses.filter(e => e.date_created?.startsWith(targetMonthStr));
-    const totalMoExp = moExpenses.reduce((sum, e) => sum + e.amount, 0);
-    const expWithReceipt = moExpenses.filter(e => e.receipt_url).reduce((sum, e) => sum + e.amount, 0);
+    const totalMoExp = moExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const expWithReceipt = moExpenses.filter(e => e.receipt_url).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const receiptRatio = totalMoExp > 0 ? expWithReceipt / totalMoExp : 1;
 
     let genSalesTax = 0; let genPurchaseTax = 0; let genCardDeduct = 0;
     customers.filter(c => c.book_date?.startsWith(targetMonthStr)).forEach(c => {
       const isRecognized = c.payment_method === '카드' || (c.payment_method === '현금' && (c.has_cash_receipt || c.has_tax_invoice));
+      const p = Number(c.final_price) || 0;
       if (isRecognized) {
-        genSalesTax += Math.floor(c.final_price * 0.1);
-        genCardDeduct += Math.floor(c.final_price * 0.013);
+        genSalesTax += Math.floor(p * 0.1);
+        genCardDeduct += Math.floor(p * 0.013);
       }
     });
     expenses.filter(e => e.date_created?.startsWith(targetMonthStr)).forEach(e => {
-      genPurchaseTax += Math.floor(e.amount * 0.1);
+      const amt = Number(e.amount) || 0;
+      genPurchaseTax += Math.floor(amt * 0.1);
     });
     const genFinalTax = Math.max(0, genSalesTax - genPurchaseTax - genCardDeduct);
 
@@ -2136,9 +2144,9 @@ ${pasteText}`;
 
   // 캘린더에 표시 중인 월의 목표 달성률 계산
   const calAchieveRate = useMemo(() => {
-    const target = businessProfile.monthly_target_revenue || 5000000;
+    const target = Number(businessProfile?.monthly_target_revenue) || 5000000;
     return Math.min(100, Math.floor((calMonthSales / target) * 100));
-  }, [calMonthSales, businessProfile.monthly_target_revenue]);
+  }, [calMonthSales, businessProfile?.monthly_target_revenue]);
 
   // 캘린더에 표시 중인 월의 전월 대비 성장률 계산
   const calMonthGrowth = useMemo(() => {
@@ -2151,7 +2159,8 @@ ${pasteText}`;
       .filter(c => c.book_date?.startsWith(prevPrefix))
       .reduce((acc, c) => acc + (c.final_price || 0), 0);
 
-    return prevMonthSales === 0 ? 100 : Math.round(((calMonthSales / prevMonthSales) * 100) - 100);
+    if (prevMonthSales === 0) return calMonthSales > 0 ? 100 : 0;
+    return Math.round(((calMonthSales / prevMonthSales) * 100) - 100);
   }, [customers, calDate, calMonthSales]);
 
   const getCalendarDays = () => {
@@ -2331,7 +2340,7 @@ ${pasteText}`;
     console.log(`[디버그] 솔라피 발송 준비: 수신=${cleanTo}, 예약시간=${scheduledAt || '즉시 발송'}\n내용:\n${text}`);
 
     const date = new Date().toISOString();
-    const salt = crypto.randomUUID().replace(/-/g, '');
+    const salt = genUUID().replace(/-/g, '');
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey('raw', encoder.encode(apiSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
     const signatureBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(date + salt));
