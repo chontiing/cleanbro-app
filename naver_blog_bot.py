@@ -143,6 +143,27 @@ def generate_draft_via_edge(memo_dict):
                 continue
             raise Exception(f"AI 초안 생성 실패 (HTTP {res.status_code}): {res.text}")
 
+def post_instagram(draft, image_urls):
+    """Meta Graph API로 인스타그램에 자동 게시 (브라우저 자동화 아님, 공식 API)."""
+    try:
+        url = f"{SUPABASE_URL}/functions/v1/publish-instagram"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {SUPABASE_KEY}"
+        }
+        caption = draft.get("karrotText") or draft.get("title") or ""
+        tags = draft.get("tags") or []
+        if tags:
+            caption += "\n\n" + " ".join(tags)
+        res = requests.post(url, headers=headers, json={"imageUrls": image_urls[:10], "caption": caption})
+        data = res.json()
+        if data.get("success"):
+            print("[Bot] 인스타그램 게시 완료!")
+        else:
+            print(f"[Bot] 인스타그램 게시 실패: {data.get('error')}")
+    except Exception as e:
+        print(f"[Bot] 인스타그램 게시 요청 중 에러: {e}")
+
 def post_karrot_news(draft, image_url, business_id=None):
     if not draft.get("karrotText"): return
     try:
@@ -188,7 +209,11 @@ def schedule_loop():
                         # 당근 소식 DB 저장
                         img_urls = memo_dict.get("image_urls", [])
                         post_karrot_news(draft, img_urls[0] if img_urls else None, task.get("business_id"))
-                        
+
+                        # 인스타그램 자동 게시 (요청 시)
+                        if memo_dict.get("post_instagram"):
+                            post_instagram(draft, img_urls)
+
                         # 생성된 텍스트를 DB로 한 번 안전하게 저장해 둡니다
                         update_supabase_task(task_id, "processing", new_memo_dict=memo_dict)
 

@@ -206,6 +206,13 @@ function App() {
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgressText, setBatchProgressText] = useState("");
 
+  // 예약 카드 단건 "블로그 작성" 버튼 상태
+  const [showSingleBlogModal, setShowSingleBlogModal] = useState(false);
+  const [blogSingleTarget, setBlogSingleTarget] = useState(null);
+  const [singleBlogFiles, setSingleBlogFiles] = useState({ beforeFiles: [], afterFiles: [] });
+  const [isSingleBlogProcessing, setIsSingleBlogProcessing] = useState(false);
+  const [singleBlogPostInstagram, setSingleBlogPostInstagram] = useState(true);
+
   // 파트너(개별) 프로필 추가 정보 및 솔라피
   const [userProfile, setUserProfile] = useState({});
   const [solapiBalance, setSolapiBalance] = useState(null);
@@ -252,7 +259,7 @@ function App() {
   const detailRef = useRef(null);
   const [showUpdateToast, setShowUpdateToast] = useState(false);
   const [swRegistration, setSwRegistration] = useState(null);
-  const APP_VERSION = "v1.2.7"; // 현재 버젼
+  const APP_VERSION = "v1.3.8"; // 현재 버젼
 
   // 인앱 브라우저 감지 (카카오톡 등)
   const [isInAppBrowser, setIsInAppBrowser] = useState(false);
@@ -1246,10 +1253,83 @@ ${pasteText}`;
     setBatchSlots(newSlots);
   };
 
+  // 비포/애프터 사진 1세트를 업로드하고 블로그자동화 큐(bookings 테이블)에 등록.
+  // 5슬롯 일괄 업로드와 예약 카드 단건 "블로그 작성" 버튼이 공통으로 사용.
+  const queueBlogPost = async ({ beforeFiles, afterFiles, category, product, customer_name, address, isImmediatePublish = false, postInstagram = false }) => {
+    const uploadOne = async (file, type) => {
+      try {
+        const arrayBuffer = await processImage(file);
+        const fileName = `${myBusinessId}/batch_blog/${type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.jpg`;
+        const { error: upErr } = await supabase.storage.from('receipts').upload(fileName, arrayBuffer, {
+          contentType: 'image/jpeg',
+          upsert: false
+        });
+        if (upErr) throw upErr;
+        const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
+        return data.publicUrl;
+      } catch (err) {
+        throw new Error(`이미지 업로드 실패 (${file.name}): ${err.message || '알 수 없는 오류'}`);
+      }
+    };
+
+    const uploadAllSequentially = async (files, type) => {
+      const urls = [];
+      for (let idx = 0; idx < files.length; idx++) {
+        urls.push(await uploadOne(files[idx], type));
+      }
+      return urls;
+    };
+
+    let beforeUrls = [];
+    let afterUrls = [];
+    try {
+      beforeUrls = await uploadAllSequentially(beforeFiles, 'before');
+      afterUrls = await uploadAllSequentially(afterFiles, 'after');
+    } catch (err) {
+      throw new Error(`업로드 단계 오류: ${err.message}`);
+    }
+
+    const allUrls = [...beforeUrls, ...afterUrls];
+    const draftImageUrls = [];
+    if (beforeUrls.length > 0) draftImageUrls.push(beforeUrls[0]);
+    if (afterUrls.length > 0) draftImageUrls.push(afterUrls[0]);
+
+    const { error: insErr } = await supabase.from('bookings').insert({
+      business_id: myBusinessId,
+      user_id: session.user.id,
+      customer_name: `블로그자동화_대기열`,
+      category: '블로그자동화',
+      product: 'pending', // pending, processing, completed, failed
+      book_date: getTodayStr(),
+      book_time_type: '예약',
+      phone: "000-0000-0000",
+      memo: JSON.stringify({
+        title: `AI 초안 작성 대기 중 (${category})`,
+        body: "",
+        tags: [],
+        photo_alt_texts: [],
+        image_urls: allUrls,
+        draft_image_urls: draftImageUrls, // AI 분석용 2장
+        category,
+        product,
+        customer_name: customer_name || '고객명',
+        address: address || '',
+        save_as_draft: !isImmediatePublish,
+        needs_gemini: true, // PC 파이썬 봇에게 AI 작성을 지시
+        businessProfile: businessProfile,
+        aiGuidelines: aiGuidelines,
+        post_instagram: postInstagram
+      }),
+      is_completed: false
+    });
+
+    if (insErr) throw new Error(insErr.message || '스케줄링 등록 실패');
+  };
+
   const startBatchProcess = async (isImmediatePublish = false) => {
     // 1. 상태 변수가 아닌 실제 업로드할 활성 슬롯만 추출 (전/후 사진이 모두 있는 슬롯만)
     const activeSlots = batchSlots.filter(slot => slot.beforeFiles.length > 0 && slot.afterFiles.length > 0);
-    
+
     // 일부만 채운 경우 사용자에게 명확히 알려줌
     const partiallyFilled = batchSlots.filter(
       slot => (slot.beforeFiles.length > 0 && slot.afterFiles.length === 0) || (slot.beforeFiles.length === 0 && slot.afterFiles.length > 0)
@@ -1274,78 +1354,16 @@ ${pasteText}`;
 
     try {
       for (let i = 0; i < activeSlots.length; i++) {
-        setBatchProgressText(`${i + 1}/${activeSlots.length} 처리 중... (이미지 업로드)`);
-
-        const uploadOne = async (file, type) => {
-          try {
-            const arrayBuffer = await processImage(file);
-            const fileName = `${myBusinessId}/batch_blog/${type}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}.jpg`;
-            const { error: upErr } = await supabase.storage.from('receipts').upload(fileName, arrayBuffer, {
-              contentType: 'image/jpeg',
-              upsert: false
-            });
-            if (upErr) throw upErr;
-            const { data } = supabase.storage.from('receipts').getPublicUrl(fileName);
-            return data.publicUrl;
-          } catch (err) {
-            throw new Error(`이미지 업로드 실패 (${file.name}): ${err.message || '알 수 없는 오류'}`);
-          }
-        };
-
-        const uploadAllSequentially = async (files, type) => {
-          const urls = [];
-          for (let idx = 0; idx < files.length; idx++) {
-            urls.push(await uploadOne(files[idx], type));
-          }
-          return urls;
-        };
-
-        let beforeUrls = [];
-        let afterUrls = [];
-        try {
-           beforeUrls = await uploadAllSequentially(activeSlots[i].beforeFiles, 'before');
-           afterUrls = await uploadAllSequentially(activeSlots[i].afterFiles, 'after');
-        } catch (err) {
-           throw new Error(`슬롯 ${i+1} 업로드 단계 오류: ${err.message}`);
-        }
-        
-        const allUrls = [...beforeUrls, ...afterUrls];
-
-        setBatchProgressText(`${i + 1}/${activeSlots.length} 스케줄러 큐 등록 중 (PC 봇 인계)...`);
-        
-        const draftImageUrls = [];
-        if (beforeUrls.length > 0) draftImageUrls.push(beforeUrls[0]);
-        if (afterUrls.length > 0) draftImageUrls.push(afterUrls[0]);
-
-        const { error: insErr } = await supabase.from('bookings').insert({
-          business_id: myBusinessId,
-          user_id: session.user.id,
-          customer_name: `블로그자동화_대기열`,
-          category: '블로그자동화',
-          product: 'pending', // pending, processing, completed, failed
-          book_date: getTodayStr(), 
-          book_time_type: '예약', 
-          phone: "000-0000-0000",
-          memo: JSON.stringify({
-            title: `AI 초안 작성 대기 중 (${activeSlots[i].category})`,
-            body: "",
-            tags: [],
-            photo_alt_texts: [],
-            image_urls: allUrls,
-            draft_image_urls: draftImageUrls, // AI 분석용 2장
-            category: activeSlots[i].category,
-            product: activeSlots[i].product,
-            customer_name: activeSlots[i].customer_name || '고객명',
-            address: activeSlots[i].address || '',
-            save_as_draft: !isImmediatePublish,
-            needs_gemini: true, // PC 파이썬 봇에게 AI 작성을 지시
-            businessProfile: businessProfile,
-            aiGuidelines: aiGuidelines
-          }),
-          is_completed: false
+        setBatchProgressText(`${i + 1}/${activeSlots.length} 처리 중... (이미지 업로드 및 큐 등록)`);
+        await queueBlogPost({
+          beforeFiles: activeSlots[i].beforeFiles,
+          afterFiles: activeSlots[i].afterFiles,
+          category: activeSlots[i].category,
+          product: activeSlots[i].product,
+          customer_name: activeSlots[i].customer_name,
+          address: activeSlots[i].address,
+          isImmediatePublish
         });
-
-        if (insErr) throw new Error(insErr.message || '스케줄링 등록 실패');
       }
 
       setBatchProgressText(`✅ ${activeSlots.length}건 예약 발행 대기열 등록 완료! (이제 스마트폰 화면을 끄셔도 PC가 알아서 처리합니다)`);
@@ -1368,6 +1386,35 @@ ${pasteText}`;
       alert(`일괄 처리 중 오류 발생: ${e.message}\n\n※ 데이터가 그대로 보존되어 있습니다!\n절대로 창을 새로고침(F5)하지 마시고 '예약 발행 시작' 버튼만 다시 눌러주세요.`);
       setIsBatchProcessing(false);
       setBatchProgressText("");
+    }
+  };
+
+  // 예약 카드의 "블로그 작성" 버튼: 해당 예약의 지역/카테고리/제품을 그대로 사용해 큐에 등록
+  const submitSingleBlogPost = async (isImmediatePublish = false) => {
+    if (singleBlogFiles.beforeFiles.length === 0 || singleBlogFiles.afterFiles.length === 0) {
+      alert('작업 전/후 사진을 모두 첨부해주세요.');
+      return;
+    }
+    setIsSingleBlogProcessing(true);
+    try {
+      await queueBlogPost({
+        beforeFiles: singleBlogFiles.beforeFiles,
+        afterFiles: singleBlogFiles.afterFiles,
+        category: blogSingleTarget.category || '에어컨',
+        product: blogSingleTarget.product || '',
+        customer_name: blogSingleTarget.customer_name,
+        address: blogSingleTarget.address,
+        isImmediatePublish,
+        postInstagram: singleBlogPostInstagram
+      });
+      alert('✅ 블로그 예약 발행 대기열에 등록되었습니다! 노트북이 켜져 있으면 자동으로 작성/발행됩니다.');
+      fetchBlogQueue();
+      setShowSingleBlogModal(false);
+      setSingleBlogFiles({ beforeFiles: [], afterFiles: [] });
+    } catch (e) {
+      alert('등록 실패: ' + e.message);
+    } finally {
+      setIsSingleBlogProcessing(false);
     }
   };
 
@@ -2541,8 +2588,20 @@ ${pasteText}`;
           }} className={`flex-1 min-w-[25%] py-1.5 rounded-lg text-[11px] font-bold transition-all border ${c.is_completed ? 'bg-white border-gray-200 text-gray-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 active:scale-[0.98]'}`}>
             {c.is_completed ? '작업 취소' : '작업 완료'}
           </button>
-          
-          <button 
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setBlogSingleTarget(c);
+              setSingleBlogFiles({ beforeFiles: [], afterFiles: [] });
+              setShowSingleBlogModal(true);
+            }}
+            className="flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100 active:scale-[0.98]"
+          >
+            <span className="material-symbols-outlined text-[12px]">auto_awesome</span>블로그 작성
+          </button>
+
+          <button
             disabled={c.is_samsung_check || c.is_confirmed_sent || c.sms_sent_initial || sendingType === 'confirm'}
             onClick={(e) => { e.stopPropagation(); handleSendConfirm(); }}
             title={c.is_samsung_check ? "삼성 체크 건은 문자 발송 제외 대상입니다." : ""}
@@ -2572,20 +2631,6 @@ ${pasteText}`;
           >
             <span className="material-symbols-outlined text-[12px]">wb_twilight</span>
             {sendingType === 'morning' ? '처리중' : ((c.is_morning_alert_sent || c.sms_sent_reminder) ? '예약완료' : '전날알림')}
-          </button>
-
-          <button 
-            disabled={c.is_samsung_check}
-            onClick={(e) => { e.stopPropagation(); handleSendCompletionSms(c); }}
-            title={c.is_samsung_check ? "삼성 체크 건은 문자 발송 제외 대상입니다." : ""}
-            className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
-              c.is_samsung_check 
-                ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-50 pointer-events-none'
-                : 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100 active:scale-[0.98]'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[12px]">send</span>
-            완료문자
           </button>
 
           <button onClick={(e) => { e.stopPropagation(); handleEdit(c); }} className="flex-none px-3 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all">
@@ -2725,12 +2770,6 @@ ${pasteText}`;
     const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
     alert(`📋 [${cleanPhone}] 고객님께 보낼 완료 문구(사진링크 포함)가 클립보드에 자동 복사되었습니다!\n\n문자 앱이 열리면 입력창을 꾹 눌러 [붙여넣기]를 해주시면 사진 링크가 100% 들어갑니다.`);
     window.location.href = `sms:${cleanPhone}${sep}body=${encodeURIComponent(completionText)}`;
-  };
-
-  // --- 개별 완료문자 재전송 ---
-  const handleSendCompletionSms = (c) => {
-    const completionText = buildCompletionSmsText(c, c.after_photo_url);
-    triggerSmsDirect(c.phone, completionText);
   };
 
   // --- 작업 완료 처리 (사진 첨부 및 DB 업데이트 + 메시지앱/공유창 열기 + 블로그 모달) ---
@@ -6066,6 +6105,110 @@ ${pasteText}`;
               >
                 나중에 하기
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 예약 카드 단건 "블로그 작성" 모달 */}
+      {showSingleBlogModal && blogSingleTarget && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-slideUp">
+
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-orange-50 to-amber-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center shadow-sm">
+                  <span className="material-symbols-outlined">auto_awesome</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-slate-800">AI 블로그 자동 작성</h3>
+                  <p className="text-xs font-medium text-orange-600">{blogSingleTarget.customer_name || '고객'}님 작업</p>
+                </div>
+              </div>
+              {!isSingleBlogProcessing && (
+                <button onClick={() => setShowSingleBlogModal(false)} className="text-slate-400 hover:text-slate-600 p-2 rounded-xl transition-colors bg-white/50 hover:bg-white">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
+              {isSingleBlogProcessing && (
+                <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl flex flex-col items-center justify-center gap-3 animate-pulse">
+                  <span className="material-symbols-outlined text-[32px] text-orange-500 animate-spin">sync</span>
+                  <p className="font-bold text-orange-700 text-sm">등록 중...</p>
+                </div>
+              )}
+
+              <div className={`space-y-4 ${isSingleBlogProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div className="bg-white border-2 border-slate-100 rounded-2xl p-4 flex flex-wrap items-center gap-2">
+                  {(() => {
+                    const region = ['속초', '양양', '고성', '인제'].find(r => blogSingleTarget.address?.includes(r));
+                    return (
+                      <span className={`text-[11px] text-white font-black px-2.5 py-1 rounded-full shadow-sm ${getRegionColor(blogSingleTarget.address)}`}>
+                        {region || '지역 미감지'}
+                      </span>
+                    );
+                  })()}
+                  <span className="text-xs font-bold text-slate-500 px-2 py-1 bg-slate-100 rounded-full">{blogSingleTarget.category || '에어컨'} · {blogSingleTarget.product || '제품 미지정'}</span>
+                  <span className="text-[10px] text-slate-400">예약 정보에서 자동으로 채워졌어요.</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className={`relative flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${singleBlogFiles.beforeFiles.length > 0 ? 'border-orange-300 bg-orange-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`}>
+                    <div className="text-center">
+                      <span className={`material-symbols-outlined ${singleBlogFiles.beforeFiles.length > 0 ? 'text-orange-500' : 'text-slate-400'}`}>{singleBlogFiles.beforeFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
+                      <p className={`text-xs font-bold mt-1 ${singleBlogFiles.beforeFiles.length > 0 ? 'text-orange-700' : 'text-slate-500'}`}>
+                        {singleBlogFiles.beforeFiles.length > 0 ? `작업 전 (${singleBlogFiles.beforeFiles.length})` : '작업 전 사진'}
+                      </p>
+                    </div>
+                    {singleBlogFiles.beforeFiles.length > 0 && (
+                      <div className="flex gap-2 mt-2 w-full overflow-x-auto pb-1 scrollbar-hide shrink-0 snap-x">
+                        {singleBlogFiles.beforeFiles.map((f, i) => (
+                          <img key={i} src={URL.createObjectURL(f)} className="w-8 h-8 rounded-md object-cover border border-orange-200 shrink-0 snap-center" title={f.name} />
+                        ))}
+                      </div>
+                    )}
+                    <input type="file" multiple accept="image/*" onChange={(e) => setSingleBlogFiles(prev => ({ ...prev, beforeFiles: Array.from(e.target.files) }))} className="hidden" />
+                  </label>
+                  <label className={`relative flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${singleBlogFiles.afterFiles.length > 0 ? 'border-orange-300 bg-orange-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`}>
+                    <div className="text-center">
+                      <span className={`material-symbols-outlined ${singleBlogFiles.afterFiles.length > 0 ? 'text-orange-500' : 'text-slate-400'}`}>{singleBlogFiles.afterFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
+                      <p className={`text-xs font-bold mt-1 ${singleBlogFiles.afterFiles.length > 0 ? 'text-orange-700' : 'text-slate-500'}`}>
+                        {singleBlogFiles.afterFiles.length > 0 ? `작업 후 (${singleBlogFiles.afterFiles.length})` : '작업 후 사진'}
+                      </p>
+                    </div>
+                    {singleBlogFiles.afterFiles.length > 0 && (
+                      <div className="flex gap-2 mt-2 w-full overflow-x-auto pb-1 scrollbar-hide shrink-0 snap-x">
+                        {singleBlogFiles.afterFiles.map((f, i) => (
+                          <img key={i} src={URL.createObjectURL(f)} className="w-8 h-8 rounded-md object-cover border border-orange-200 shrink-0 snap-center" title={f.name} />
+                        ))}
+                      </div>
+                    )}
+                    <input type="file" multiple accept="image/*" onChange={(e) => setSingleBlogFiles(prev => ({ ...prev, afterFiles: Array.from(e.target.files) }))} className="hidden" />
+                  </label>
+                </div>
+
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-500 px-1">
+                  <input type="checkbox" checked={singleBlogPostInstagram} onChange={e => setSingleBlogPostInstagram(e.target.checked)} className="w-4 h-4 accent-orange-500" />
+                  인스타그램에도 함께 게시
+                </label>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex flex-col gap-2 w-full">
+              <button
+                onClick={() => submitSingleBlogPost(false)}
+                disabled={isSingleBlogProcessing || singleBlogFiles.beforeFiles.length === 0 || singleBlogFiles.afterFiles.length === 0}
+                className="w-full py-3 bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-xl font-black text-sm shadow-lg active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {isSingleBlogProcessing ? (
+                  <><span className="material-symbols-outlined animate-spin text-sm">sync</span>등록 중</>
+                ) : (
+                  <><span className="material-symbols-outlined text-sm">rocket_launch</span>AI 자동 작성 후 예약 발행</>
+                )}
+              </button>
+              <button onClick={() => setShowSingleBlogModal(false)} disabled={isSingleBlogProcessing} className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-bold text-sm active:scale-95 disabled:opacity-50">닫기</button>
             </div>
           </div>
         </div>
