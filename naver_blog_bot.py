@@ -292,6 +292,7 @@ class PublishRequest(BaseModel):
     tags: list[str]
     photo_alt_texts: list[str]
     image_urls: list[str]
+    draft_image_urls: list[str] = []
     category: Optional[str] = "세탁기"
     product: Optional[str] = "범용"
     address: Optional[str] = ""
@@ -545,10 +546,28 @@ def post_to_naver(data: PublishRequest) -> str:
                 # ── 5.5 대표 썸네일 자동 생성 및 업로드 ──────────────────
                 print("[Bot] 대표 썸네일 생성 및 업로드 시도 중...")
                 try:
+                    region_ko = "속초"
+                    if "고성" in data.title: region_ko = "고성"
+                    elif "양양" in data.title: region_ko = "양양"
+                    elif "강릉" in data.title: region_ko = "강릉"
+                    
+                    # 썸네일 합성용 비포/애프터 이미지 다운로드
+                    before_img_path = None
+                    after_img_path = None
+                    if getattr(data, 'draft_image_urls', None) and len(data.draft_image_urls) >= 2:
+                        try:
+                            before_img_path = download_image(data.draft_image_urls[0], 998, tmpdir, "thumb_before")
+                            after_img_path  = download_image(data.draft_image_urls[1], 999, tmpdir, "thumb_after")
+                        except Exception as de:
+                            print(f"[경고] 썸네일용 비포/애프터 다운로드 실패 (일반 템플릿으로 진행): {de}")
+
                     from thumbnail_generator import create_thumbnail
                     thumb_path = create_thumbnail(
                         service_type=data.service_type, 
                         model_name=data.model_name,
+                        region=region_ko,
+                        before_img_path=before_img_path,
+                        after_img_path=after_img_path,
                         output_path=os.path.join(tmpdir, f"main-thumb-{prefix}.jpg")
                     )
                     if thumb_path and os.path.exists(thumb_path):
@@ -758,10 +777,14 @@ def post_to_naver(data: PublishRequest) -> str:
                 main_btn = page.locator("button, a").filter(has_text="발행").locator("visible=true").first
                 panel_opened = False
                 if main_btn.count() > 0:
-                    main_btn.click()
-                    page.wait_for_timeout(2000)
-                    panel_opened = True
-                    print("[Bot] 발행 패널 열기 완료")
+                    try:
+                        # 화면을 가리는 툴팁(Coach mark) 등을 무시하기 위해 force=True 적용
+                        main_btn.click(force=True, timeout=5000)
+                        page.wait_for_timeout(2000)
+                        panel_opened = True
+                        print("[Bot] 발행 패널 열기 완료")
+                    except Exception as e:
+                        print(f"[경고] 발행 패널 열기 실패: {e}")
                     
                     # 태그 입력
                     tag_written = False

@@ -197,11 +197,11 @@ function App() {
   // 블로그 5슬롯 자동화 상태
   const [showBatchBlogModal, setShowBatchBlogModal] = useState(false);
   const [batchSlots, setBatchSlots] = useState([
-    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
-    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
-    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
-    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
-    { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' }
+    { beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+    { beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+    { beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+    { beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+    { beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' }
   ]);
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgressText, setBatchProgressText] = useState("");
@@ -209,7 +209,7 @@ function App() {
   // 예약 카드 단건 "블로그 작성" 버튼 상태
   const [showSingleBlogModal, setShowSingleBlogModal] = useState(false);
   const [blogSingleTarget, setBlogSingleTarget] = useState(null);
-  const [singleBlogFiles, setSingleBlogFiles] = useState({ beforeFiles: [], afterFiles: [] });
+  const [singleBlogFiles, setSingleBlogFiles] = useState({ beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [] });
   const [isSingleBlogProcessing, setIsSingleBlogProcessing] = useState(false);
   const [singleBlogPostInstagram, setSingleBlogPostInstagram] = useState(true);
 
@@ -1263,12 +1263,14 @@ ${pasteText}`;
     const fileArray = Array.from(files);
     if (type === 'before') newSlots[slotIndex].beforeFiles = fileArray;
     if (type === 'after') newSlots[slotIndex].afterFiles = fileArray;
+    if (type === 'thumb_before') newSlots[slotIndex].thumbBeforeFiles = fileArray;
+    if (type === 'thumb_after') newSlots[slotIndex].thumbAfterFiles = fileArray;
     setBatchSlots(newSlots);
   };
 
   // 비포/애프터 사진 1세트를 업로드하고 블로그자동화 큐(bookings 테이블)에 등록.
   // 5슬롯 일괄 업로드와 예약 카드 단건 "블로그 작성" 버튼이 공통으로 사용.
-  const queueBlogPost = async ({ beforeFiles, afterFiles, category, product, customer_name, address, isImmediatePublish = false, postInstagram = false }) => {
+  const queueBlogPost = async ({ beforeFiles, afterFiles, thumbBeforeFiles = [], thumbAfterFiles = [], category, product, customer_name, address, isImmediatePublish = false, postInstagram = false }) => {
     const uploadOne = async (file, type) => {
       try {
         const arrayBuffer = await processImage(file);
@@ -1295,17 +1297,26 @@ ${pasteText}`;
 
     let beforeUrls = [];
     let afterUrls = [];
+    let thumbBeforeUrls = [];
+    let thumbAfterUrls = [];
     try {
       beforeUrls = await uploadAllSequentially(beforeFiles, 'before');
       afterUrls = await uploadAllSequentially(afterFiles, 'after');
+      thumbBeforeUrls = await uploadAllSequentially(thumbBeforeFiles, 'thumb_before');
+      thumbAfterUrls = await uploadAllSequentially(thumbAfterFiles, 'thumb_after');
     } catch (err) {
       throw new Error(`업로드 단계 오류: ${err.message}`);
     }
 
     const allUrls = [...beforeUrls, ...afterUrls];
     const draftImageUrls = [];
-    if (beforeUrls.length > 0) draftImageUrls.push(beforeUrls[0]);
-    if (afterUrls.length > 0) draftImageUrls.push(afterUrls[0]);
+    
+    // 썸네일 전용 이미지가 있으면 우선 사용, 없으면 본문 첫 번째 이미지 폴백
+    if (thumbBeforeUrls.length > 0) draftImageUrls.push(thumbBeforeUrls[0]);
+    else if (beforeUrls.length > 0) draftImageUrls.push(beforeUrls[0]);
+
+    if (thumbAfterUrls.length > 0) draftImageUrls.push(thumbAfterUrls[0]);
+    else if (afterUrls.length > 0) draftImageUrls.push(afterUrls[0]);
 
     const { error: insErr } = await supabase.from('bookings').insert({
       business_id: myBusinessId,
@@ -1371,6 +1382,8 @@ ${pasteText}`;
         await queueBlogPost({
           beforeFiles: activeSlots[i].beforeFiles,
           afterFiles: activeSlots[i].afterFiles,
+          thumbBeforeFiles: activeSlots[i].thumbBeforeFiles,
+          thumbAfterFiles: activeSlots[i].thumbAfterFiles,
           category: activeSlots[i].category,
           product: activeSlots[i].product,
           customer_name: activeSlots[i].customer_name,
@@ -1387,11 +1400,11 @@ ${pasteText}`;
       setTimeout(() => {
         setIsBatchProcessing(false);
         setBatchSlots([
-          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
-          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
-          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
-          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
-          { beforeFiles: [], afterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' }
+          { beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+          { beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+          { beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+          { beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' },
+          { beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [], category: '에어컨', product: '벽걸이', customer_name: '', address: '' }
         ]);
       }, 2000);
 
@@ -1413,6 +1426,8 @@ ${pasteText}`;
       await queueBlogPost({
         beforeFiles: singleBlogFiles.beforeFiles,
         afterFiles: singleBlogFiles.afterFiles,
+        thumbBeforeFiles: singleBlogFiles.thumbBeforeFiles,
+        thumbAfterFiles: singleBlogFiles.thumbAfterFiles,
         category: blogSingleTarget.category || '에어컨',
         product: blogSingleTarget.product || '',
         customer_name: blogSingleTarget.customer_name,
@@ -1423,7 +1438,7 @@ ${pasteText}`;
       alert('✅ 블로그 예약 발행 대기열에 등록되었습니다! 노트북이 켜져 있으면 자동으로 작성/발행됩니다.');
       fetchBlogQueue();
       setShowSingleBlogModal(false);
-      setSingleBlogFiles({ beforeFiles: [], afterFiles: [] });
+      setSingleBlogFiles({ beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [] });
     } catch (e) {
       alert('등록 실패: ' + e.message);
     } finally {
@@ -6193,12 +6208,46 @@ ${pasteText}`;
                   <span className="text-[10px] text-slate-400">예약 정보에서 자동으로 채워졌어요.</span>
                 </div>
 
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <label className={`relative flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${singleBlogFiles.thumbBeforeFiles.length > 0 ? 'border-amber-400 bg-amber-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`}>
+                    <div className="text-center">
+                      <span className={`material-symbols-outlined ${singleBlogFiles.thumbBeforeFiles.length > 0 ? 'text-amber-500' : 'text-slate-400'}`}>{singleBlogFiles.thumbBeforeFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
+                      <p className={`text-[11px] font-black mt-1 ${singleBlogFiles.thumbBeforeFiles.length > 0 ? 'text-amber-700' : 'text-slate-500'}`}>
+                        {singleBlogFiles.thumbBeforeFiles.length > 0 ? `썸네일 비포 (${singleBlogFiles.thumbBeforeFiles.length})` : '썸네일 비포 (선택)'}
+                      </p>
+                    </div>
+                    {singleBlogFiles.thumbBeforeFiles.length > 0 && (
+                      <div className="flex gap-2 mt-2 w-full overflow-x-auto pb-1 scrollbar-hide shrink-0 snap-x">
+                        {singleBlogFiles.thumbBeforeFiles.map((f, i) => (
+                          <img key={i} src={URL.createObjectURL(f)} className="w-8 h-8 rounded-md object-cover border border-amber-200 shrink-0 snap-center" title={f.name} />
+                        ))}
+                      </div>
+                    )}
+                    <input type="file" accept="image/*" onChange={(e) => setSingleBlogFiles(prev => ({ ...prev, thumbBeforeFiles: Array.from(e.target.files) }))} className="hidden" />
+                  </label>
+                  <label className={`relative flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${singleBlogFiles.thumbAfterFiles.length > 0 ? 'border-amber-400 bg-amber-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`}>
+                    <div className="text-center">
+                      <span className={`material-symbols-outlined ${singleBlogFiles.thumbAfterFiles.length > 0 ? 'text-amber-500' : 'text-slate-400'}`}>{singleBlogFiles.thumbAfterFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
+                      <p className={`text-[11px] font-black mt-1 ${singleBlogFiles.thumbAfterFiles.length > 0 ? 'text-amber-700' : 'text-slate-500'}`}>
+                        {singleBlogFiles.thumbAfterFiles.length > 0 ? `썸네일 애프터 (${singleBlogFiles.thumbAfterFiles.length})` : '썸네일 애프터 (선택)'}
+                      </p>
+                    </div>
+                    {singleBlogFiles.thumbAfterFiles.length > 0 && (
+                      <div className="flex gap-2 mt-2 w-full overflow-x-auto pb-1 scrollbar-hide shrink-0 snap-x">
+                        {singleBlogFiles.thumbAfterFiles.map((f, i) => (
+                          <img key={i} src={URL.createObjectURL(f)} className="w-8 h-8 rounded-md object-cover border border-amber-200 shrink-0 snap-center" title={f.name} />
+                        ))}
+                      </div>
+                    )}
+                    <input type="file" accept="image/*" onChange={(e) => setSingleBlogFiles(prev => ({ ...prev, thumbAfterFiles: Array.from(e.target.files) }))} className="hidden" />
+                  </label>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <label className={`relative flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${singleBlogFiles.beforeFiles.length > 0 ? 'border-orange-300 bg-orange-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`}>
                     <div className="text-center">
                       <span className={`material-symbols-outlined ${singleBlogFiles.beforeFiles.length > 0 ? 'text-orange-500' : 'text-slate-400'}`}>{singleBlogFiles.beforeFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
                       <p className={`text-xs font-bold mt-1 ${singleBlogFiles.beforeFiles.length > 0 ? 'text-orange-700' : 'text-slate-500'}`}>
-                        {singleBlogFiles.beforeFiles.length > 0 ? `작업 전 (${singleBlogFiles.beforeFiles.length})` : '작업 전 사진'}
+                        {singleBlogFiles.beforeFiles.length > 0 ? `본문 작업 전 (${singleBlogFiles.beforeFiles.length})` : '본문 작업 전 (필수)'}
                       </p>
                     </div>
                     {singleBlogFiles.beforeFiles.length > 0 && (
@@ -6214,7 +6263,7 @@ ${pasteText}`;
                     <div className="text-center">
                       <span className={`material-symbols-outlined ${singleBlogFiles.afterFiles.length > 0 ? 'text-orange-500' : 'text-slate-400'}`}>{singleBlogFiles.afterFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
                       <p className={`text-xs font-bold mt-1 ${singleBlogFiles.afterFiles.length > 0 ? 'text-orange-700' : 'text-slate-500'}`}>
-                        {singleBlogFiles.afterFiles.length > 0 ? `작업 후 (${singleBlogFiles.afterFiles.length})` : '작업 후 사진'}
+                        {singleBlogFiles.afterFiles.length > 0 ? `본문 작업 후 (${singleBlogFiles.afterFiles.length})` : '본문 작업 후 (필수)'}
                       </p>
                     </div>
                     {singleBlogFiles.afterFiles.length > 0 && (
@@ -6341,13 +6390,47 @@ ${pasteText}`;
                         />
                       </div>
                     </div>
+                    <div className="flex w-full grid grid-cols-2 gap-3 mb-2">
+                      <label className={`relative flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${slot.thumbBeforeFiles.length > 0 ? 'border-amber-400 bg-amber-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`}>
+                        <div className="text-center">
+                          <span className={`material-symbols-outlined ${slot.thumbBeforeFiles.length > 0 ? 'text-amber-500' : 'text-slate-400'}`}>{slot.thumbBeforeFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
+                          <p className={`text-[11px] font-black mt-1 ${slot.thumbBeforeFiles.length > 0 ? 'text-amber-700' : 'text-slate-500'}`}>
+                            {slot.thumbBeforeFiles.length > 0 ? `썸네일 비포 (${slot.thumbBeforeFiles.length})` : '썸네일 비포 (선택)'}
+                          </p>
+                        </div>
+                        {slot.thumbBeforeFiles.length > 0 && (
+                          <div className="flex gap-2 mt-2 w-full overflow-x-auto pb-1 scrollbar-hide shrink-0 snap-x">
+                            {slot.thumbBeforeFiles.map((f, i) => (
+                              <img key={i} src={URL.createObjectURL(f)} className="w-8 h-8 rounded-md object-cover border border-amber-200 shrink-0 snap-center" title={f.name} />
+                            ))}
+                          </div>
+                        )}
+                        <input type="file" accept="image/*" onChange={(e) => handleBatchImageUpload(idx, 'thumb_before', e.target.files)} className="hidden" />
+                      </label>
+                      <label className={`relative flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${slot.thumbAfterFiles.length > 0 ? 'border-amber-400 bg-amber-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`}>
+                        <div className="text-center">
+                          <span className={`material-symbols-outlined ${slot.thumbAfterFiles.length > 0 ? 'text-amber-500' : 'text-slate-400'}`}>{slot.thumbAfterFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
+                          <p className={`text-[11px] font-black mt-1 ${slot.thumbAfterFiles.length > 0 ? 'text-amber-700' : 'text-slate-500'}`}>
+                            {slot.thumbAfterFiles.length > 0 ? `썸네일 애프터 (${slot.thumbAfterFiles.length})` : '썸네일 애프터 (선택)'}
+                          </p>
+                        </div>
+                        {slot.thumbAfterFiles.length > 0 && (
+                          <div className="flex gap-2 mt-2 w-full overflow-x-auto pb-1 scrollbar-hide shrink-0 snap-x">
+                            {slot.thumbAfterFiles.map((f, i) => (
+                              <img key={i} src={URL.createObjectURL(f)} className="w-8 h-8 rounded-md object-cover border border-amber-200 shrink-0 snap-center" title={f.name} />
+                            ))}
+                          </div>
+                        )}
+                        <input type="file" accept="image/*" onChange={(e) => handleBatchImageUpload(idx, 'thumb_after', e.target.files)} className="hidden" />
+                      </label>
+                    </div>
                     
                     <div className="flex w-full grid grid-cols-2 gap-3">
                       <label className={`relative flex flex-col items-center justify-center p-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${slot.beforeFiles.length > 0 ? 'border-orange-300 bg-orange-50' : 'border-slate-300 hover:border-slate-400 hover:bg-slate-50'}`}>
                         <div className="text-center">
                           <span className={`material-symbols-outlined ${slot.beforeFiles.length > 0 ? 'text-orange-500' : 'text-slate-400'}`}>{slot.beforeFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
                           <p className={`text-xs font-bold mt-1 ${slot.beforeFiles.length > 0 ? 'text-orange-700' : 'text-slate-500'}`}>
-                            {slot.beforeFiles.length > 0 ? `작업 전 (${slot.beforeFiles.length})` : '작업 전 사진'}
+                            {slot.beforeFiles.length > 0 ? `본문 작업 전 (${slot.beforeFiles.length})` : '본문 작업 전 (필수)'}
                           </p>
                         </div>
                         {slot.beforeFiles.length > 0 && (
@@ -6363,7 +6446,7 @@ ${pasteText}`;
                         <div className="text-center">
                           <span className={`material-symbols-outlined ${slot.afterFiles.length > 0 ? 'text-orange-500' : 'text-slate-400'}`}>{slot.afterFiles.length > 0 ? 'check_circle' : 'add_photo_alternate'}</span>
                           <p className={`text-xs font-bold mt-1 ${slot.afterFiles.length > 0 ? 'text-orange-700' : 'text-slate-500'}`}>
-                            {slot.afterFiles.length > 0 ? `작업 후 (${slot.afterFiles.length})` : '작업 후 사진'}
+                            {slot.afterFiles.length > 0 ? `본문 작업 후 (${slot.afterFiles.length})` : '본문 작업 후 (필수)'}
                           </p>
                         </div>
                         {slot.afterFiles.length > 0 && (
