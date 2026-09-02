@@ -2621,7 +2621,7 @@ ${pasteText}`;
             onClick={(e) => {
               e.stopPropagation();
               setBlogSingleTarget(c);
-              setSingleBlogFiles({ beforeFiles: [], afterFiles: [] });
+              setSingleBlogFiles({ beforeFiles: [], afterFiles: [], thumbBeforeFiles: [], thumbAfterFiles: [] });
               setShowSingleBlogModal(true);
             }}
             className="flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100 active:scale-[0.98]"
