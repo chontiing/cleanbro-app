@@ -57,48 +57,64 @@ SUPABASE_KEY = os.getenv("VITE_SUPABASE_ANON_KEY", "")
 # 예약 발행 큐 관리 로직 (Supabase 기반)
 # ──────────────────────────────────────────────────
 def fetch_pending_supabase_task():
-    try:
-        url = f"{SUPABASE_URL}/rest/v1/bookings?category=eq.블로그자동화&product=eq.pending&order=id.asc&limit=1"
-        headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
-        res = requests.get(url, headers=headers)
-        if res.status_code == 200:
-            data = res.json()
-            if data: return data[0]
-    except Exception as e:
-        print(f"Supabase GET 에러: {e}")
+    for attempt in range(3):
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/bookings?category=eq.블로그자동화&product=eq.pending&order=id.asc&limit=1"
+            headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"}
+            res = requests.get(url, headers=headers, timeout=10)
+            if res.status_code == 200:
+                data = res.json()
+                if data: return data[0]
+            return None
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(2)
+                continue
+            if "NameResolutionError" in str(e) or "getaddrinfo failed" in str(e):
+                print(f"[네트워크 지연] 인터넷 연결 또는 DNS 조회가 일시적으로 끊겼습니다. (다음 주기 재시도)")
+            else:
+                print(f"Supabase GET 에러: {e}")
     return None
 
 def update_supabase_task(task_id, status, error_msg=None, published_url=None, new_memo_dict=None):
-    try:
-        req_url = f"{SUPABASE_URL}/rest/v1/bookings?id=eq.{task_id}"
-        headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
-        
-        # 기존 memo 가져오기
-        res = requests.get(req_url, headers=headers)
-        memo_dict = {}
-        if res.status_code == 200 and res.json():
-            try: memo_dict = json.loads(res.json()[0].get('memo', '{}'))
-            except: pass
+    for attempt in range(3):
+        try:
+            req_url = f"{SUPABASE_URL}/rest/v1/bookings?id=eq.{task_id}"
+            headers = {"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}", "Content-Type": "application/json", "Prefer": "return=representation"}
             
-        if new_memo_dict:
-            memo_dict.update(new_memo_dict)
+            # 기존 memo 가져오기
+            res = requests.get(req_url, headers=headers, timeout=10)
+            memo_dict = {}
+            if res.status_code == 200 and res.json():
+                try: memo_dict = json.loads(res.json()[0].get('memo', '{}'))
+                except: pass
+                
+            if new_memo_dict:
+                memo_dict.update(new_memo_dict)
 
-        if published_url: memo_dict['published_url'] = published_url
-        if error_msg: 
-            memo_dict['error'] = error_msg
-        elif status == "작성 완료" or status == "completed":
-            memo_dict['error'] = None # 성공 시 에러 메시지 초기화
-        
-        payload = {
-            "product": status,
-            "memo": json.dumps(memo_dict, ensure_ascii=False)
-        }
-        if status == "completed" or "완료" in status:
-            payload["is_completed"] = True
+            if published_url: memo_dict['published_url'] = published_url
+            if error_msg: 
+                memo_dict['error'] = error_msg
+            elif status == "작성 완료" or status == "completed":
+                memo_dict['error'] = None # 성공 시 에러 메시지 초기화
             
-        requests.patch(req_url, headers=headers, json=payload)
-    except Exception as e:
-        print(f"Supabase PATCH 에러: {e}")
+            payload = {
+                "product": status,
+                "memo": json.dumps(memo_dict, ensure_ascii=False)
+            }
+            if status == "completed" or "완료" in status:
+                payload["is_completed"] = True
+                
+            requests.patch(req_url, headers=headers, json=payload, timeout=10)
+            break
+        except Exception as e:
+            if attempt < 2:
+                time.sleep(2)
+                continue
+            if "NameResolutionError" in str(e) or "getaddrinfo failed" in str(e):
+                print(f"[네트워크 지연] 인터넷 연결 또는 DNS 조회가 일시적으로 끊겼습니다.")
+            else:
+                print(f"Supabase UPDATE 에러: {e}")
 
 def generate_draft_via_edge(memo_dict):
     url = f"{SUPABASE_URL}/functions/v1/generate-blog-draft"
@@ -295,13 +311,29 @@ def download_image(url: str, idx: int, tmpdir: str, prefix: str = "sokcho-aircon
     return out_path
 
 
+NAVER_SESSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "naver_session.json")
+
+
 def post_to_naver(data: PublishRequest) -> str:
     """Playwright로 네이버 블로그에 포스팅하고 발행된 URL을 반환."""
     blog_id = NAVER_BLOG_ID or "carehome-"
-    
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        context = browser.new_context(
+        # 네이버가 navigator.webdriver 등 자동화 흔적을 감지하면 캡차를 계속 새로
+        # 띄우므로, 설치된 실제 크롬(channel="chrome")을 우선 사용하고 자동화
+        # 감지 플래그를 끔. 크롬이 없는 환경이면 번들 Chromium으로 폴백.
+        try:
+            browser = p.chromium.launch(
+                headless=False,
+                channel="chrome",
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+        except Exception:
+            browser = p.chromium.launch(
+                headless=False,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+        context_kwargs = dict(
             viewport={"width": 1280, "height": 900},
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -309,41 +341,76 @@ def post_to_naver(data: PublishRequest) -> str:
                 "Chrome/121.0.0.0 Safari/537.36"
             ),
         )
+        # 저장된 세션(쿠키)이 있으면 재사용 → 매번 새 로그인으로 인식되어 뜨는
+        # 네이버 보안 캡차를 대부분 회피할 수 있음.
+        if os.path.exists(NAVER_SESSION_FILE):
+            context_kwargs["storage_state"] = NAVER_SESSION_FILE
+        context = browser.new_context(**context_kwargs)
+        # navigator.webdriver 값을 감춰 자동화 브라우저로 감지되는 것을 방지.
+        context.add_init_script(
+            "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+        )
         page = context.new_page()
 
         try:
-            # ── 1. 네이버 로그인 ──────────────────────────
-            print("[Bot] 네이버 로그인 중...")
-            page.goto("https://nid.naver.com/nidlogin.login", timeout=30000)
-            page.wait_for_timeout(2000)
+            # ── 1. 네이버 로그인 (저장된 세션 우선 재사용) ──────────
+            logged_in = False
+            if os.path.exists(NAVER_SESSION_FILE):
+                print("[Bot] 저장된 네이버 세션으로 로그인 시도...")
+                page.goto("https://blog.naver.com", timeout=30000)
+                page.wait_for_timeout(1500)
+                if "nid.naver.com" not in page.url:
+                    logged_in = True
+                    print("[Bot] 세션 재사용으로 로그인 완료 (캡차 생략)")
+                else:
+                    print("[Bot] 저장된 세션이 만료됨. 아이디/비밀번호로 재로그인합니다.")
 
-            # JavaScript 주입 대신 사람이 직접 복사/붙여넣기 하는 방식으로 우회 (자동입력 방지 방어)
-            page.click('#id')
-            pyperclip.copy(NAVER_ID)
-            page.keyboard.down('Control')
-            page.keyboard.press('v')
-            page.keyboard.up('Control')
-            page.wait_for_timeout(1000)
+            if not logged_in:
+                print("[Bot] 네이버 로그인 중...")
+                page.goto("https://nid.naver.com/nidlogin.login", timeout=30000)
+                page.wait_for_timeout(2000)
 
-            page.click('#pw')
-            pyperclip.copy(NAVER_PW)
-            page.keyboard.down('Control')
-            page.keyboard.press('v')
-            page.keyboard.up('Control')
-            page.wait_for_timeout(1000)
-            
-            page.click("#log\\.login")
-            print("[Bot] 로그인 버튼 클릭 완료. (2단계 인증이나 캡차(보안문자)가 뜬 경우 화면에서 직접 해결해 주세요. 최대 30초 기다립니다...)")
-            
-            for _ in range(30):
-                if "nid.naver.com" not in page.url or "login" not in page.url:
-                    break
-                page.wait_for_timeout(1000)
+                if "nidlogin" not in page.url or not page.is_visible('#id'):
+                    # 이미 유효한 로그인 세션이라 로그인 페이지가 자동으로 홈/마이페이지로 리다이렉트된 경우
+                    print(f"[Bot] 이미 로그인된 상태로 감지됨 (URL: {page.url}).")
+                else:
+                    # JavaScript 주입 대신 사람이 직접 복사/붙여넣기 하는 방식으로 우회 (자동입력 방지 방어)
+                    page.click('#id')
+                    pyperclip.copy(NAVER_ID)
+                    page.keyboard.down('Control')
+                    page.keyboard.press('v')
+                    page.keyboard.up('Control')
+                    page.wait_for_timeout(1000)
 
-            # 로그인 성공 여부 확인
-            if "nid.naver.com" in page.url and "login" in page.url:
-                raise Exception("네이버 로그인 실패. 아이디/비밀번호를 확인하시거나, 2단계 인증을 타이밍 내에 승인해주세요.")
-            print("[Bot] 로그인 (또는 2단계 인증) 완료:", page.url)
+                    page.click('#pw')
+                    pyperclip.copy(NAVER_PW)
+                    page.keyboard.down('Control')
+                    page.keyboard.press('v')
+                    page.keyboard.up('Control')
+                    page.wait_for_timeout(1000)
+
+                    # 네이버가 로그인 페이지 UI를 개편하며 버튼 id(log.login)가 사라질 수 있어,
+                    # 옛 id와 텍스트 기반 버튼을 모두 시도.
+                    try:
+                        page.click("#log\\.login", timeout=5000)
+                    except Exception:
+                        if page.is_visible('#id'):
+                            page.get_by_role("button", name="로그인", exact=True).first.click(timeout=15000)
+                    print("[Bot] 로그인 버튼 처리 완료. (2단계 인증이나 캡차(보안문자)가 뜬 경우 화면에서 직접 해결해 주세요. 최대 30초 기다립니다...)")
+
+                    for _ in range(30):
+                        if "nidlogin" not in page.url:
+                            break
+                        page.wait_for_timeout(1000)
+
+                    # 로그인 성공 여부 확인
+                    if "nidlogin" in page.url and page.is_visible('#id'):
+                        raise Exception("네이버 로그인 실패. 아이디/비밀번호를 확인하시거나, 2단계 인증을 타이밍 내에 승인해주세요.")
+                print("[Bot] 로그인 (또는 2단계 인증) 완료:", page.url)
+
+                # 다음 실행부터는 이 세션을 재사용해 캡차를 회피
+                context.storage_state(path=NAVER_SESSION_FILE)
+                print(f"[Bot] 네이버 세션 저장 완료: {NAVER_SESSION_FILE}")
 
             # ── 2. 블로그 글쓰기 에디터 접속 ──────────────
             editor_url = f"https://blog.naver.com/{blog_id}/postwrite"
@@ -676,38 +743,60 @@ def post_to_naver(data: PublishRequest) -> str:
                 except Exception as e:
                     print(f"[경고] 장소 컴포넌트 첨부 중 알 수 없는 에러: {e}")
 
-                # ── 7. 태그 입력 ──────────────────────────
-                print("[Bot] 태그 입력 중...")
-                tag_written = False
-                tag_selectors = [
-                    ".se-tag-input__input",
-                    ".se-tag-input input",
-                    "input[placeholder*='태그']",
-                    "input[placeholder*='tag']",
-                    ".tag_input",
-                    "#post-tag-input",
-                ]
-                for sel in tag_selectors:
-                    try:
-                        tag_input = page.wait_for_selector(sel, timeout=1000)
-                        if tag_input:
-                            for tag in data.tags[:10]:
-                                tag_input.click()
-                                tag_text = tag.lstrip("#").strip()
-                                if tag_text:
-                                    tag_input.type(tag_text, delay=30)
-                                    page.keyboard.press("Enter")
-                                    page.wait_for_timeout(300)
-                            tag_written = True
-                            print(f"[Bot] 태그 입력 완료 (selector: {sel})")
-                            break
-                    except Exception:
-                        continue
+                # ── 7. 태그 입력 (발행 패널 열기) ──────────────────────────
+                print("[Bot] 태그 입력을 위해 발행 패널 열기 시도 중...")
                 
-                if not tag_written:
-                    print("[경고] 태그 입력 실패 - 셀렉터를 찾지 못함")
-
+                # 먼저 1단계 발행 버튼(패널 열기)을 클릭합니다.
+                main_btn = page.locator("button, a").filter(has_text="발행").locator("visible=true").first
+                panel_opened = False
+                if main_btn.count() > 0:
+                    main_btn.click()
+                    page.wait_for_timeout(2000)
+                    panel_opened = True
+                    print("[Bot] 발행 패널 열기 완료")
+                    
+                    # 태그 입력
+                    tag_written = False
+                    tag_selectors = [
+                        "input[placeholder*='태그']",
+                        "textarea[placeholder*='태그']",
+                        ".tag_input",
+                        "#post-tag-input",
+                        ".se-tag-input__input",
+                        ".se-tag-input input"
+                    ]
+                    
+                    for sel in tag_selectors:
+                        try:
+                            tag_input = page.locator(sel).first
+                            if tag_input.count() > 0 and tag_input.is_visible(timeout=2000):
+                                for tag in data.tags[:10]:
+                                    tag_text = tag.lstrip("#").strip()
+                                    if tag_text:
+                                        tag_input.click()
+                                        # 클립보드를 통한 입력 방식(안정성) 또는 type 사용
+                                        tag_input.fill(tag_text)
+                                        tag_input.press("Enter")
+                                        page.wait_for_timeout(300)
+                                tag_written = True
+                                print(f"[Bot] 발행 패널 내 태그 입력 완료 (selector: {sel})")
+                                break
+                        except Exception:
+                            continue
+                    
+                    if not tag_written:
+                        print("[경고] 태그 입력 실패 - 발행 패널 내에서 입력창을 찾지 못함")
+                        
+                # ── 8. 임시저장 또는 최종 발행 ───────────────────────────────
                 if data.save_as_draft:
+                    # 패널 닫기 (ESC키로 닫기)
+                    if panel_opened:
+                        page.keyboard.press("Escape")
+                        page.wait_for_timeout(1000)
+                        # 에디터 본문 한 번 클릭해서 확실히 패널 닫기 (포커스 아웃)
+                        page.mouse.click(10, 10)
+                        page.wait_for_timeout(1000)
+
                     print("[Bot] 임시저장/발행 전 이미지 업로드 안정화 대기 (10초)...")
                     page.wait_for_timeout(10000)
                     print("[Bot] 임시저장 시도 중...")
@@ -726,7 +815,6 @@ def post_to_naver(data: PublishRequest) -> str:
                     for sel in draft_selectors:
                         try:
                             save_btn = page.locator(sel).first
-                            # is_visible() 이 다른 투명 레이어 때문에 False일 수 있으므로 강제(force) 클릭 시도
                             if save_btn.count() > 0:
                                 print(f"[Bot] 임시저장 버튼 발견 시도: (selector: {sel})")
                                 save_btn.click(timeout=3000, force=True)
@@ -753,34 +841,22 @@ def post_to_naver(data: PublishRequest) -> str:
                         return "[임시저장 완료] " + editor_url
                     else:
                         raise Exception("임시저장 버튼을 찾지 못했습니다.")
-
-                # ── 8. 발행 ───────────────────────────────
-                print("[Bot] 발행 시도 중...")
-                page.wait_for_timeout(1000)
-                
-                published = False
-                
-                try:
-                    main_btn = page.locator("button, a").filter(has_text="발행").locator("visible=true").first
-                    if main_btn.count() > 0:
-                        print(f"[Bot] 1단계 발행 버튼 찾아냄: {main_btn.inner_text()}")
-                        main_btn.evaluate("el => el.click()")
-                        page.wait_for_timeout(2000)
-                        
-                        try:
-                            # 1단계 누른 직후 모달 스크린샷 캡처
-                            page.screenshot(path="debug_panel.png")
-                        except: pass
+                else:
+                    # 즉시 발행인 경우, 패널이 열려있으므로 최종 발행 버튼을 클릭
+                    print("[Bot] 즉시 발행 시도 중...")
+                    page.wait_for_timeout(1000)
                     
-                    final_btn = page.locator("button, a").filter(has_text="발행").filter(has_not_text="0건").filter(has_not_text="예약").filter(has_not_text="취소").locator("visible=true").last
-                    if final_btn.count() > 0:
-                        print(f"[Bot] 2단계 최종 발행 버튼 찾아냄: {final_btn.inner_text()}")
-                        final_btn.evaluate("el => el.click()")
-                        page.wait_for_timeout(10000) # 발행 후 충분히 대기
-                        published = True
+                    published = False
+                    try:
+                        final_btn = page.locator("button, a").filter(has_text="발행").filter(has_not_text="0건").filter(has_not_text="예약").filter(has_not_text="취소").locator("visible=true").last
+                        if final_btn.count() > 0:
+                            print(f"[Bot] 2단계 최종 발행 버튼 찾아냄: {final_btn.inner_text()}")
+                            final_btn.evaluate("el => el.click()")
+                            page.wait_for_timeout(10000) # 발행 후 충분히 대기
+                            published = True
 
-                except Exception as e:
-                    print(f"[경고] 발행 단계 오류: {e}")
+                    except Exception as e:
+                        print(f"[경고] 발행 단계 오류: {e}")
 
                 if not published:
                     print("[경고] 발행 버튼을 여러 번 탐색해도 실패하여 백업 클릭을 시도합니다.")
@@ -832,6 +908,14 @@ def post_to_naver(data: PublishRequest) -> str:
                 if "postwrite" in published_url:
                     raise Exception(f"발행 버튼을 눌렀으나 페이지가 전환되지 않았습니다. (현재 URL: {published_url})")
 
+        except Exception:
+            try:
+                shot_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f"naver_error_{int(time.time())}.png")
+                page.screenshot(path=shot_path)
+                print(f"[Bot] 에러 발생 시점 화면 캡처 저장: {shot_path}")
+            except Exception:
+                pass
+            raise
         finally:
             context.close()
             browser.close()

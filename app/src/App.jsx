@@ -1230,6 +1230,19 @@ ${pasteText}`;
     }
   };
 
+  const deleteAllFromQueue = async () => {
+    if(!window.confirm('모든 발행 현황 기록을 삭제하시겠습니까?\n(대기 중인 작업도 모두 취소되며, 이미 발행된 글은 블로그에서 직접 지워야 합니다)')) return;
+    try {
+      const { error } = await supabase.from('bookings').delete()
+        .eq('business_id', myBusinessId)
+        .eq('category', '블로그자동화');
+      if (error) throw error;
+      fetchBlogQueue();
+    } catch (err) {
+      alert('전체 삭제 실패: ' + err.message);
+    }
+  };
+
   const retryQueueTask = async (id) => {
     if (!window.confirm('에러가 발생한 블로그 자동발행 작업을 재시도하시겠습니까?\n사진이나 데이터를 다시 넣을 필요 없이 즉시 로봇이 다시 가동됩니다.')) return;
     try {
@@ -3206,6 +3219,9 @@ ${pasteText}`;
           </h1>
         </div>
         <div className="flex items-center gap-3">
+          <button onClick={() => window.location.reload()} className="text-slate-400 hover:text-blue-500 transition-colors" title="새로고침">
+            <span className="material-symbols-outlined text-[26px]">refresh</span>
+          </button>
           <button onClick={() => setCurrentTab('notice')} className={`transition-colors ${currentTab === 'notice' ? 'text-primary' : 'text-slate-400 hover:text-blue-500'}`}>
             <span className="material-symbols-outlined text-[26px]">campaign</span>
           </button>
@@ -5556,6 +5572,12 @@ ${pasteText}`;
                   <div className="flex justify-between items-center text-[9px] text-slate-400 font-bold mb-1">
                     <span>재고: {p.stock}개</span>
                   </div>
+                  {p.platform === '쿠팡' && (
+                    <p className="text-[9px] text-[#0055ff] font-semibold mt-1.5 leading-tight flex items-start gap-1 bg-blue-50 p-1.5 rounded-lg border border-blue-100 shrink-0">
+                      <span className="material-symbols-outlined text-[10px] shrink-0 mt-0.5">info</span>
+                      <span>이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 전액 수수료를 제공 받습니다.</span>
+                    </p>
+                  )}
                   {p.platform === '알리' && (
                     <p className="text-[9px] text-orange-500 font-bold mt-1.5 leading-tight flex items-start gap-0.5 bg-orange-50 p-1.5 rounded-lg border border-orange-100 shrink-0">
                       <span className="material-symbols-outlined text-[10px]">flight_takeoff</span>
@@ -5631,7 +5653,19 @@ ${pasteText}`;
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 mb-1">플랫폼 연동</label>
-                    <select value={editingProduct.platform || ''} onChange={e => setEditingProduct({ ...editingProduct, platform: e.target.value })} className="w-full p-2 rounded-lg border bg-slate-50 text-[10px]">
+                    <select 
+                      value={editingProduct.platform || ''} 
+                      onChange={e => {
+                        const val = e.target.value;
+                        let newDesc = editingProduct.description || '';
+                        const coupangNotice = "이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 전액 수수료를 제공 받습니다.";
+                        if (val === '쿠팡' && !newDesc.includes("쿠팡 파트너스")) {
+                          newDesc = newDesc ? `${newDesc}\n\n${coupangNotice}` : coupangNotice;
+                        }
+                        setEditingProduct({ ...editingProduct, platform: val, description: newDesc });
+                      }} 
+                      className="w-full p-2 rounded-lg border bg-slate-50 text-[10px]"
+                    >
                       <option value="">없음</option>
                       <option value="쿠팡">쿠팡</option>
                       <option value="알리">알리</option>
@@ -5646,6 +5680,11 @@ ${pasteText}`;
                     </select>
                   </div>
                 </div>
+                {editingProduct.platform === '쿠팡' && (
+                  <p className="text-[9px] text-blue-600 font-medium mb-3 leading-tight bg-blue-50 p-2 rounded-lg border border-blue-100">
+                    💡 쿠팡 파트너스 문구("이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 전액 수수료를 제공 받습니다.")가 상품 카드 및 상세 설명에 자동으로 적용됩니다.
+                  </p>
+                )}
                 <div>
                   <label className="block text-[10px] font-bold text-slate-500 mb-1">외부 링크 (구매처)</label>
                   <input type="url" value={editingProduct.link_url} onChange={e => setEditingProduct({ ...editingProduct, link_url: e.target.value })} className="w-full p-2 rounded-lg border bg-slate-50 text-[10px]" placeholder="https://..." />
@@ -6344,9 +6383,17 @@ ${pasteText}`;
               {/* 큐(대기열) 대시보드 추가 */}
               {blogQueue.length > 0 && (
                 <div className="mt-4 bg-orange-50 border border-orange-200 rounded-xl p-4">
-                  <h4 className="text-orange-800 font-bold text-sm mb-3 flex items-center gap-1">
-                    <span className="material-symbols-outlined text-sm">rocket_launch</span>블로그 자동 발행 현황 ({blogQueue.length}/30)
-                  </h4>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-orange-800 font-bold text-sm flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm">rocket_launch</span>블로그 자동 발행 현황 ({blogQueue.length}/30)
+                    </h4>
+                    <button 
+                      onClick={deleteAllFromQueue}
+                      className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded text-[11px] font-bold transition-colors active:scale-95 whitespace-nowrap"
+                    >
+                      전체 삭제
+                    </button>
+                  </div>
                   <div className="space-y-2">
                     {blogQueue.map((item, idx) => (
                       <div key={item.id} className="flex flex-col sm:flex-row sm:items-center justify-between text-xs bg-white p-3 rounded-lg border border-orange-100 shadow-sm gap-2 sm:gap-0">
