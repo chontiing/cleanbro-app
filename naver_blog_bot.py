@@ -136,7 +136,7 @@ def generate_draft_via_edge(memo_dict):
     max_retries = 3
     for attempt in range(1, max_retries + 1):
         print(f"[Bot] AI 서버(Gemini)에 블로그 초안 생성 요청 중... (시도 {attempt}/{max_retries})")
-        res = requests.post(url, json=req_body, headers=headers)
+        res = requests.post(url, json=req_body, headers=headers, timeout=120)
         if res.status_code == 200:
             data = res.json()
             if "error" in data:
@@ -730,7 +730,7 @@ def post_to_naver(data: PublishRequest) -> str:
                             # 팝업 내에서만 찾도록 한정합니다 (안 그러면 배경의 다른 요소를 잡아 딤 레이어 에러가 발생합니다)
                             add_btn = page.locator(".se-popup-placesMap button:has-text('추가'), .se-popup-placesMap a:has-text('추가'), .se-popup-placesMap .btn_add, .se-place-search-list-item button").first
                             if add_btn.is_visible(timeout=3000):
-                                add_btn.click(timeout=3000)
+                                add_btn.click(timeout=3000, force=True)
                                 page.wait_for_timeout(1000)
                                 
                                 # 4. 하단 '확인' 또는 '완료' 버튼 클릭하여 에디터로 최종 삽입
@@ -752,7 +752,7 @@ def post_to_naver(data: PublishRequest) -> str:
                                 if not confirm_btn_clicked:
                                     confirm_fallback = page.locator(".se-popup-placesMap button:has-text('확인'), .se-popup-placesMap button:has-text('완료'), .se-popup-placesMap .btn_confirm").first
                                     if confirm_fallback.is_visible(timeout=3000):
-                                        confirm_fallback.click(timeout=3000)
+                                        confirm_fallback.click(timeout=3000, force=True)
                                         
                                 page.wait_for_timeout(2000)
                                 print("[Bot] 장소(Map) 컴포넌트 성공적으로 쾅 찍어 넣었습니다! 🗺️")
@@ -1069,7 +1069,7 @@ SEO 마케터, 카피라이터, 데이터 분석가 AI 3명이 내부적으로 �
             return jsonify({"detail": "Gemini API 키가 없습니다."}), 500
 
         res = requests.post(
-            f"https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key={{GEMINI_KEY}}",
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={{GEMINI_KEY}}",
             json={
                 "contents": [{"role": "user", "parts": [{"text": system_prompt}]}],
                 "generationConfig": {"temperature": 0.8, "maxOutputTokens": 800}
