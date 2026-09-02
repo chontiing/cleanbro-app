@@ -353,11 +353,15 @@ def post_to_naver(data: PublishRequest) -> str:
         page = context.new_page()
 
         try:
+            editor_url = f"https://blog.naver.com/{blog_id}/postwrite"
+            if getattr(data, 'category', '') == '인스턴티':
+                editor_url += "?categoryNo=22"
+
             # ── 1. 네이버 로그인 (저장된 세션 우선 재사용) ──────────
             logged_in = False
             if os.path.exists(NAVER_SESSION_FILE):
                 print("[Bot] 저장된 네이버 세션으로 로그인 시도...")
-                page.goto("https://blog.naver.com", timeout=30000)
+                page.goto(editor_url, timeout=30000)
                 page.wait_for_timeout(1500)
                 if "nid.naver.com" not in page.url:
                     logged_in = True
@@ -413,15 +417,10 @@ def post_to_naver(data: PublishRequest) -> str:
                 print(f"[Bot] 네이버 세션 저장 완료: {NAVER_SESSION_FILE}")
 
             # ── 2. 블로그 글쓰기 에디터 접속 ──────────────
-            editor_url = f"https://blog.naver.com/{blog_id}/postwrite"
-            
-            # 카테고리 식별 (인스턴티는 categoryNo=22)
-            if getattr(data, 'category', '') == '인스턴티':
-                editor_url += "?categoryNo=22"
-
-            print(f"[Bot] 에디터 접속: {editor_url}")
-            page.goto(editor_url, timeout=30000)
-            page.wait_for_timeout(5000)
+            if not logged_in or page.url != editor_url:
+                print(f"[Bot] 에디터 접속: {editor_url}")
+                page.goto(editor_url, timeout=30000)
+                page.wait_for_timeout(5000)
 
             # ── 2.1 팝업 처리 (작성중인 글이 있습니다 등) ──
             print("[Bot] 팝업 체크 중...")
@@ -709,39 +708,48 @@ def post_to_naver(data: PublishRequest) -> str:
                             page.wait_for_timeout(2500)
                             
                             # 3. '추가' 버튼 클릭 (결과 리스트의 첫번째)
-                            add_btn = page.locator("button:has-text('추가'), a:has-text('추가'), .btn_add").first
+                            # 팝업 내에서만 찾도록 한정합니다 (안 그러면 배경의 다른 요소를 잡아 딤 레이어 에러가 발생합니다)
+                            add_btn = page.locator(".se-popup-placesMap button:has-text('추가'), .se-popup-placesMap a:has-text('추가'), .se-popup-placesMap .btn_add, .se-place-search-list-item button").first
                             if add_btn.is_visible(timeout=3000):
-                                add_btn.click()
+                                add_btn.click(timeout=3000)
                                 page.wait_for_timeout(1000)
                                 
                                 # 4. 하단 '확인' 또는 '완료' 버튼 클릭하여 에디터로 최종 삽입
                                 confirm_btn_clicked = page.evaluate('''() => {
-                                    const cBtn = document.querySelector("button.se-place-confirm-button, button.btn_confirm");
+                                    const cBtn = document.querySelector(".se-popup-placesMap button.se-place-confirm-button, .se-popup-placesMap button.btn_confirm");
                                     if(cBtn) { cBtn.click(); return true; }
-                                    // 텍스트 기반 탐색
-                                    for(const btn of document.querySelectorAll('button')) {
-                                        if(btn.innerText.includes('확인') || btn.innerText.includes('완료')) {
-                                            btn.click(); return true;
+                                    // 텍스트 기반 탐색 (팝업 내)
+                                    const popup = document.querySelector(".se-popup-placesMap");
+                                    if(popup) {
+                                        for(const btn of popup.querySelectorAll('button')) {
+                                            if(btn.innerText.includes('확인') || btn.innerText.includes('완료')) {
+                                                btn.click(); return true;
+                                            }
                                         }
                                     }
                                     return false;
                                 }''')
                                 
                                 if not confirm_btn_clicked:
-                                    confirm_fallback = page.locator("button:has-text('확인'), button:has-text('완료'), .btn_confirm").first
+                                    confirm_fallback = page.locator(".se-popup-placesMap button:has-text('확인'), .se-popup-placesMap button:has-text('완료'), .se-popup-placesMap .btn_confirm").first
                                     if confirm_fallback.is_visible(timeout=3000):
-                                        confirm_fallback.click()
+                                        confirm_fallback.click(timeout=3000)
                                         
                                 page.wait_for_timeout(2000)
                                 print("[Bot] 장소(Map) 컴포넌트 성공적으로 쾅 찍어 넣었습니다! 🗺️")
                             else:
                                 print(f"[경고] '{place_keyword}' 검색 결과에서 '추가' 버튼을 못 찾았습니다.")
+                                page.keyboard.press("Escape") # 팝업 닫기
+                                page.wait_for_timeout(1000)
                         else:
                             print("[경고] 장소 검색 팝업창(input)이 열리지 않았습니다.")
+                            page.keyboard.press("Escape")
                     else:
                         print("[경고] 상단 툴바에서 '장소' 버튼을 찾지 못해 클릭에 실패했습니다.")
                 except Exception as e:
                     print(f"[경고] 장소 컴포넌트 첨부 중 알 수 없는 에러: {e}")
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(1000)
 
                 # ── 7. 태그 입력 (발행 패널 열기) ──────────────────────────
                 print("[Bot] 태그 입력을 위해 발행 패널 열기 시도 중...")
