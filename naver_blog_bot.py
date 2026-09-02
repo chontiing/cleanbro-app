@@ -1069,7 +1069,7 @@ SEO 마케터, 카피라이터, 데이터 분석가 AI 3명이 내부적으로 �
             return jsonify({"detail": "Gemini API 키가 없습니다."}), 500
 
         res = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={{GEMINI_KEY}}",
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}",
             json={
                 "contents": [{"role": "user", "parts": [{"text": system_prompt}]}],
                 "generationConfig": {"temperature": 0.8, "maxOutputTokens": 800}

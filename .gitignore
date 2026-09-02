@@ -1,5 +1,6 @@
 .env
 app/.env
+blog_publisher/.env
 naver_session.json
 naver_error_*.png
 test_*.py
