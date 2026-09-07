@@ -165,6 +165,10 @@ function App() {
   // 매출 분석용 추가 상태
   const [showTargetEdit, setShowTargetEdit] = useState(false);
   const [showYearSalesModal, setShowYearSalesModal] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+  const [yearModalFilter, setYearModalFilter] = useState('all'); // 'all', 'general', 'samsung'
+  const [scheduleFilterType, setScheduleFilterType] = useState('all'); // 'all', 'general', 'samsung'
+  const [statCategoryFilter, setStatCategoryFilter] = useState('all'); // 'all', 'general', 'samsung'
   const [newTargetRevenue, setNewTargetRevenue] = useState('');
   const [showConfettiOnce, setShowConfettiOnce] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
@@ -2167,12 +2171,23 @@ ${pasteText}`;
   // [대시보드 보조 함수]
   // ==========================================
   const calcDashboard = (dateStr) => {
-    const list = customers.filter(c => c.book_date === dateStr);
+    const list = customers.filter(c => c.book_date === dateStr && c.category !== '블로그자동화');
     let total = 0, cash = 0, card = 0;
+    let generalSales = 0, samsungSales = 0;
+    let generalCount = 0, samsungCount = 0;
+
     list.forEach(c => {
-      total += c.final_price;
-      if (c.payment_method === '현금') cash += c.final_price;
-      if (c.payment_method === '카드') card += c.final_price;
+      const p = Number(c.final_price) || 0;
+      total += p;
+      if (c.payment_method === '현금') cash += p;
+      if (c.payment_method === '카드') card += p;
+      if (c.is_samsung_check) {
+        samsungSales += p;
+        samsungCount++;
+      } else {
+        generalSales += p;
+        generalCount++;
+      }
     });
     
     // 예약 시간을 기준으로 정렬 (빈 문자열이 앞으로 오지 않고, 정상적으로 비교되게 처리)
@@ -2182,7 +2197,18 @@ ${pasteText}`;
       return timeA.localeCompare(timeB);
     });
 
-    return { total, cash, card, list };
+    const filteredList = list.filter(c => {
+      if (scheduleFilterType === 'samsung') return c.is_samsung_check;
+      if (scheduleFilterType === 'general') return !c.is_samsung_check;
+      return true;
+    });
+
+    return { 
+      total, cash, card, 
+      generalSales, samsungSales, 
+      generalCount, samsungCount,
+      list, filteredList 
+    };
   };
 
   // ==========================================
@@ -2192,30 +2218,95 @@ ${pasteText}`;
   const [selectedDate, setSelectedDate] = useState(getTodayStr());
   const [showAllSchedule, setShowAllSchedule] = useState(false); // 전체 일정 보기 토글 상태 추가
 
-  // 캘린더에 표시 중인 월(calDate)의 총 매출 계산
-  const calMonthSales = useMemo(() => {
+  // 캘린더에 표시 중인 월(calDate)의 매출 계산 (전체, 일반, 삼성)
+  const calMonthSalesData = useMemo(() => {
     const year = calDate.getFullYear();
     const month = String(calDate.getMonth() + 1).padStart(2, '0');
     const prefix = `${year}-${month}`;
-    return customers
-      .filter(c => c.book_date?.startsWith(prefix))
-      .reduce((acc, c) => acc + (c.final_price || 0), 0);
+    let total = 0, general = 0, samsung = 0;
+    let totalCount = 0, generalCount = 0, samsungCount = 0;
+
+    customers
+      .filter(c => c.book_date?.startsWith(prefix) && c.category !== '블로그자동화')
+      .forEach(c => {
+        const p = Number(c.final_price) || 0;
+        total += p;
+        totalCount++;
+        if (c.is_samsung_check) {
+          samsung += p;
+          samsungCount++;
+        } else {
+          general += p;
+          generalCount++;
+        }
+      });
+
+    return { total, general, samsung, totalCount, generalCount, samsungCount };
   }, [customers, calDate]);
 
-  // 캘린더에 표시 중인 연도의 총 매출 계산 및 월별 breakdown
+  const calMonthSales = calMonthSalesData.total;
+
+  // 캘린더에 표시 중인 연도의 총 매출 계산 및 월별 breakdown (삼성/일반/지출/순익 포함)
   const calYearSalesBreakdown = useMemo(() => {
-    const year = calDate.getFullYear();
+    const year = selectedYear || calDate.getFullYear();
     const months = Array.from({ length: 12 }, (_, i) => {
       const monthStr = String(i + 1).padStart(2, '0');
       const prefix = `${year}-${monthStr}`;
-      const sales = customers
-        .filter(c => c.book_date?.startsWith(prefix))
-        .reduce((acc, c) => acc + (c.final_price || 0), 0);
-      return { month: i + 1, sales };
+      let sales = 0, generalSales = 0, samsungSales = 0;
+      let count = 0, generalCount = 0, samsungCount = 0;
+
+      customers
+        .filter(c => c.book_date?.startsWith(prefix) && c.category !== '블로그자동화')
+        .forEach(c => {
+          const p = Number(c.final_price) || 0;
+          sales += p;
+          count++;
+          if (c.is_samsung_check) {
+            samsungSales += p;
+            samsungCount++;
+          } else {
+            generalSales += p;
+            generalCount++;
+          }
+        });
+
+      // 해당 월 지출액
+      const monthExpenses = expenses
+        .filter(e => e.date_created?.startsWith(prefix))
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+      const netProfit = sales - monthExpenses;
+
+      return { 
+        month: i + 1, 
+        sales, generalSales, samsungSales, 
+        count, generalCount, samsungCount,
+        expenses: monthExpenses, netProfit 
+      };
     });
+
     const total = months.reduce((acc, m) => acc + m.sales, 0);
-    return { year, months, total };
-  }, [customers, calDate]);
+    const totalGeneral = months.reduce((acc, m) => acc + m.generalSales, 0);
+    const totalSamsung = months.reduce((acc, m) => acc + m.samsungSales, 0);
+    const totalExpenses = months.reduce((acc, m) => acc + m.expenses, 0);
+    const totalNetProfit = total - totalExpenses;
+
+    const totalCount = months.reduce((acc, m) => acc + m.count, 0);
+    const totalGeneralCount = months.reduce((acc, m) => acc + m.generalCount, 0);
+    const totalSamsungCount = months.reduce((acc, m) => acc + m.samsungCount, 0);
+
+    const samsungPct = total > 0 ? Math.round((totalSamsung / total) * 100) : 0;
+    const generalPct = total > 0 ? 100 - samsungPct : 0;
+    const netProfitMargin = total > 0 ? Math.round((totalNetProfit / total) * 100) : 0;
+
+    return { 
+      year, months, total, 
+      totalGeneral, totalSamsung, 
+      totalExpenses, totalNetProfit,
+      totalCount, totalGeneralCount, totalSamsungCount,
+      samsungPct, generalPct, netProfitMargin
+    };
+  }, [customers, expenses, selectedYear, calDate]);
 
   // 캘린더에 표시 중인 월의 목표 달성률 계산
   const calAchieveRate = useMemo(() => {
@@ -2231,7 +2322,7 @@ ${pasteText}`;
     const prevPrefix = `${prevYear}-${prevMonth}`;
 
     const prevMonthSales = customers
-      .filter(c => c.book_date?.startsWith(prevPrefix))
+      .filter(c => c.book_date?.startsWith(prevPrefix) && c.category !== '블로그자동화')
       .reduce((acc, c) => acc + (c.final_price || 0), 0);
 
     if (prevMonthSales === 0) return calMonthSales > 0 ? 100 : 0;
@@ -2354,16 +2445,43 @@ ${pasteText}`;
   const [statEnd, setStatEnd] = useState(getTodayStr());
 
   const statsData = useMemo(() => {
-    const list = customers.filter(c => c.book_date >= statStart && c.book_date <= statEnd);
+    const rawList = customers.filter(c => c.book_date >= statStart && c.book_date <= statEnd && c.category !== '블로그자동화');
     let total = 0, cash = 0, card = 0, unpaid = 0;
-    list.forEach(c => {
-      total += c.final_price;
-      if (c.payment_method === '현금') cash += c.final_price;
-      if (c.payment_method === '카드') card += c.final_price;
-      if (c.payment_method === '미결제') unpaid += c.final_price;
+    let generalTotal = 0, samsungTotal = 0;
+    let generalCount = 0, samsungCount = 0;
+
+    rawList.forEach(c => {
+      const p = Number(c.final_price) || 0;
+      total += p;
+      if (c.payment_method === '현금') cash += p;
+      if (c.payment_method === '카드') card += p;
+      if (c.payment_method === '미결제') unpaid += p;
+      if (c.is_samsung_check) {
+        samsungTotal += p;
+        samsungCount++;
+      } else {
+        generalTotal += p;
+        generalCount++;
+      }
     });
-    return { total, cash, card, unpaid, list };
-  }, [customers, statStart, statEnd]);
+
+    const filteredList = rawList.filter(c => {
+      if (statCategoryFilter === 'samsung') return c.is_samsung_check;
+      if (statCategoryFilter === 'general') return !c.is_samsung_check;
+      return true;
+    });
+
+    const displayTotal = statCategoryFilter === 'samsung' ? samsungTotal : (statCategoryFilter === 'general' ? generalTotal : total);
+
+    return { 
+      total, cash, card, unpaid, 
+      generalTotal, samsungTotal,
+      generalCount, samsungCount,
+      displayTotal,
+      list: filteredList,
+      rawList
+    };
+  }, [customers, statStart, statEnd, statCategoryFilter]);
 
   const monthlyCompare = useMemo(() => {
     const now = new Date();
@@ -3271,9 +3389,14 @@ ${pasteText}`;
                 <div className="text-xl font-black text-slate-800 dark:text-white flex items-baseline truncate">
                   {fmtNum(calcDashboard(selectedDate).total)}<span className="text-[10px] text-slate-400 font-bold ml-0.5">원</span>
                 </div>
+                <div className="text-[10px] text-slate-400 font-medium mt-1 flex items-center gap-1.5 flex-wrap">
+                  <span>일반 <strong className="text-slate-600 dark:text-slate-300 font-bold">{fmtNum(calcDashboard(selectedDate).generalSales)}</strong>원</span>
+                  <span className="text-slate-300">·</span>
+                  <span className="text-cyan-600 dark:text-cyan-400 font-bold">삼성 {fmtNum(calcDashboard(selectedDate).samsungSales)}원</span>
+                </div>
               </div>
 
-              <div className="h-6 w-[1px] bg-slate-100 dark:bg-slate-700 mx-3"></div>
+              <div className="h-10 w-[1px] bg-slate-100 dark:bg-slate-700 mx-3"></div>
 
               <div className="cursor-pointer transition-transform active:scale-95 flex-1 text-right" onClick={() => setCurrentTab('stats')}>
                 <p className="text-[10px] font-bold text-slate-400 mb-0.5 leading-none">{calDate.getMonth() + 1}월 총 매출</p>
@@ -3281,7 +3404,12 @@ ${pasteText}`;
                   <div className="text-xl font-black text-primary flex items-baseline truncate">
                     {fmtNum(calMonthSales)}<span className="text-[10px] text-slate-400 font-bold ml-0.5">원</span>
                   </div>
-                  <div className={`text-[9px] font-bold mt-0 flex items-center gap-0.5 ${calMonthGrowth >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
+                  <div className="text-[10px] text-slate-400 font-medium mt-1 flex items-center gap-1.5 justify-end flex-wrap">
+                    <span>일반 <strong className="text-slate-600 dark:text-slate-300 font-bold">{fmtNum(calMonthSalesData.general)}</strong>원</span>
+                    <span className="text-slate-300">·</span>
+                    <span className="text-cyan-600 dark:text-cyan-400 font-bold">삼성 {fmtNum(calMonthSalesData.samsung)}원</span>
+                  </div>
+                  <div className={`text-[9px] font-bold mt-0.5 flex items-center gap-0.5 ${calMonthGrowth >= 0 ? 'text-red-500' : 'text-blue-500'}`}>
                     {calMonthGrowth >= 0 ? '▲' : '▼'} {Math.abs(calMonthGrowth)}% <span className="text-slate-400 font-medium ml-0.5">전월대비</span>
                   </div>
                 </div>
@@ -3328,16 +3456,23 @@ ${pasteText}`;
                  <div className="flex flex-col items-center">
                   <h2 className="font-bold text-xs sm:text-lg">{calDate.getFullYear()}년 {calDate.getMonth() + 1}월</h2>
                   <div className="flex flex-col items-center gap-1 mt-0.5">
-                    <span className="text-[10px] font-black text-primary bg-blue-50 dark:bg-blue-950/30 px-2.5 py-0.5 rounded-full shadow-sm border border-blue-100/30">
-                      총 매출: {fmtNum(calMonthSales)}원
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                      <span className="text-[10px] font-black text-primary bg-blue-50 dark:bg-blue-950/30 px-2.5 py-0.5 rounded-full shadow-sm border border-blue-100/30">
+                        총 {fmtNum(calMonthSales)}원
+                      </span>
+                      {calMonthSalesData.samsung > 0 && (
+                        <span className="text-[9px] font-bold text-cyan-700 bg-cyan-50 dark:bg-cyan-950/40 dark:text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-200/50">
+                          삼성 {fmtNum(calMonthSalesData.samsung)}원
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       onClick={() => setShowYearSalesModal(true)}
-                      className="text-[9px] font-bold text-slate-500 hover:text-primary hover:border-primary/50 rounded-full px-2 py-0.5 flex items-center gap-0.5 active:scale-95 transition-all cursor-pointer bg-slate-50 hover:bg-blue-50/50 dark:bg-slate-800 dark:hover:bg-slate-700/50 border border-slate-200 dark:border-slate-750"
+                      className="text-[9px] font-bold text-slate-500 hover:text-primary hover:border-primary/50 rounded-full px-2.5 py-0.5 flex items-center gap-1 active:scale-95 transition-all cursor-pointer bg-slate-50 hover:bg-blue-50/50 dark:bg-slate-800 dark:hover:bg-slate-700/50 border border-slate-200 dark:border-slate-750 shadow-xs"
                     >
-                      <span className="material-symbols-outlined text-[10px]">analytics</span>
-                      올해 총 매출 보기
+                      <span className="material-symbols-outlined text-[11px] text-cyan-600">analytics</span>
+                      올해 총 매출 & 삼성 매출 분석
                     </button>
                   </div>
                 </div>
@@ -3506,27 +3641,55 @@ ${pasteText}`;
           </div>
 
           {/* 선택된 날짜의 리스트 상세 */}
+          {/* 선택된 날짜의 리스트 상세 */}
           <div className="max-w-lg mx-auto w-full pt-4" ref={detailRef}>
-            <h3 className="font-bold text-sm text-slate-600 dark:text-slate-400 mb-3 px-1 flex justify-between items-center">
-              <span className="flex items-center gap-1.5">
+            <div className="flex justify-between items-center mb-2.5 px-1">
+              <h3 className="font-bold text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
                 {selectedDate.split('-')[2]}일 예약 상세 리스트
-              </span>
+              </h3>
               <div className="flex gap-2 items-center">
                 <button onClick={() => handleBulkDeleteDuplicates(selectedDate)} className="text-[10px] bg-red-50 text-red-500 px-2 py-0.5 rounded border border-red-100 hover:bg-red-100 transition-colors font-bold active:scale-95">
                   중복 싹 지우기
                 </button>
                 <span className="font-normal text-[10px] opacity-70">(길게 눌러 수정/삭제)</span>
               </div>
-            </h3>
-            {calcDashboard(selectedDate).list.length === 0 ? (
+            </div>
+
+            {/* 일정 분류 필터 탭 (전체 / 일반 / 삼성) */}
+            <div className="flex items-center gap-1.5 mb-3 px-1">
+              <button
+                type="button"
+                onClick={() => setScheduleFilterType('all')}
+                className={`text-[11px] font-bold px-3 py-1 rounded-full transition-all active:scale-95 ${scheduleFilterType === 'all' ? 'bg-slate-800 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200'}`}
+              >
+                전체 ({calcDashboard(selectedDate).list.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setScheduleFilterType('general')}
+                className={`text-[11px] font-bold px-3 py-1 rounded-full transition-all active:scale-95 ${scheduleFilterType === 'general' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200'}`}
+              >
+                일반 ({calcDashboard(selectedDate).generalCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setScheduleFilterType('samsung')}
+                className={`text-[11px] font-bold px-3 py-1 rounded-full transition-all active:scale-95 flex items-center gap-1 ${scheduleFilterType === 'samsung' ? 'bg-cyan-600 text-white shadow-sm' : 'bg-cyan-50 dark:bg-cyan-950/30 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100'}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                삼성 ({calcDashboard(selectedDate).samsungCount})
+              </button>
+            </div>
+
+            {calcDashboard(selectedDate).filteredList.length === 0 ? (
               <div className="text-center py-12 text-slate-400 text-sm bg-white dark:bg-slate-800/50 rounded-[2rem] border-2 border-dashed border-slate-100 dark:border-slate-700 shadow-inner">
                 <span className="material-symbols-outlined text-[30px] block mb-2 opacity-20">history_edu</span>
-                해당 날짜에 예약이 없습니다.
+                {scheduleFilterType === 'all' ? '해당 날짜에 예약이 없습니다.' : '선택한 분류의 예약이 없습니다.'}
               </div>
             ) : (
               <div className="space-y-4 pb-12">
-                {calcDashboard(selectedDate).list.map(c => <BookingItem key={c.id} c={c} />)}
+                {calcDashboard(selectedDate).filteredList.map(c => <BookingItem key={c.id} c={c} />)}
               </div>
             )}
           </div>
@@ -3922,12 +4085,61 @@ ${pasteText}`;
             </div>
           </div>
 
+          {/* 분류 필터 (전체 / 일반 / 삼성) */}
+          <div className="flex bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setStatCategoryFilter('all')}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${statCategoryFilter === 'all' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              전체 ({statsData.rawList.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatCategoryFilter('general')}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${statCategoryFilter === 'general' ? 'bg-white dark:bg-slate-700 text-primary shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              일반 ({statsData.generalCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatCategoryFilter('samsung')}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${statCategoryFilter === 'samsung' ? 'bg-cyan-600 text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+            >
+              삼성 ({statsData.samsungCount})
+            </button>
+          </div>
+
           <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-[1.5rem] p-6 text-white shadow-lg shadow-slate-900/20 relative overflow-hidden">
             <span className="material-symbols-outlined absolute -right-4 -bottom-4 text-[100px] text-white/5 font-fill">monitoring</span>
-            <p className="text-sm font-medium text-slate-300 mb-1">해당 기간 총 매출</p>
-            <p className="text-4xl font-black mb-4">{fmtNum(statsData.total)}<span className="text-xl ml-1 font-bold text-slate-400">원</span></p>
+            <div className="flex justify-between items-start mb-1">
+              <p className="text-sm font-medium text-slate-300">
+                {statCategoryFilter === 'samsung' ? '해당 기간 삼성 매출' : statCategoryFilter === 'general' ? '해당 기간 일반 매출' : '해당 기간 총 매출'}
+              </p>
+              {statCategoryFilter !== 'all' && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statCategoryFilter === 'samsung' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'}`}>
+                  {statCategoryFilter === 'samsung' ? '삼성 전용' : '일반 전용'}
+                </span>
+              )}
+            </div>
+            <p className="text-4xl font-black mb-3">{fmtNum(statsData.displayTotal)}<span className="text-xl ml-1 font-bold text-slate-400">원</span></p>
 
-            <div className="flex gap-4">
+            {/* 전체 보기 시 일반/삼성 분할 정보 */}
+            {statCategoryFilter === 'all' && (
+              <div className="flex items-center gap-3 py-2 px-3 rounded-xl bg-white/5 border border-white/10 mb-4 text-xs">
+                <div className="flex-1">
+                  <span className="text-[10px] text-slate-400 block font-semibold">일반 매출 ({statsData.generalCount}건)</span>
+                  <span className="font-bold text-slate-100">{fmtNum(statsData.generalTotal)}원</span>
+                </div>
+                <div className="w-[1px] h-6 bg-white/10"></div>
+                <div className="flex-1">
+                  <span className="text-[10px] text-cyan-300 block font-semibold">삼성 매출 ({statsData.samsungCount}건)</span>
+                  <span className="font-bold text-cyan-400">{fmtNum(statsData.samsungTotal)}원</span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-4 pt-1">
               <div className="flex-1">
                 <p className="text-[11px] text-slate-400 font-bold">현금 합계</p>
                 <p className="text-base font-bold text-green-400">{fmtNum(statsData.cash)}원</p>
@@ -3983,7 +4195,14 @@ ${pasteText}`;
                       {c.memo}
                       <span className="material-symbols-outlined text-[14px] text-blue-500">location_on</span>
                     </span>
-                    <span className="text-xs text-slate-400 ml-1">{c.book_date}</span>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-xs text-slate-400">{c.book_date}</span>
+                      {c.is_samsung_check && (
+                        <span className="bg-cyan-50 text-cyan-700 dark:bg-cyan-950/40 dark:text-cyan-300 text-[9px] font-black px-1.5 py-0.5 rounded border border-cyan-200/50">
+                          삼성
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="font-bold">
                     <span className={`text-[10px] mr-2 px-1.5 py-0.5 rounded border ${c.payment_method === '현금' ? 'text-green-600 border-green-200' : c.payment_method === '카드' ? 'text-blue-600 border-blue-200' : 'text-red-400 border-red-200'}`}>{c.payment_method}</span>
@@ -5758,54 +5977,208 @@ ${pasteText}`;
 
       {/* ======================= [탭 8: 모달들] ======================= */}
       
-      {/* 0. 올해 총 매출 분석 모달 */}
+      {/* 0. 올해 총 매출 및 연간 수익 분석 모달 */}
       {showYearSalesModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-display">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-slide-up flex flex-col border border-slate-100 dark:border-slate-800">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-slide-up flex flex-col border border-slate-100 dark:border-slate-800 max-h-[85vh]">
             {/* Header */}
-            <div className="flex justify-between items-center px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-              <div>
-                <h3 className="font-black text-slate-800 dark:text-white text-base flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-primary text-lg">calendar_today</span>
-                  {calYearSalesBreakdown.year}년 총 매출 분석
-                </h3>
-                <p className="text-[10px] font-bold text-slate-400 mt-0.5">연간 매출 현황 및 월별 통계</p>
+            <div className="flex justify-between items-center px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 shadow-xs px-1">
+                  <button 
+                    type="button"
+                    onClick={() => setSelectedYear(y => (y || calDate.getFullYear()) - 1)}
+                    className="p-1 text-slate-400 hover:text-primary active:scale-95 transition-all"
+                  >
+                    <span className="material-symbols-outlined text-base">chevron_left</span>
+                  </button>
+                  <span className="text-xs font-black px-1 text-slate-700 dark:text-slate-200">
+                    {calYearSalesBreakdown.year}년
+                  </span>
+                  <button 
+                    type="button"
+                    onClick={() => setSelectedYear(y => (y || calDate.getFullYear()) + 1)}
+                    className="p-1 text-slate-400 hover:text-primary active:scale-95 transition-all"
+                  >
+                    <span className="material-symbols-outlined text-base">chevron_right</span>
+                  </button>
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-800 dark:text-white text-sm sm:text-base flex items-center gap-1">
+                    매출 & 연간 수익 분석
+                  </h3>
+                  <p className="text-[10px] font-bold text-slate-400">삼성 매출 분리 및 연간 순이익 현황</p>
+                </div>
               </div>
               <button type="button" onClick={() => setShowYearSalesModal(false)} className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full transition-colors active:scale-95">
                 <span className="material-symbols-outlined text-sm">close</span>
               </button>
             </div>
 
+            {/* Filter Pills */}
+            <div className="flex gap-1.5 px-5 pt-3 pb-1 bg-white dark:bg-slate-900">
+              <button
+                type="button"
+                onClick={() => setYearModalFilter('all')}
+                className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${yearModalFilter === 'all' ? 'bg-slate-800 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200'}`}
+              >
+                전체 매출
+              </button>
+              <button
+                type="button"
+                onClick={() => setYearModalFilter('general')}
+                className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${yearModalFilter === 'general' ? 'bg-primary text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-slate-200'}`}
+              >
+                일반 매출
+              </button>
+              <button
+                type="button"
+                onClick={() => setYearModalFilter('samsung')}
+                className={`flex-1 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center justify-center gap-1 ${yearModalFilter === 'samsung' ? 'bg-cyan-600 text-white shadow-sm' : 'bg-cyan-50 dark:bg-cyan-950/30 text-cyan-700 dark:text-cyan-300 hover:bg-cyan-100'}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                삼성 매출
+              </button>
+            </div>
+
             {/* Body */}
-            <div className="flex-1 overflow-y-auto p-5 max-h-[60vh] flex flex-col gap-4">
-              {/* Total Card */}
-              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-5 rounded-2xl text-white shadow-md">
-                <p className="text-[10px] font-bold text-blue-100/90 leading-none mb-1">{calYearSalesBreakdown.year}년 합계 매출액</p>
-                <h4 className="text-2xl font-black flex items-baseline">
-                  {fmtNum(calYearSalesBreakdown.total)}<span className="text-xs font-bold text-blue-100 ml-1">원</span>
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+              {/* Total Revenue Card */}
+              <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-900 p-5 rounded-2xl text-white shadow-md relative overflow-hidden">
+                <span className="material-symbols-outlined absolute -right-3 -bottom-3 text-[90px] text-white/5 pointer-events-none">query_stats</span>
+                <div className="flex justify-between items-start mb-1">
+                  <p className="text-[11px] font-bold text-slate-300">
+                    {yearModalFilter === 'samsung' ? `${calYearSalesBreakdown.year}년 삼성 매출 (${calYearSalesBreakdown.totalSamsungCount}건)` :
+                     yearModalFilter === 'general' ? `${calYearSalesBreakdown.year}년 일반 매출 (${calYearSalesBreakdown.totalGeneralCount}건)` :
+                     `${calYearSalesBreakdown.year}년 연간 총 매출 (${calYearSalesBreakdown.totalCount}건)`}
+                  </p>
+                  {yearModalFilter === 'all' && (
+                    <span className="text-[10px] font-black text-cyan-300 bg-white/10 px-2 py-0.5 rounded-full">
+                      삼성 비중 {calYearSalesBreakdown.samsungPct}%
+                    </span>
+                  )}
+                </div>
+                
+                <h4 className="text-3xl font-black flex items-baseline mb-3">
+                  {fmtNum(
+                    yearModalFilter === 'samsung' ? calYearSalesBreakdown.totalSamsung :
+                    yearModalFilter === 'general' ? calYearSalesBreakdown.totalGeneral :
+                    calYearSalesBreakdown.total
+                  )}
+                  <span className="text-sm font-bold text-slate-300 ml-1">원</span>
                 </h4>
+
+                {/* 분할 바 & 내역 */}
+                {yearModalFilter === 'all' && (
+                  <div className="space-y-2 pt-1 border-t border-white/10">
+                    <div className="w-full h-2 bg-black/20 rounded-full overflow-hidden flex">
+                      <div className="h-full bg-blue-500 transition-all duration-700" style={{ width: `${calYearSalesBreakdown.generalPct}%` }} title={`일반: ${calYearSalesBreakdown.generalPct}%`}></div>
+                      <div className="h-full bg-cyan-400 transition-all duration-700" style={{ width: `${calYearSalesBreakdown.samsungPct}%` }} title={`삼성: ${calYearSalesBreakdown.samsungPct}%`}></div>
+                    </div>
+                    <div className="flex justify-between text-[11px] pt-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>
+                        <span className="text-slate-300">일반</span>
+                        <strong className="text-white font-bold">{fmtNum(calYearSalesBreakdown.totalGeneral)}원</strong>
+                        <span className="text-slate-400 text-[10px]">({calYearSalesBreakdown.generalPct}%)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>
+                        <span className="text-cyan-200">삼성</span>
+                        <strong className="text-cyan-300 font-bold">{fmtNum(calYearSalesBreakdown.totalSamsung)}원</strong>
+                        <span className="text-cyan-300/70 text-[10px]">({calYearSalesBreakdown.samsungPct}%)</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 연간 순수익 카드 (연간 수익 = 총매출 - 총지출) */}
+              <div className="bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/40 p-4 rounded-2xl">
+                <div className="flex justify-between items-center mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-emerald-600 text-lg">savings</span>
+                    <span className="text-xs font-black text-emerald-800 dark:text-emerald-300">연간 순수익 (마진율 {calYearSalesBreakdown.netProfitMargin}%)</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-100/60 dark:bg-emerald-900/40 px-2 py-0.5 rounded-full">
+                    순수익 = 매출 - 지출
+                  </span>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-2 text-center pt-1">
+                  <div className="bg-white/80 dark:bg-slate-800/60 p-2.5 rounded-xl">
+                    <p className="text-[10px] font-bold text-slate-400 mb-0.5">총 매출</p>
+                    <p className="text-xs sm:text-sm font-black text-slate-800 dark:text-white truncate">{fmtNum(calYearSalesBreakdown.total)}원</p>
+                  </div>
+                  <div className="bg-white/80 dark:bg-slate-800/60 p-2.5 rounded-xl">
+                    <p className="text-[10px] font-bold text-red-400 mb-0.5">총 지출(경비)</p>
+                    <p className="text-xs sm:text-sm font-black text-red-500 truncate">-{fmtNum(calYearSalesBreakdown.totalExpenses)}원</p>
+                  </div>
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-xl">
+                    <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 mb-0.5">연간 순수익</p>
+                    <p className="text-xs sm:text-sm font-black text-emerald-600 dark:text-emerald-300 truncate">{fmtNum(calYearSalesBreakdown.totalNetProfit)}원</p>
+                  </div>
+                </div>
               </div>
 
               {/* Monthly breakdown */}
               <div className="flex flex-col gap-2">
-                <p className="text-xs font-black text-slate-700 dark:text-slate-300 px-1 mb-1">월별 매출 상세</p>
+                <div className="flex justify-between items-center px-1">
+                  <p className="text-xs font-black text-slate-700 dark:text-slate-300">
+                    {calYearSalesBreakdown.year}년 월별 매출 및 순이익
+                  </p>
+                  <span className="text-[10px] text-slate-400 font-medium">1월 ~ 12월</span>
+                </div>
+
                 <div className="flex flex-col gap-2 bg-slate-50 dark:bg-slate-950/20 p-3 rounded-xl border border-slate-100 dark:border-slate-800/50">
                   {calYearSalesBreakdown.months.map((m) => {
-                    // Find max sales for calculating progress bar percentage
                     const maxSales = Math.max(...calYearSalesBreakdown.months.map(x => x.sales), 1);
-                    const pct = (m.sales / maxSales) * 100;
+                    const targetAmount = 
+                      yearModalFilter === 'samsung' ? m.samsungSales :
+                      yearModalFilter === 'general' ? m.generalSales :
+                      m.sales;
                     
+                    const genPct = (m.generalSales / maxSales) * 100;
+                    const samPct = (m.samsungSales / maxSales) * 100;
+
                     return (
-                      <div key={m.month} className="flex flex-col gap-1 py-1.5 border-b border-slate-100 dark:border-slate-800/40 last:border-0">
+                      <div key={m.month} className="flex flex-col gap-1 py-2 border-b border-slate-100 dark:border-slate-800/40 last:border-0">
                         <div className="flex justify-between items-center text-xs font-bold">
-                          <span className="text-slate-500">{m.month}월</span>
-                          <span className={`${m.sales > 0 ? 'text-slate-800 dark:text-white font-extrabold' : 'text-slate-400 font-medium'}`}>
-                            {m.sales > 0 ? `${fmtNum(m.sales)}원` : '매출 없음'}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-600 dark:text-slate-400 w-8">{m.month}월</span>
+                            {m.sales > 0 && (
+                              <div className="flex items-center gap-1.5 text-[10px] font-normal text-slate-400">
+                                <span>일반 {fmtNum(m.generalSales)}원</span>
+                                <span>·</span>
+                                <span className="text-cyan-600 dark:text-cyan-400 font-bold">삼성 {fmtNum(m.samsungSales)}원</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <span className={`${targetAmount > 0 ? 'text-slate-800 dark:text-white font-black' : 'text-slate-400 font-medium'}`}>
+                              {targetAmount > 0 ? `${fmtNum(targetAmount)}원` : '매출 없음'}
+                            </span>
+                            {m.sales > 0 && (
+                              <div className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">
+                                순익 {fmtNum(m.netProfit)}원 <span className="text-slate-400 font-normal">(지출 {fmtNum(m.expenses)}원)</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
+
+                        {/* 그래프 바 */}
                         {m.sales > 0 && (
-                          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden mt-0.5">
-                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }}></div>
+                          <div className="w-full h-2 bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden flex mt-0.5">
+                            {yearModalFilter === 'all' ? (
+                              <>
+                                <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${genPct}%` }} title={`일반: ${fmtNum(m.generalSales)}원`}></div>
+                                <div className="h-full bg-cyan-400 transition-all duration-500" style={{ width: `${samPct}%` }} title={`삼성: ${fmtNum(m.samsungSales)}원`}></div>
+                              </>
+                            ) : yearModalFilter === 'general' ? (
+                              <div className="h-full bg-primary transition-all duration-500" style={{ width: `${genPct}%` }}></div>
+                            ) : (
+                              <div className="h-full bg-cyan-500 transition-all duration-500" style={{ width: `${samPct}%` }}></div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -5816,13 +6189,13 @@ ${pasteText}`;
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex gap-2">
               <button 
                 type="button"
                 onClick={() => setShowYearSalesModal(false)}
                 className="w-full py-2.5 bg-slate-800 text-white font-black rounded-xl text-xs active:scale-95 transition-all shadow-sm hover:bg-slate-700 text-center"
               >
-                확인
+                닫기
               </button>
             </div>
           </div>
