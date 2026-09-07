@@ -3443,6 +3443,23 @@ ${pasteText}`;
                 <span className="text-[10px] text-slate-600 font-black">{fmtNum(revenueStats.target)}원</span>
               </div>
             </div>
+
+            {/* 올해 누적 총매출 (일반 / 삼성) 배너 */}
+            <div 
+              onClick={() => setShowYearSalesModal(true)}
+              className="mt-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 dark:hover:bg-slate-750/30 p-1 rounded-xl transition-all active:scale-[0.99]"
+            >
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[15px] text-primary">analytics</span>
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{calYearSalesBreakdown.year}년 누적</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px]">
+                <span className="text-slate-600 dark:text-slate-300">일반 <strong className="font-bold">{fmtNum(calYearSalesBreakdown.totalGeneral)}</strong>원</span>
+                <span className="text-slate-300">·</span>
+                <span className="text-cyan-600 dark:text-cyan-400 font-bold">삼성 {fmtNum(calYearSalesBreakdown.totalSamsung)}원</span>
+                <span className="material-symbols-outlined text-[13px] text-slate-400 ml-0.5">chevron_right</span>
+              </div>
+            </div>
           </div>
 
           {/* 캘린더 및 통합 리스트 구역 */}
@@ -6091,6 +6108,59 @@ ${pasteText}`;
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* 올해 일반 총매출 & 올해 삼성 총매출 전용 카드 (상시 표시 + 클릭 시 필터 전환) */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div 
+                  onClick={() => setYearModalFilter(f => f === 'general' ? 'all' : 'general')}
+                  className={`p-3.5 rounded-2xl border cursor-pointer transition-all active:scale-95 ${
+                    yearModalFilter === 'general' 
+                      ? 'bg-blue-50/90 dark:bg-blue-950/40 border-primary ring-2 ring-primary/20 shadow-sm' 
+                      : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/80 hover:border-blue-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-primary inline-block"></span>
+                      올해 일반 총매출
+                    </span>
+                    <span className="text-[9px] font-black text-primary bg-blue-100/70 dark:bg-blue-900/50 px-1.5 py-0.5 rounded">
+                      {calYearSalesBreakdown.generalPct}%
+                    </span>
+                  </div>
+                  <div className="text-base sm:text-xl font-black text-slate-800 dark:text-white truncate">
+                    {fmtNum(calYearSalesBreakdown.totalGeneral)}<span className="text-xs font-bold text-slate-400 ml-0.5">원</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                    {calYearSalesBreakdown.totalGeneralCount}건 완료 {yearModalFilter === 'general' && '✓ (필터중)'}
+                  </p>
+                </div>
+
+                <div 
+                  onClick={() => setYearModalFilter(f => f === 'samsung' ? 'all' : 'samsung')}
+                  className={`p-3.5 rounded-2xl border cursor-pointer transition-all active:scale-95 ${
+                    yearModalFilter === 'samsung' 
+                      ? 'bg-cyan-50/90 dark:bg-cyan-950/40 border-cyan-500 ring-2 ring-cyan-500/20 shadow-sm' 
+                      : 'bg-white dark:bg-slate-800 border-slate-200/80 dark:border-slate-700/80 hover:border-cyan-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400 flex items-center gap-1">
+                      <span className="w-2 h-2 rounded-full bg-cyan-400 inline-block"></span>
+                      올해 삼성 총매출
+                    </span>
+                    <span className="text-[9px] font-black text-cyan-700 dark:text-cyan-300 bg-cyan-100/70 dark:bg-cyan-900/50 px-1.5 py-0.5 rounded">
+                      {calYearSalesBreakdown.samsungPct}%
+                    </span>
+                  </div>
+                  <div className="text-base sm:text-xl font-black text-cyan-600 dark:text-cyan-400 truncate">
+                    {fmtNum(calYearSalesBreakdown.totalSamsung)}<span className="text-xs font-bold text-slate-400 ml-0.5">원</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                    {calYearSalesBreakdown.totalSamsungCount}건 완료 {yearModalFilter === 'samsung' && '✓ (필터중)'}
+                  </p>
+                </div>
               </div>
 
               {/* 연간 순수익 카드 (연간 수익 = 총매출 - 총지출) */}
