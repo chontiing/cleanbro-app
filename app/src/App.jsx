@@ -875,20 +875,46 @@ ${pasteText}`;
       .eq('business_id', myBusinessId)
       .order('id', { ascending: false });
 
+    let rawList = [];
     if (error) {
       console.error('Fetch customers error:', error);
       // 기존 데이터의 business_id 누락 고려한 폴백
       try {
         const { data: fallbackData, error: fbErr } = await supabase.from('bookings').select('*').eq('user_id', session?.user?.id).order('id', { ascending: false });
-        if (!fbErr && fallbackData) setCustomers(fallbackData.filter(c => c.category !== '블로그자동화'));
-        else setCustomers([]);
+        if (!fbErr && fallbackData) rawList = fallbackData.filter(c => c.category !== '블로그자동화');
+        else rawList = [];
       } catch (e) {
-        setCustomers([]);
+        rawList = [];
       }
     } else {
-      setCustomers((data || []).filter(c => c.category !== '블로그자동화'));
+      rawList = (data || []).filter(c => c.category !== '블로그자동화');
     }
+
+    // 날짜 지난(과거 일자) 미완료 작업 자동 완료 처리
+    const todayStr = getTodayStr();
+    const pastUncompletedIds = [];
+    const processedList = rawList.map(item => {
+      if (item.book_date && item.book_date < todayStr && !item.is_completed) {
+        pastUncompletedIds.push(item.id);
+        return { ...item, is_completed: true };
+      }
+      return item;
+    });
+
+    setCustomers(processedList);
     setLoadingData(false);
+
+    // DB에도 자동으로 일괄 완료 업데이트 (백그라운드 동기화)
+    if (pastUncompletedIds.length > 0) {
+      console.log(`[자동 완료] 과거 예약 ${pastUncompletedIds.length}건을 작업 완료로 자동 갱신합니다.`);
+      supabase
+        .from('bookings')
+        .update({ is_completed: true })
+        .in('id', pastUncompletedIds)
+        .then(({ error: autoErr }) => {
+          if (autoErr) console.error('과거 예약 자동 완료 DB 저장 실패:', autoErr);
+        });
+    }
   };
 
   useEffect(() => {
@@ -898,6 +924,15 @@ ${pasteText}`;
       fetchExpenses();
       fetchCustomers();
       fetchProducts();
+
+      // 모바일(휴대폰)에서 앱을 다시 열거나 화면을 켰을 때 자동 갱신 및 과거 예약 자동 완료
+      const handleAppFocus = () => {
+        if (document.visibilityState === 'visible') {
+          fetchCustomers();
+        }
+      };
+      document.addEventListener('visibilitychange', handleAppFocus);
+      window.addEventListener('focus', handleAppFocus);
 
       // 실시간 데이터 동기화 구독 추가
       const bookingSubscription = supabase
@@ -922,7 +957,9 @@ ${pasteText}`;
       return () => {
         supabase.removeChannel(bookingSubscription);
         supabase.removeChannel(productSubscription);
-      }
+        document.removeEventListener('visibilitychange', handleAppFocus);
+        window.removeEventListener('focus', handleAppFocus);
+      };
     } else {
       setCustomers([]);
     }
@@ -975,13 +1012,27 @@ ${pasteText}`;
   // ==========================================
   const toggleCompletion = async (c) => {
     const newValue = !c.is_completed;
+
+    // 즉시 화면 반영 (낙관적 업데이트)
+    setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, is_completed: newValue } : item));
+
+    // 완료 처리 시 가벼운 축하 효과
+    if (newValue) {
+      try {
+        confetti({ particleCount: 35, spread: 60, origin: { y: 0.8 } });
+      } catch (e) {}
+    }
+
     const { error } = await supabase
       .from('bookings')
       .update({ is_completed: newValue })
       .eq('id', c.id);
 
-    if (error) alert('상태 변경 실패: ' + error.message);
-    else fetchCustomers();
+    if (error) {
+      alert('상태 변경 실패: ' + error.message);
+      // 실패 시 롤백
+      setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, is_completed: !newValue } : item));
+    }
   };
 
   // ==========================================
@@ -2567,90 +2618,168 @@ ${pasteText}`;
       else if (action === '2') handleDelete(c.id);
     }, 600);
 
-    const handleSendConfirm = async () => {
-      if (c.is_samsung_check) {
-        console.log("삼성 체크 예약으로 문자가 발송되지 않았습니다.");
-        alert('삼성 체크건으로 문자 발송이 비활성화되었습니다.');
-        return;
-      }
-      if (!c.phone) return alert('고객 연락처가 없습니다.');
-      if (!confirm('확정 문자를 바로 발송하시겠습니까?')) return;
-      
-      setSendingType('confirm');
+    // --- 문자 메시지 앱 열기 & 클립보드 복사 헬퍼 ---
+    const openSmsApp = (phone, text, customAlert = null) => {
+      const cleanPhone = phone ? phone.replace(/[^0-9]/g, '') : '';
       try {
-        const tpl = businessProfile?.confirmed_template || `[예약 확정] [일시]에 방문 예정입니다. - 클린브로 ([파트너전화번호])`;
-        const timeVal = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
-        const text = tpl
-          .replace(/\[고객명\]/g, c.customer_name || '고객')
-          .replace(/\[일시\]/g, `${c.book_date} ${timeVal}`)
-          .replace(/\[시간\]/g, timeVal || '')
-          .replace(/\[파트너전화번호\]/g, userProfile?.solapi_from_number || businessProfile?.phone || '');
-          
-        await sendSolapiMessage(c.phone, text);
-        const { error } = await supabase.from('bookings').update({ is_confirmed_sent: true }).eq('id', c.id);
-        if (error && error.message.includes('column')) {
-            await supabase.from('bookings').update({ sms_sent_initial: true }).eq('id', c.id);
-            c.sms_sent_initial = true;
-        } else if (!error) {
-            c.is_confirmed_sent = true;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).catch(() => {});
         }
-        alert('확정 문자가 발송되었습니다.');
-      } catch (e) {
-        alert('발송 실패: ' + e.message);
-      } finally {
-        setSendingType(null);
+      } catch (err) {}
+
+      if (customAlert) {
+        alert(customAlert);
+      }
+      const sep = /iPhone|iPad|iPod/.test(navigator.userAgent) ? '&' : '?';
+      window.location.href = `sms:${cleanPhone}${sep}body=${encodeURIComponent(text)}`;
+    };
+
+    const markConfirmSent = async () => {
+      setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, is_confirmed_sent: true, sms_sent_initial: true } : item));
+      c.is_confirmed_sent = true;
+      c.sms_sent_initial = true;
+      const { error } = await supabase.from('bookings').update({ is_confirmed_sent: true }).eq('id', c.id);
+      if (error && error.message.includes('column')) {
+        await supabase.from('bookings').update({ sms_sent_initial: true }).eq('id', c.id);
+      }
+    };
+
+    const markMorningSent = async () => {
+      setCustomers(prev => prev.map(item => item.id === c.id ? { ...item, is_morning_alert_sent: true, sms_sent_reminder: true } : item));
+      c.is_morning_alert_sent = true;
+      c.sms_sent_reminder = true;
+      const { error } = await supabase.from('bookings').update({ is_morning_alert_sent: true }).eq('id', c.id);
+      if (error && error.message.includes('column')) {
+        await supabase.from('bookings').update({ sms_sent_reminder: true }).eq('id', c.id);
+      }
+    };
+
+    const handleSendConfirm = async () => {
+      if (!c.phone) return alert('고객 연락처가 없습니다.');
+      if (c.is_samsung_check && !confirm('삼성 체크 건입니다. 그래도 확정 문자를 발송하시겠습니까?')) return;
+
+      const cleanPhone = c.phone.replace(/[^0-9]/g, '');
+      const tpl = businessProfile?.confirmed_template || `[예약 확정] [일시]에 방문 예정입니다. - 클린브로 ([파트너전화번호])`;
+      const timeVal = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
+      const senderPhone = userProfile?.solapi_from_number || businessProfile?.phone || '';
+      const text = tpl
+        .replace(/\[고객명\]/g, c.customer_name || '고객')
+        .replace(/\[일시\]/g, `${c.book_date} ${timeVal}`)
+        .replace(/\[시간\]/g, timeVal || '')
+        .replace(/\[파트너전화번호\]/g, senderPhone);
+
+      const hasSolapi = Boolean(
+        (import.meta.env.VITE_SOLAPI_API_KEY || userProfile?.solapi_api_key || businessProfile?.solapi_api_key) &&
+        (import.meta.env.VITE_SOLAPI_API_SECRET || userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret)
+      );
+
+      if (hasSolapi) {
+        if (!confirm('솔라피로 확정 문자를 바로 발송하시겠습니까?\n(취소 시 기본 메시지 앱으로 열기)')) {
+          openSmsApp(cleanPhone, text);
+          markConfirmSent();
+          return;
+        }
+        setSendingType('confirm');
+        try {
+          await sendSolapiMessage(c.phone, text);
+          markConfirmSent();
+          alert('확정 문자가 발송되었습니다.');
+        } catch (e) {
+          console.warn('솔라피 발송 실패, 메시지 앱으로 전환:', e);
+          alert('솔라피 발송에 실패하여 메시지 앱으로 전환합니다: ' + e.message);
+          openSmsApp(cleanPhone, text);
+          markConfirmSent();
+        } finally {
+          setSendingType(null);
+        }
+      } else {
+        openSmsApp(cleanPhone, text);
+        markConfirmSent();
       }
     };
 
     const handleSendMorning = async () => {
-      if (c.is_samsung_check) {
-        console.log("삼성 체크 예약으로 문자가 발송되지 않았습니다.");
-        alert('삼성 체크건으로 문자 발송이 비활성화되었습니다.');
-        return;
-      }
       if (!c.phone) return alert('고객 연락처가 없습니다.');
-      
-      // KST 기준 전날 18:00 계산
-      const d = new Date(c.book_date);
-      d.setDate(d.getDate() - 1);
-      d.setHours(18, 0, 0, 0);
-      let scheduledUtc = d.toISOString();
-      const isPast = d.getTime() <= Date.now();
+      if (c.is_samsung_check && !confirm('삼성 체크 건입니다. 그래도 전날 알림 문자를 발송하시겠습니까?')) return;
 
-      if (isPast) {
-        if (!confirm('예약 전날이 이미 지났습니다. 지금 즉시 전날 알림 문자를 발송하시겠습니까?')) return;
-        scheduledUtc = null; // 과거 시간이면 즉시 발송
-      } else {
-        if (!confirm('예약 전날로 알림 문자를 예약 발송하시겠습니까?')) return;
-      }
-      
-      setSendingType('morning');
-      try {
-        const tpl = businessProfile?.morning_reminder_template || `[알림] 내일 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`;
-        const timeVal = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
-        const text = tpl
-          .replace(/\[고객명\]/g, c.customer_name || '고객')
-          .replace(/\[시간\]/g, timeVal || '')
-          .replace(/\[파트너전화번호\]/g, userProfile?.solapi_from_number || businessProfile?.phone || '');
-          
-        await sendSolapiMessage(c.phone, text, scheduledUtc);
-        const { error } = await supabase.from('bookings').update({ is_morning_alert_sent: true }).eq('id', c.id);
-        if (error && error.message.includes('column')) {
-            await supabase.from('bookings').update({ sms_sent_reminder: true }).eq('id', c.id);
-            c.sms_sent_reminder = true;
-        } else if (!error) {
-            c.is_morning_alert_sent = true;
+      const cleanPhone = c.phone.replace(/[^0-9]/g, '');
+      const tpl = businessProfile?.morning_reminder_template || `[알림] 내일 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`;
+      const timeVal = c.book_time_type === '직접입력' ? c.book_time_custom : c.book_time_type;
+      const senderPhone = userProfile?.solapi_from_number || businessProfile?.phone || '';
+      const text = tpl
+        .replace(/\[고객명\]/g, c.customer_name || '고객')
+        .replace(/\[시간\]/g, timeVal || '')
+        .replace(/\[파트너전화번호\]/g, senderPhone);
+
+      const hasSolapi = Boolean(
+        (import.meta.env.VITE_SOLAPI_API_KEY || userProfile?.solapi_api_key || businessProfile?.solapi_api_key) &&
+        (import.meta.env.VITE_SOLAPI_API_SECRET || userProfile?.solapi_api_secret || businessProfile?.solapi_api_secret)
+      );
+
+      if (hasSolapi) {
+        // KST 기준 전날 18:00 계산
+        const d = new Date(c.book_date);
+        d.setDate(d.getDate() - 1);
+        d.setHours(18, 0, 0, 0);
+        let scheduledUtc = d.toISOString();
+        const isPast = d.getTime() <= Date.now();
+
+        if (isPast) {
+          if (!confirm('예약 전날이 이미 지났습니다. 지금 즉시 전날 알림 문자를 발송하시겠습니까?\n(취소 시 메시지 앱 열기)')) {
+            openSmsApp(cleanPhone, text);
+            markMorningSent();
+            return;
+          }
+          scheduledUtc = null; // 과거 시간이면 즉시 발송
+        } else {
+          if (!confirm('예약 전날 18시로 알림 문자를 예약 발송하시겠습니까?\n(취소 시 메시지 앱 열기)')) {
+            openSmsApp(cleanPhone, text);
+            markMorningSent();
+            return;
+          }
         }
-        alert(scheduledUtc ? '전날 알림 예약이 완료되었습니다.' : '전날 알림 문자가 즉시 발송되었습니다.');
-      } catch (e) {
-        alert('발송 실패: ' + e.message);
-      } finally {
-        setSendingType(null);
+
+        setSendingType('morning');
+        try {
+          await sendSolapiMessage(c.phone, text, scheduledUtc);
+          markMorningSent();
+          alert(scheduledUtc ? '전날 알림 예약이 완료되었습니다.' : '전날 알림 문자가 즉시 발송되었습니다.');
+        } catch (e) {
+          console.warn('솔라피 발송 실패, 메시지 앱으로 전환:', e);
+          alert('솔라피 발송에 실패하여 메시지 앱으로 전환합니다: ' + e.message);
+          openSmsApp(cleanPhone, text);
+          markMorningSent();
+        } finally {
+          setSendingType(null);
+        }
+      } else {
+        // 솔라피 미연동 시 기본 메시지 앱으로 열기
+        openSmsApp(cleanPhone, text);
+        markMorningSent();
       }
     };
 
+    // --- 관리요령 메시지 발송 (메시지 앱 연동) ---
+    const handleSendGuide = (c) => {
+      if (!c.phone) return alert('고객 연락처가 없습니다.');
+
+      const cleanPhone = c.phone.replace(/[^0-9]/g, '');
+      const customerName = c.customer_name || '고객';
+      const itemDesc = `${c.category || '가전'}${c.product ? ` (${c.product})` : ''}`;
+
+      const guideText = `[클린브로] ${customerName}님, 작업 관리 요령 안내드립니다.\n\n오늘 시공해 드린 ${itemDesc}을 더욱 깨끗하고 오래 사용하실 수 있도록 관리 요령을 이미지로 보내드립니다.\n\n첨부해 드린 관리 요령 이미지를 확인해 주시고, 궁금하신 점은 언제든 편하게 문의해 주세요. 감사합니다! 😊\n\n- 클린브로 케어 서비스`;
+
+      openSmsApp(
+        cleanPhone,
+        guideText,
+        `📋 [${customerName}님] 관리 요령 문구가 클립보드에 복사되었습니다!\n\n메시지 앱이 열리면 앨범에서 원하시는 관리요령 이미지를 첨부하여 발송해 주세요.`
+      );
+    };
+
+    const isEffectiveCompleted = Boolean(c.is_completed || (c.book_date && c.book_date < getTodayStr()));
+
     return (
-      <div {...longPressHooks} className={`relative p-4 rounded-2xl shadow-sm transition-all active:scale-[0.98] ${c.is_completed ? 'bg-gray-50/50 opacity-80 border-0' : c.is_samsung_check ? 'bg-[#eef2ff] border-[1.5px] border-[#818cf8]' : 'bg-white border-0'}`}>
+      <div {...longPressHooks} className={`relative p-4 rounded-2xl shadow-sm transition-all active:scale-[0.98] ${isEffectiveCompleted ? 'bg-gray-50/50 opacity-80 border-0' : c.is_samsung_check ? 'bg-[#eef2ff] border-[1.5px] border-[#818cf8]' : 'bg-white border-0'}`}>
 
         {/* 더보기 버튼 (삭제 등 메뉴) */}
         <div className="absolute top-3 right-3">
@@ -2688,10 +2817,10 @@ ${pasteText}`;
 
             <h4
               onClick={(e) => { e.stopPropagation(); setMapPopupMemo(c.address ? (c.address + ' ' + (c.address_detail || '')).trim() : c.memo); }}
-              className={`font-black text-base cursor-pointer hover:text-blue-600 flex items-center transition-colors ${c.is_completed ? 'text-[#10B981]' : 'text-slate-800'}`}
+              className={`font-black text-base cursor-pointer hover:text-blue-600 flex items-center transition-colors ${isEffectiveCompleted ? 'text-[#10B981]' : 'text-slate-800'}`}
             >
               {c.customer_name || '이름 없음'}
-              {c.is_completed && <span className="material-symbols-outlined text-[#10B981] text-[18px] ml-1">check_circle</span>}
+              {isEffectiveCompleted && <span className="material-symbols-outlined text-[#10B981] text-[18px] ml-1">check_circle</span>}
               {c.address && <span className="text-[10px] font-bold text-gray-400 ml-1.5 truncate max-w-[130px]">({c.address.split(' ').slice(0, 2).join(' ')})</span>}
             </h4>
 
@@ -2722,17 +2851,30 @@ ${pasteText}`;
 
         {/* 액션 버튼 그룹 */}
         <div className="mt-3 flex gap-1.5 flex-wrap">
-          <button onClick={() => {
-            if (c.is_completed) {
-              toggleCompletion(c);
-            } else {
-              setCompletionTarget(c);
-              setCompletionPhotoFile(null);
-              setCompletionPhotoPreview(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
-              setShowCompletionModal(true);
-            }
-          }} className={`flex-1 min-w-[25%] py-1.5 rounded-lg text-[11px] font-bold transition-all border ${c.is_completed ? 'bg-white border-gray-200 text-gray-400' : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 active:scale-[0.98]'}`}>
-            {c.is_completed ? '작업 취소' : '작업 완료'}
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
+              await toggleCompletion({ ...c, is_completed: isEffectiveCompleted });
+            }}
+            className={`flex-1 min-w-[22%] py-1.5 rounded-lg text-[11px] font-bold transition-all border ${
+              isEffectiveCompleted
+                ? 'bg-white border-gray-200 text-gray-400 hover:bg-gray-50'
+                : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 active:scale-[0.98]'
+            }`}
+          >
+            {isEffectiveCompleted ? '작업 취소' : '작업 완료'}
+          </button>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSendGuide(c);
+            }}
+            title="고객님께 관리요령 문자 발송 (메시지 앱 열기)"
+            className="flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 active:scale-[0.98]"
+          >
+            <span className="material-symbols-outlined text-[12px]">menu_book</span>
+            관리요령
           </button>
 
           <button
@@ -2748,15 +2890,13 @@ ${pasteText}`;
           </button>
 
           <button
-            disabled={c.is_samsung_check || c.is_confirmed_sent || c.sms_sent_initial || sendingType === 'confirm'}
+            disabled={sendingType === 'confirm'}
             onClick={(e) => { e.stopPropagation(); handleSendConfirm(); }}
-            title={c.is_samsung_check ? "삼성 체크 건은 문자 발송 제외 대상입니다." : ""}
+            title="예약 확정 안내 문자 발송"
             className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
-              c.is_samsung_check 
-                ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-50 pointer-events-none'
-                : (c.is_confirmed_sent || c.sms_sent_initial) 
-                  ? 'bg-gray-50 text-gray-400 border-gray-200 disabled:opacity-80' 
-                  : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 active:scale-[0.98] disabled:opacity-80'
+              (c.is_confirmed_sent || c.sms_sent_initial) 
+                ? 'bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100' 
+                : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 active:scale-[0.98]'
             }`}
           >
             <span className="material-symbols-outlined text-[12px]">done_all</span>
@@ -2764,19 +2904,17 @@ ${pasteText}`;
           </button>
 
           <button 
-            disabled={c.is_samsung_check || c.is_morning_alert_sent || c.sms_sent_reminder || sendingType === 'morning'}
+            disabled={sendingType === 'morning'}
             onClick={(e) => { e.stopPropagation(); handleSendMorning(); }}
-            title={c.is_samsung_check ? "삼성 체크 건은 문자 발송 제외 대상입니다." : ""}
+            title="예약 전날 알림 문자 발송"
             className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
-              c.is_samsung_check 
-                ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-50 pointer-events-none'
-                : (c.is_morning_alert_sent || c.sms_sent_reminder) 
-                  ? 'bg-gray-50 text-gray-400 border-gray-200 disabled:opacity-80' 
-                  : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100 active:scale-[0.98] disabled:opacity-80'
+              (c.is_morning_alert_sent || c.sms_sent_reminder) 
+                ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100' 
+                : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100 active:scale-[0.98]'
             }`}
           >
             <span className="material-symbols-outlined text-[12px]">wb_twilight</span>
-            {sendingType === 'morning' ? '처리중' : ((c.is_morning_alert_sent || c.sms_sent_reminder) ? '예약완료' : '전날알림')}
+            {sendingType === 'morning' ? '처리중' : ((c.is_morning_alert_sent || c.sms_sent_reminder) ? '알림완료' : '전날알림')}
           </button>
 
           <button onClick={(e) => { e.stopPropagation(); handleEdit(c); }} className="flex-none px-3 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all">
