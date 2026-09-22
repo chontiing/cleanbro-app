@@ -2889,33 +2889,46 @@ ${pasteText}`;
             <span className="material-symbols-outlined text-[12px]">auto_awesome</span>블로그 작성
           </button>
 
-          <button
-            disabled={sendingType === 'confirm'}
-            onClick={(e) => { e.stopPropagation(); handleSendConfirm(); }}
-            title="예약 확정 안내 문자 발송"
-            className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
-              (c.is_confirmed_sent || c.sms_sent_initial) 
-                ? 'bg-blue-50 text-blue-700 border-blue-300 hover:bg-blue-100' 
-                : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 active:scale-[0.98]'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[12px]">done_all</span>
-            {sendingType === 'confirm' ? '처리중' : ((c.is_confirmed_sent || c.sms_sent_initial) ? '발송완료' : '확정문자')}
-          </button>
+          {(() => {
+            const isConfirmSent = Boolean(c.is_confirmed_sent || c.sms_sent_initial);
+            const isMorningSent = Boolean(c.is_morning_alert_sent || c.sms_sent_reminder);
 
-          <button 
-            disabled={sendingType === 'morning'}
-            onClick={(e) => { e.stopPropagation(); handleSendMorning(); }}
-            title="예약 전날 알림 문자 발송"
-            className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
-              (c.is_morning_alert_sent || c.sms_sent_reminder) 
-                ? 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100' 
-                : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100 active:scale-[0.98]'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[12px]">wb_twilight</span>
-            {sendingType === 'morning' ? '처리중' : ((c.is_morning_alert_sent || c.sms_sent_reminder) ? '알림완료' : '전날알림')}
-          </button>
+            return (
+              <>
+                <button
+                  disabled={sendingType === 'confirm'}
+                  onClick={(e) => { e.stopPropagation(); handleSendConfirm(); }}
+                  title={isConfirmSent ? "확정 문자가 이미 발송되었습니다 (클릭 시 재전송 가능)" : "예약 확정 안내 문자 발송"}
+                  className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
+                    isConfirmSent 
+                      ? 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200 hover:text-gray-600 shadow-none' 
+                      : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 active:scale-[0.98]'
+                  }`}
+                >
+                  <span className={`material-symbols-outlined text-[12px] ${isConfirmSent ? 'text-gray-400' : ''}`}>
+                    {isConfirmSent ? 'check_circle' : 'done_all'}
+                  </span>
+                  {sendingType === 'confirm' ? '처리중' : (isConfirmSent ? '확정완료' : '확정문자')}
+                </button>
+
+                <button 
+                  disabled={sendingType === 'morning'}
+                  onClick={(e) => { e.stopPropagation(); handleSendMorning(); }}
+                  title={isMorningSent ? "전날 알림 문자가 이미 발송되었습니다 (클릭 시 재전송 가능)" : "예약 전날 알림 문자 발송"}
+                  className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
+                    isMorningSent 
+                      ? 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200 hover:text-gray-600 shadow-none' 
+                      : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100 active:scale-[0.98]'
+                  }`}
+                >
+                  <span className={`material-symbols-outlined text-[12px] ${isMorningSent ? 'text-gray-400' : ''}`}>
+                    {isMorningSent ? 'check_circle' : 'wb_twilight'}
+                  </span>
+                  {sendingType === 'morning' ? '처리중' : (isMorningSent ? '알림완료' : '전날알림')}
+                </button>
+              </>
+            );
+          })()}
 
           <button onClick={(e) => { e.stopPropagation(); handleEdit(c); }} className="flex-none px-3 py-1.5 rounded-lg text-[11px] font-bold border border-gray-200 text-gray-500 hover:bg-gray-50 transition-all">
             수정
