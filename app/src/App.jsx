@@ -2655,8 +2655,11 @@ ${pasteText}`;
     };
 
     const handleSendConfirm = async () => {
+      if (c.is_samsung_check) {
+        alert('삼성 체크 건은 문자 발송 제외 대상입니다.');
+        return;
+      }
       if (!c.phone) return alert('고객 연락처가 없습니다.');
-      if (c.is_samsung_check && !confirm('삼성 체크 건입니다. 그래도 확정 문자를 발송하시겠습니까?')) return;
 
       const cleanPhone = c.phone.replace(/[^0-9]/g, '');
       const tpl = businessProfile?.confirmed_template || `[예약 확정] [일시]에 방문 예정입니다. - 클린브로 ([파트너전화번호])`;
@@ -2699,8 +2702,11 @@ ${pasteText}`;
     };
 
     const handleSendMorning = async () => {
+      if (c.is_samsung_check) {
+        alert('삼성 체크 건은 문자 발송 제외 대상입니다.');
+        return;
+      }
       if (!c.phone) return alert('고객 연락처가 없습니다.');
-      if (c.is_samsung_check && !confirm('삼성 체크 건입니다. 그래도 전날 알림 문자를 발송하시겠습니까?')) return;
 
       const cleanPhone = c.phone.replace(/[^0-9]/g, '');
       const tpl = businessProfile?.morning_reminder_template || `[알림] 내일 [시간]에 방문 예정입니다. 뵙겠습니다! - 클린브로 ([파트너전화번호])`;
@@ -2896,32 +2902,36 @@ ${pasteText}`;
             return (
               <>
                 <button
-                  disabled={sendingType === 'confirm'}
+                  disabled={c.is_samsung_check || sendingType === 'confirm'}
                   onClick={(e) => { e.stopPropagation(); handleSendConfirm(); }}
-                  title={isConfirmSent ? "확정 문자가 이미 발송되었습니다 (클릭 시 재전송 가능)" : "예약 확정 안내 문자 발송"}
+                  title={c.is_samsung_check ? "삼성 체크 건은 문자 발송 제외 대상입니다." : (isConfirmSent ? "확정 문자가 이미 발송되었습니다 (클릭 시 재전송 가능)" : "예약 확정 안내 문자 발송")}
                   className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
-                    isConfirmSent 
-                      ? 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200 hover:text-gray-600 shadow-none' 
-                      : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 active:scale-[0.98]'
+                    c.is_samsung_check
+                      ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-40 cursor-not-allowed pointer-events-none shadow-none'
+                      : (isConfirmSent 
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200 hover:text-gray-600 shadow-none' 
+                          : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 active:scale-[0.98]')
                   }`}
                 >
-                  <span className={`material-symbols-outlined text-[12px] ${isConfirmSent ? 'text-gray-400' : ''}`}>
+                  <span className={`material-symbols-outlined text-[12px] ${c.is_samsung_check || isConfirmSent ? 'text-gray-400' : ''}`}>
                     {isConfirmSent ? 'check_circle' : 'done_all'}
                   </span>
                   {sendingType === 'confirm' ? '처리중' : (isConfirmSent ? '확정완료' : '확정문자')}
                 </button>
 
                 <button 
-                  disabled={sendingType === 'morning'}
+                  disabled={c.is_samsung_check || sendingType === 'morning'}
                   onClick={(e) => { e.stopPropagation(); handleSendMorning(); }}
-                  title={isMorningSent ? "전날 알림 문자가 이미 발송되었습니다 (클릭 시 재전송 가능)" : "예약 전날 알림 문자 발송"}
+                  title={c.is_samsung_check ? "삼성 체크 건은 문자 발송 제외 대상입니다." : (isMorningSent ? "전날 알림 문자가 이미 발송되었습니다 (클릭 시 재전송 가능)" : "예약 전날 알림 문자 발송")}
                   className={`flex-none px-2 py-1.5 rounded-lg text-[10px] font-bold flex items-center gap-0.5 border transition-all ${
-                    isMorningSent 
-                      ? 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200 hover:text-gray-600 shadow-none' 
-                      : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100 active:scale-[0.98]'
+                    c.is_samsung_check
+                      ? 'bg-gray-100 text-gray-400 border-gray-200 opacity-40 cursor-not-allowed pointer-events-none shadow-none'
+                      : (isMorningSent 
+                          ? 'bg-gray-100 text-gray-400 border-gray-200 hover:bg-gray-200 hover:text-gray-600 shadow-none' 
+                          : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100 active:scale-[0.98]')
                   }`}
                 >
-                  <span className={`material-symbols-outlined text-[12px] ${isMorningSent ? 'text-gray-400' : ''}`}>
+                  <span className={`material-symbols-outlined text-[12px] ${c.is_samsung_check || isMorningSent ? 'text-gray-400' : ''}`}>
                     {isMorningSent ? 'check_circle' : 'wb_twilight'}
                   </span>
                   {sendingType === 'morning' ? '처리중' : (isMorningSent ? '알림완료' : '전날알림')}
